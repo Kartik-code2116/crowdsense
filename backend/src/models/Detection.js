@@ -1,0 +1,29 @@
+const mongoose = require('mongoose');
+
+const detectionSchema = new mongoose.Schema({
+  cameraId: { type: String, required: true, index: true },
+  zoneId: { type: String, required: true, index: true },
+  timestamp: { type: Date, default: Date.now, index: true },
+  count: { type: Number, required: true },
+  uncertainty: { type: Number, default: 0 },
+  peakDensity: { type: Number, default: 0 },
+  latencyMs: { type: Number, default: 35 },
+  modelUsed: { type: String, default: 'CSRNet' },
+  flowVector: {
+    speed: { type: Number, default: 0 },
+    headingDeg: { type: Number, default: 0 },
+    direction: { type: String, default: 'East' }
+  },
+  alertTriggered: { type: Boolean, default: false }
+});
+
+// Compound Index on (cameraId, timestamp) for rapid time-series range slicing
+detectionSchema.index({ cameraId: 1, timestamp: -1 });
+
+// Compound Index on (zoneId, timestamp) for zone trend aggregation
+detectionSchema.index({ zoneId: 1, timestamp: -1 });
+
+// TTL Index: expire short-lived raw detections after 7 days (604,800 seconds)
+detectionSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 });
+
+module.exports = mongoose.model('Detection', detectionSchema);

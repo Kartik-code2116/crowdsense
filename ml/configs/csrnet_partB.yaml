@@ -1,0 +1,29 @@
+# CSRNet Configuration for ShanghaiTech Part B (Sparse Crowd Walking Streets)
+dataset:
+  name: "ShanghaiTech_Part_B"
+  part: "part_B"
+  data_root: "./data/ShanghaiTech"
+  adaptive_kernel: false
+  fixed_sigma: 15.0
+  downsample_ratio: 8
+
+model:
+  architecture: "CSRNet"
+  frontend: "vgg16_dilated"
+  backend_dilation: 2
+  pretrained_frontend: true
+
+training:
+  epochs: 80
+  batch_size: 1
+  learning_rate: 0.00001
+  momentum: 0.95
+  weight_decay: 0.0001
+  lr_step_size: 25
+  lr_gamma: 0.1
+  optimizer: "Adam"
+  loss_fn: "MSE"
+
+target_metrics:
+  target_mae: 10.6
+  target_rmse: 16.0
