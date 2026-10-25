@@ -1,0 +1,76 @@
+services:
+  # 1. MongoDB with persistent time-series volume
+  mongodb:
+    image: mongo:7.0
+    container_name: crowdsense-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: crowdsense
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - crowdsense-net
+
+  # 2. Python FastAPI AI Service (PyTorch / ONNX / Density Inference / Grad-CAM / LSTM)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: crowdsense-ai-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DEFAULT_MODEL=csrnet
+      - DEVICE=cpu
+      - SURGE_THRESHOLD_PERCENT=25.0
+    volumes:
+      - ./ml/weights:/app/weights:ro
+    networks:
+      - crowdsense-net
+
+  # 3. Node.js + Express API Gateway (Auth, Sockets, Alert Engine, Ingestion)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crowdsense-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongodb:27017/crowdsense
+      - JWT_SECRET=crowdsense-super-secure-production-secret-key-2026
+      - AI_SERVICE_URL=http://ai-service:8000
+      - CORS_ORIGIN=*
+    depends_on:
+      - mongodb
+      - ai-service
+    networks:
+      - crowdsense-net
+
+  # 4. React Frontend Dashboard (Vite + Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crowdsense-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - crowdsense-net
+
+networks:
+  crowdsense-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+    driver: local
