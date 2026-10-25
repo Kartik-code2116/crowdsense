@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
+import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
-function TrendLineChart({ forecast = true }) {
-  const actualPoints = '0,78 30,71 60,73 90,57 120,62 150,45 180,52 210,37 240,44 270,28 300,36 330,18';
+function TrendLineChart({ range = 'Today' }) {
+  const pointsMap = {
+    Today: '0,78 30,71 60,73 90,57 120,62 150,45 180,52 210,37 240,44 270,28 300,36 330,18',
+    'Last 24 hours': '0,90 30,85 60,82 90,75 120,60 150,55 180,48 210,40 240,32 270,24 300,20 330,18',
+    'This week': '0,65 30,55 60,60 90,45 120,50 150,38 180,30 210,25 240,28 270,18 300,16 330,12'
+  };
+
+  const actualPoints = pointsMap[range] || pointsMap['Today'];
   const forecastPoints = '330,18 360,12 390,14 420,6 450,2';
+
   return (
     <svg className="line-chart" viewBox="0 0 460 116" preserveAspectRatio="none" role="img" aria-label="Occupancy trend chart">
       <defs>
@@ -17,53 +25,37 @@ function TrendLineChart({ forecast = true }) {
       ))}
       <polygon points={`0,116 0,78 ${actualPoints} 330,116`} fill="url(#areaGradient)" />
       <polyline points={actualPoints} fill="none" className="chart-line" />
-      {forecast && (
-        <polyline points={forecastPoints} fill="none" className="forecast-line" />
-      )}
+      <polyline points={forecastPoints} fill="none" className="forecast-line" />
       <circle cx="330" cy="18" r="4" fill="#3478e5" stroke="#fff" strokeWidth="2" />
     </svg>
   );
 }
 
-function SimulatedCameraScene({ scene, index, heatmap, flowVectors }) {
-  return (
-    <div className={`scene ${scene}`}>
-      <div className="scene-building building-a" />
-      <div className="scene-building building-b" />
-      <div className="scene-floor" />
-      <div className="scene-light light-a" />
-      <div className="scene-light light-b" />
-
-      {/* Simulated people particles */}
-      {Array.from({ length: 12 }, (_, i) => (
-        <span key={i} className={`person p${i + 1}`}>
-          <i />
-          {flowVectors && <span className="flow-arrow">↗</span>}
-        </span>
-      ))}
-
-      {/* Continuous density heatmap overlay */}
-      {heatmap && (
-        <>
-          <div className="heat heat-a" />
-          <div className="heat heat-b" />
-        </>
-      )}
-
-      <span className="camera-label">CAM-0{index + 1} · LIVE</span>
-      <span className="scene-time">14:36:2{index}</span>
-      {!heatmap && <div className="heatmap-off">Heatmap Hidden</div>}
-    </div>
-  );
-}
-
 export default function DashboardView() {
-  const { cameras, zones, incidents, range, setRange, heatmap, setHeatmap, setPage, flowVectors, setFlowVectors } = useCrowdStore();
-  const [selectedZone, setSelectedZone] = useState('all');
+  const {
+    cameras,
+    zones,
+    incidents,
+    range,
+    setRange,
+    heatmap,
+    setHeatmap,
+    flowVectors,
+    setFlowVectors,
+    setPage,
+    setActiveCameraId,
+    setSandboxSnapshot,
+    setShowAddCameraModal
+  } = useCrowdStore();
 
-  const totalPeople = cameras.reduce((sum, c) => sum + c.count, 774);
+  const totalPeopleBase = cameras.reduce((sum, c) => sum + c.count, 774);
+  const totalPeople = range === 'This week' ? totalPeopleBase * 4 : range === 'Last 24 hours' ? totalPeopleBase * 2 : totalPeopleBase;
   const avgCapacity = Math.round(zones.reduce((sum, z) => sum + z.occupancyPct, 0) / zones.length);
   const activeIncidentsCount = incidents.filter((i) => i.status === 'Open').length;
+
+  const handleCameraSnapshot = (dataUrl) => {
+    setSandboxSnapshot(dataUrl);
+  };
 
   return (
     <div className="dashboard-content-wrapper">
@@ -130,9 +122,9 @@ export default function DashboardView() {
               <p>Continuous density regression integration across all camera zones</p>
             </div>
             <select value={range} onChange={(e) => setRange(e.target.value)} aria-label="Chart range">
-              <option>Today</option>
-              <option>Last 24 hours</option>
-              <option>This week</option>
+              <option value="Today">Today</option>
+              <option value="Last 24 hours">Last 24 hours</option>
+              <option value="This week">This week</option>
             </select>
           </div>
 
@@ -149,7 +141,7 @@ export default function DashboardView() {
               <span>500</span>
               <span>0</span>
             </div>
-            <TrendLineChart forecast />
+            <TrendLineChart range={range} />
             <div className="x-labels">
               <span>09:00</span>
               <span>10:00</span>
@@ -207,12 +199,12 @@ export default function DashboardView() {
         </section>
       </div>
 
-      {/* Live Camera Grid Section */}
+      {/* Live Camera Grid Section with Real Canvas Streams */}
       <section className="panel camera-panel">
         <div className="panel-heading">
           <div>
-            <h2>Live Camera Feeds <span className="feed-count">{cameras.length} Active</span></h2>
-            <p>1-2 FPS sampled frames processed by Python FastAPI AI service</p>
+            <h2>Live CCTV Edge Feeds <span className="feed-count">{cameras.length} Active Streams</span></h2>
+            <p>1-2 FPS sampled frames regressed via Python FastAPI microservice</p>
           </div>
           <div className="camera-actions">
             <button
@@ -240,10 +232,22 @@ export default function DashboardView() {
         </div>
 
         <div className="camera-grid">
-          {cameras.slice(0, 3).map((cam, i) => (
+          {cameras.slice(0, 3).map((cam) => (
             <article className="camera-card" key={cam.id}>
-              <div className="camera-visual">
-                <SimulatedCameraScene scene={cam.scene} index={i} heatmap={heatmap} flowVectors={flowVectors} />
+              <div className="camera-visual" style={{ height: '170px' }}>
+                <CCTVCanvasStream
+                  cameraId={cam.id}
+                  cameraName={cam.name}
+                  count={cam.count}
+                  resolution={cam.resolution}
+                  fps={cam.fps}
+                  latencyMs={cam.latencyMs}
+                  heatmap={heatmap}
+                  flowVectors={flowVectors}
+                  sceneType={cam.scene}
+                  height={170}
+                  onSnapshot={handleCameraSnapshot}
+                />
               </div>
               <div className="camera-info">
                 <div>
@@ -262,6 +266,13 @@ export default function DashboardView() {
                   />
                 </div>
                 <small>{cam.capacity}% capacity</small>
+                <button
+                  className="text-button"
+                  style={{ marginLeft: 'auto', fontSize: '8px' }}
+                  onClick={() => { setActiveCameraId(cam.id); setPage('Live monitor'); }}
+                >
+                  Inspect →
+                </button>
               </div>
             </article>
           ))}

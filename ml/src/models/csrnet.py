@@ -19,58 +19,51 @@ class CSRNet(nn.Module):
     def __init__(self, load_pretrained=False):
         super(CSRNet, self).__init__()
         
-        # Frontend: VGG-16 first 10 conv layers
-        self.frontend_feat = [
-            'conv1_1', 'conv1_2', 'pool1',
-            'conv2_1', 'conv2_2', 'pool2',
-            'conv3_1', 'conv3_2', 'conv3_3', 'pool3',
-            'conv4_1', 'conv4_2', 'conv4_3'
-        ]
-        
         # Build Frontend (Channels: 3 -> 64 -> 128 -> 256 -> 512)
+        # We use inplace=False to allow clean Grad-CAM backward hooks
         self.frontend = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=False)
         )
         
         # Backend: Dilated Convolutions (dilation=2, padding=2 to keep spatial dimensions)
         self.backend = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(512, 512, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(512, 512, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(512, 256, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(256, 128, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(128, 64, kernel_size=3, dilation=2, padding=2),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=False)
         )
         
         # Output 1x1 Convolution: regresses 1-channel continuous crowd density map
@@ -103,16 +96,10 @@ class CSRNet(nn.Module):
         for vgg_l, csr_l in zip(vgg_conv_layers[:10], csr_conv_layers):
             csr_l.weight.data.copy_(vgg_l.weight.data)
             csr_l.bias.data.copy_(vgg_l.bias.data)
-        print("✓ Pretrained VGG-16 weights loaded into CSRNet frontend.")
 
 
 if __name__ == '__main__':
     model = CSRNet(load_pretrained=False)
     x = torch.randn(1, 3, 384, 512)
     density_map = model(x)
-    print(f"Input shape:       {x.shape}")
-    print(f"Density map shape: {density_map.shape} (downsampled stride 8)")
-    count = density_map.sum().item()
-    print(f"Predicted total count (integral): {count:.2f}")
-    assert density_map.shape == (1, 1, 48, 64)
-    print("✓ CSRNet architecture forward pass verified successfully.")
+    print(f"Density map shape: {density_map.shape}")

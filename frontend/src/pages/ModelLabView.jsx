@@ -1,12 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
+import { apiClient } from '../api/client';
 
 export default function ModelLabView() {
   const { models, setActiveModel } = useCrowdStore();
   const [selectedLayer, setSelectedLayer] = useState('backend_conv5_3');
   const [activeCamMode, setActiveCamMode] = useState('gradcam'); // 'gradcam' | 'density' | 'raw'
+  const [activeImageSrc, setActiveImageSrc] = useState('/samples/stadium_dense.jpg');
+  const [gradcamOverlayUrl, setGradcamOverlayUrl] = useState(null);
+  const [densityOverlayUrl, setDensityOverlayUrl] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const activeModel = models.find((m) => m.isActive) || models[0];
+  // Fetch real PyTorch Grad-CAM and Density Map
+  useEffect(() => {
+    async function fetchModelExplainability() {
+      setIsLoading(true);
+      try {
+        const resp = await fetch(activeImageSrc);
+        const blob = await resp.blob();
+
+        // 1. Fetch real PyTorch Grad-CAM
+        const gradcamRes = await apiClient.explainGradCam(blob, selectedLayer);
+        if (gradcamRes && gradcamRes.gradcam_data_url) {
+          setGradcamOverlayUrl(gradcamRes.gradcam_data_url);
+        }
+
+        // 2. Fetch real PyTorch Density Map
+        const predictRes = await apiClient.predictImage(blob, 'csrnet', 300);
+        if (predictRes && predictRes.heatmap_data_url) {
+          setDensityOverlayUrl(predictRes.heatmap_data_url);
+        }
+      } catch (err) {
+        console.warn('Explainability load notice:', err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchModelExplainability();
+  }, [activeImageSrc, selectedLayer]);
 
   return (
     <div className="model-lab-container">
@@ -93,26 +125,26 @@ export default function ModelLabView() {
         </table>
       </div>
 
-      {/* Interactive Grad-CAM & Explainability Studio */}
+      {/* Real Density Grad-CAM & Explainability Studio */}
       <div className="gradcam-studio-grid" style={{ marginTop: '16px' }}>
         <div className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Density Grad-CAM Visualizer (Explainable AI)</h2>
-              <p>Gradient-weighted Class Activation Mapping adapted for crowd regression</p>
+              <h2>Density Grad-CAM Visualizer (PyTorch Backpropagation)</h2>
+              <p>Gradient-weighted Class Activation Mapping adapted for continuous regression: d(Count)/dA_k</p>
             </div>
             <div className="view-mode-toggles">
               <button
                 className={`pill-btn ${activeCamMode === 'raw' ? 'active' : ''}`}
                 onClick={() => setActiveCamMode('raw')}
               >
-                Raw Input
+                Raw Photo
               </button>
               <button
                 className={`pill-btn ${activeCamMode === 'density' ? 'active' : ''}`}
                 onClick={() => setActiveCamMode('density')}
               >
-                Density Map
+                Density Heatmap
               </button>
               <button
                 className={`pill-btn ${activeCamMode === 'gradcam' ? 'active' : ''}`}
@@ -123,50 +155,87 @@ export default function ModelLabView() {
             </div>
           </div>
 
-          <div className="gradcam-preview-box">
-            <div className={`scene concourse ${activeCamMode}`}>
-              <div className="scene-building building-a" />
-              <div className="scene-building building-b" />
-              <div className="scene-floor" />
-              {Array.from({ length: 14 }, (_, i) => (
-                <span key={i} className={`person p${(i % 12) + 1}`}>
-                  <i />
-                </span>
-              ))}
+          {/* Genuine Crowd Photo + Real Neural Activation Overlay */}
+          <div className="gradcam-preview-box" style={{ position: 'relative', height: '320px', borderRadius: '8px', overflow: 'hidden', background: '#0d131a' }}>
+            <img
+              src={activeImageSrc}
+              alt="Real Crowd Scene"
+              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+            />
 
-              {activeCamMode === 'density' && (
-                <>
-                  <div className="heat heat-a" />
-                  <div className="heat heat-b" />
-                </>
-              )}
+            {/* Real Density Map Overlay */}
+            {activeCamMode === 'density' && densityOverlayUrl && (
+              <img
+                src={densityOverlayUrl}
+                alt="PyTorch Density Map"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  mixBlendMode: 'screen',
+                  opacity: 0.8
+                }}
+              />
+            )}
 
-              {activeCamMode === 'gradcam' && (
-                <div className="gradcam-overlay">
-                  <div className="gradcam-pulse pulse-1" />
-                  <div className="gradcam-pulse pulse-2" />
-                  <div className="gradcam-pulse pulse-3" />
-                </div>
-              )}
+            {/* Real PyTorch Grad-CAM Activation Overlay */}
+            {activeCamMode === 'gradcam' && gradcamOverlayUrl && (
+              <img
+                src={gradcamOverlayUrl}
+                alt="PyTorch Grad-CAM Activation Map"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  mixBlendMode: 'screen',
+                  opacity: 0.85
+                }}
+              />
+            )}
 
-              <span className="camera-label">
-                TARGET LAYER: {selectedLayer.toUpperCase()} · RECEPTIVE FIELD EXPANDED (DILATION=2)
-              </span>
+            <div style={{ position: 'absolute', left: '10px', top: '10px', background: 'rgba(12, 20, 28, 0.85)', padding: '5px 9px', borderRadius: '5px', fontSize: '9.5px', color: '#fff', fontFamily: 'JetBrains Mono, monospace' }}>
+              TARGET LAYER: <span style={{ color: '#00ffcc', fontWeight: '700' }}>{selectedLayer.toUpperCase()}</span> (DILATION FACTOR r=2)
             </div>
           </div>
 
-          <div className="layer-picker-row">
-            <span>Target Feature Layer:</span>
+          <div className="layer-picker-row" style={{ marginTop: '12px' }}>
+            <span style={{ fontWeight: '700' }}>Backpropagate Gradient Into:</span>
             {['conv4_3 (Frontend)', 'backend_conv5_1', 'backend_conv5_3 (Output)'].map((l) => (
               <button
                 key={l}
-                className={`button secondary ${selectedLayer === l ? 'active-layer' : ''}`}
+                className={`button secondary ${selectedLayer === l.split(' ')[0] ? 'active-layer' : ''}`}
                 style={{ height: '28px', fontSize: '10px' }}
-                onClick={() => setSelectedLayer(l)}
+                onClick={() => setSelectedLayer(l.split(' ')[0])}
               >
                 {l}
               </button>
             ))}
+          </div>
+
+          <div className="sample-switch-row" style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '10px', fontWeight: '700' }}>Test Photo:</span>
+            <button
+              className={`pill-btn ${activeImageSrc.includes('stadium') ? 'active' : ''}`}
+              onClick={() => setActiveImageSrc('/samples/stadium_dense.jpg')}
+            >
+              Dense Stadium
+            </button>
+            <button
+              className={`pill-btn ${activeImageSrc.includes('street') ? 'active' : ''}`}
+              onClick={() => setActiveImageSrc('/samples/street_pedestrians.jpg')}
+            >
+              Pedestrian Street
+            </button>
+            <button
+              className={`pill-btn ${activeImageSrc.includes('mall') ? 'active' : ''}`}
+              onClick={() => setActiveImageSrc('/samples/mall_concourse.jpg')}
+            >
+              Mall Atrium
+            </button>
           </div>
         </div>
 
@@ -195,10 +264,10 @@ export default function ModelLabView() {
           </div>
 
           <div className="tech-feature-card">
-            <h4>3. ONNX Runtime & FP16 Quantization</h4>
-            <p>
-              Inference is accelerated from 82ms in vanilla PyTorch CPU down to <b>38.4ms</b> using 
-              dynamic-axis ONNX graph export and half-precision FP16 execution.
+            <h4>3. Real PyTorch Density Grad-CAM Formula</h4>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', background: 'var(--surface)', padding: '6px', borderRadius: '4px' }}>
+              α_k = (1/Z) ∑_i ∑_j [∂(Total Count) / ∂A_k(i, j)]<br />
+              L_CAM = ReLU(∑_k α_k · A_k)
             </p>
           </div>
         </div>

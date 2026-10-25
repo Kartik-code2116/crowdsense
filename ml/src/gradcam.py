@@ -18,15 +18,16 @@ class DensityGradCAM:
         self.gradients = None
         self.activations = None
         
-        # Register hooks
+        # Register hooks with cloning to support PyTorch autograd graph
         self.target_layer.register_forward_hook(self._save_activation)
         self.target_layer.register_full_backward_hook(self._save_gradient)
 
     def _save_activation(self, module, input, output):
-        self.activations = output
+        self.activations = output.clone()
 
     def _save_gradient(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0]
+        if grad_output[0] is not None:
+            self.gradients = grad_output[0].clone()
 
     def generate(self, input_tensor):
         """
@@ -47,11 +48,15 @@ class DensityGradCAM:
         # Backward pass with respect to total crowd count
         pred_count.backward(retain_graph=True)
 
-        # Global average pooling of gradients: alpha_k = (1/Z) * sum(grad_k)
-        weights = torch.mean(self.gradients, dim=[2, 3], keepdim=True)
+        if self.gradients is None or self.activations is None:
+            # Fallback to normalized activation
+            cam = torch.mean(self.activations, dim=1, keepdim=True) if self.activations is not None else density_map
+        else:
+            # Global average pooling of gradients: alpha_k = (1/Z) * sum(grad_k)
+            weights = torch.mean(self.gradients, dim=[2, 3], keepdim=True)
+            # Weighted combination of activation maps
+            cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
 
-        # Weighted combination of activation maps
-        cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
         # Apply ReLU to focus on features having positive contribution
         cam = F.relu(cam)
 
@@ -75,12 +80,8 @@ class DensityGradCAM:
 if __name__ == '__main__':
     from models.csrnet import CSRNet
     model = CSRNet(load_pretrained=False)
-    # Target the last layer of the dilated backend
-    target_layer = model.backend[-2]  # Conv2d(128, 64)
+    target_layer = model.backend[-2]
     gradcam = DensityGradCAM(model, target_layer)
-    
     dummy_input = torch.randn(1, 3, 256, 256, requires_grad=True)
     cam, count = gradcam.generate(dummy_input)
-    print(f"Grad-CAM shape: {cam.shape}")
-    print(f"Predicted count: {count:.2f}")
-    print("✓ Density Grad-CAM successfully generated.")
+    print("Grad-CAM check:", cam.shape, count)

@@ -11,6 +11,12 @@ import ModelLabView from './pages/ModelLabView';
 import ReportsView from './pages/ReportsView';
 import SandboxView from './pages/SandboxView';
 import SettingsView from './pages/SettingsView';
+import PhotoScannerView from './pages/PhotoScannerView';
+
+import AuthModal from './components/AuthModal';
+import ProfilePopover from './components/ProfilePopover';
+import NotificationsDrawer from './components/NotificationsDrawer';
+import AddCameraModal from './components/AddCameraModal';
 
 const navGroups = [
   {
@@ -33,6 +39,7 @@ const navGroups = [
   {
     label: 'INTELLIGENCE',
     items: [
+      ['Crowd search', '🔍'],
       ['Forecast', '📈'],
       ['Model lab', '✳'],
       ['Sandbox', '🧪'],
@@ -42,12 +49,13 @@ const navGroups = [
 ];
 
 const menuTitles = {
-  Dashboard: 'Good afternoon, Operator',
+  Dashboard: 'Operations Overview & Live Telemetry',
   'Live monitor': 'Live Camera Multi-Monitor & Telemetry',
   Analytics: 'Crowd Intelligence & Throughput Analytics',
   Cameras: 'Edge Camera Management & RTSP Feeds',
   Zones: 'Safety Zones & Capacity Ceiling Management',
   Incidents: 'Incident Center & Forensic Replay Scrubber',
+  'Crowd search': 'Deep Learning Photo Crowd Scanner & Head Locator',
   Forecast: 'CrowdFlowLSTM Predictive Early Warning',
   'Model lab': 'Model Performance Lab (CSRNet vs MCNN vs YOLO)',
   Reports: 'Operational Safety Reports & Compliance Audits',
@@ -56,13 +64,29 @@ const menuTitles = {
 };
 
 export default function App() {
-  const { theme, setTheme, page, setPage, incidents } = useCrowdStore();
+  const {
+    theme,
+    setTheme,
+    page,
+    setPage,
+    incidents,
+    user,
+    isAuthenticated,
+    setShowAuthModal,
+    showProfileMenu,
+    setShowProfileMenu,
+    showNotificationsDrawer,
+    setShowNotificationsDrawer,
+    setShowAddCameraModal,
+    notifications
+  } = useCrowdStore();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   const activeIncidents = incidents.filter((i) => i.status === 'Open').length;
+  const unreadNotifs = notifications.filter((n) => n.unread).length;
 
   const renderActivePage = () => {
     switch (page) {
@@ -78,6 +102,8 @@ export default function App() {
         return <ZonesView />;
       case 'Incidents':
         return <IncidentsView />;
+      case 'Crowd search':
+        return <PhotoScannerView />;
       case 'Forecast':
         return <ForecastView />;
       case 'Model lab':
@@ -109,11 +135,11 @@ export default function App() {
           </div>
         </div>
 
-        <div className="workspace">
-          <div className="workspace-icon">VC</div>
+        <div className="workspace" onClick={() => setShowProfileMenu(!showProfileMenu)} style={{ cursor: 'pointer' }}>
+          <div className="workspace-icon">{user ? user.avatar : 'VC'}</div>
           <div>
             <strong>Venue Central</strong>
-            <small>Operations Lead · Shift 02</small>
+            <small>{user ? `${user.name} (${user.role})` : 'Operations Lead'}</small>
           </div>
           <span className="chevron">⌄</span>
         </div>
@@ -131,8 +157,8 @@ export default function App() {
                   <span className="icon" aria-hidden="true">{icon}</span>
                   <span>{label}</span>
                   {label === 'Incidents' && activeIncidents > 0 && <em>{activeIncidents}</em>}
+                  {label === 'Crowd search' && <span className="micro-badge pulse">AI</span>}
                   {label === 'Model lab' && <span className="micro-badge">DL</span>}
-                  {label === 'Forecast' && <span className="micro-badge pulse">AI</span>}
                 </button>
               ))}
             </section>
@@ -156,11 +182,15 @@ export default function App() {
             </div>
           </div>
 
-          <button className="profile" onClick={() => setPage('Settings')}>
-            <div className="avatar">AK</div>
+          <button
+            className="profile"
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            title="Open Account & RBAC menu"
+          >
+            <div className="avatar">{user ? user.avatar : 'AK'}</div>
             <span>
-              <b>Alex Kumar</b>
-              <small>Operations Lead (Admin)</small>
+              <b>{user ? user.name : 'Sign In'}</b>
+              <small>{user ? `${user.department} (${user.role})` : 'Unauthenticated'}</small>
             </span>
             <span className="profile-dots">···</span>
           </button>
@@ -192,23 +222,31 @@ export default function App() {
               {theme === 'light' ? '☾' : '☀'}
             </button>
 
+            {/* Notifications Button with Live Badge */}
             <button
               className="icon-button notification"
-              aria-label="Active Incidents"
-              onClick={() => setPage('Incidents')}
+              aria-label="Active Incidents & Alerts"
+              onClick={() => setShowNotificationsDrawer(!showNotificationsDrawer)}
+              title="Open Notifications Drawer"
             >
               ♧
-              {activeIncidents > 0 && <i />}
+              {unreadNotifs > 0 && <i />}
             </button>
 
             <div className="top-divider" />
-            <div className="top-avatar" onClick={() => setPage('Settings')} title="Profile Settings">
-              AK
+
+            {/* User Profile Avatar */}
+            <div
+              className="top-avatar"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              title={`${user?.name} · Click for Account & Role switcher`}
+            >
+              {user ? user.avatar : 'AK'}
             </div>
           </div>
         </header>
 
-        {/* Dynamic Page Header & Router Container */}
+        {/* Dynamic Page Header */}
         <div className="content">
           <div className="page-heading">
             <div>
@@ -216,7 +254,7 @@ export default function App() {
                 SUNDAY, OCTOBER 25, 2026 <span className="heading-dot">•</span> SHIFT 02
               </div>
               <h1>
-                {menuTitles[page] || page}
+                {page === 'Dashboard' && user ? `Welcome back, ${user.name}` : menuTitles[page] || page}
                 <span className="wave">{page === 'Dashboard' ? ' 👋' : ''}</span>
               </h1>
               <p>
@@ -230,16 +268,22 @@ export default function App() {
               <button className="button secondary" onClick={() => setPage('Reports')}>
                 ↓ Export Report
               </button>
-              <button className="button primary" onClick={() => setPage('Cameras')}>
+              <button className="button primary" onClick={() => setShowAddCameraModal(true)}>
                 ＋ Add Camera
               </button>
             </div>
           </div>
 
-          {/* Render Active Tab Component */}
+          {/* Render Active Page Content */}
           {renderActivePage()}
         </div>
       </main>
+
+      {/* Global Interactive Modals & Drawers */}
+      <AuthModal />
+      <ProfilePopover />
+      <NotificationsDrawer />
+      <AddCameraModal />
     </div>
   );
 }

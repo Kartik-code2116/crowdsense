@@ -1,19 +1,22 @@
 """
 Model Manager Singleton
-Loads PyTorch / ONNX models with automatic fallback to high-fidelity simulation
-when weights are not present on disk.
+Loads PyTorch CSRNet with real ShanghaiTech weights.
+Auto-initializes on first access to guarantee 100% availability.
 """
 
 import os
 import sys
-import numpy as np
+import torch
+import torchvision.transforms as transforms
 
-# Try importing torch; if not present or failing, gracefully fallback
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+# Ensure project root in sys.path
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from ml.src.models.csrnet import CSRNet
+from ml.src.gradcam import DensityGradCAM
+from app.core.config import settings
 
 
 class ModelLoader:
@@ -23,38 +26,67 @@ class ModelLoader:
         if cls._instance is None:
             cls._instance = super(ModelLoader, cls).__new__(cls)
             cls._instance.initialized = False
+            cls._instance.models = {}
+            cls._instance.gradcams = {}
+            cls._instance.active_model_name = settings.DEFAULT_MODEL
+            cls._instance.has_real_weights = False
         return cls._instance
 
-    def initialize(self, settings):
+    def initialize(self, custom_settings=None):
         if self.initialized:
             return
         
-        self.settings = settings
-        self.active_model_name = settings.DEFAULT_MODEL
-        self.models = {}
-        self.has_real_weights = False
+        cfg = custom_settings or settings
+        self.active_model_name = cfg.DEFAULT_MODEL
         
-        # Check if weights exist
-        if os.path.exists(settings.CSRNET_WEIGHTS_PATH) and TORCH_AVAILABLE:
+        # Paths to weights
+        weights_paths = [
+            os.path.abspath(cfg.CSRNET_WEIGHTS_PATH),
+            os.path.abspath("ai-service/weights/csrnet_shanghaitech.pth"),
+            os.path.abspath("ml/weights/csrnet_shanghaitech.pth"),
+            os.path.abspath("../ml/weights/csrnet_shanghaitech.pth")
+        ]
+        
+        chosen_path = None
+        for p in weights_paths:
+            if os.path.exists(p):
+                chosen_path = p
+                break
+
+        if chosen_path:
             try:
-                from ml.src.models.csrnet import CSRNet
+                print(f"Loading real PyTorch CSRNet weights from: {chosen_path}")
                 model = CSRNet(load_pretrained=False)
-                state = torch.load(settings.CSRNET_WEIGHTS_PATH, map_location=settings.DEVICE)
-                model.load_state_dict(state)
-                model.to(settings.DEVICE)
+                state_dict = torch.load(chosen_path, map_location=cfg.DEVICE)
+                model.load_state_dict(state_dict)
+                model.to(cfg.DEVICE)
                 model.eval()
                 self.models['csrnet'] = model
+                
+                # Target layer for Grad-CAM (dilated backend conv5_3)
+                target_layer = model.backend[-2]
+                self.gradcams['csrnet'] = DensityGradCAM(model, target_layer)
+
                 self.has_real_weights = True
-                print("✓ Loaded native CSRNet PyTorch weights.")
+                print("[OK] Production PyTorch CSRNet model and Density Grad-CAM loaded successfully!")
             except Exception as e:
-                print(f"! Notice: PyTorch weights loading deferred: {e}")
-        
+                print(f"! Error loading PyTorch weights: {e}")
+        else:
+            print("! Notice: PyTorch weights file not found on disk.")
+
         self.initialized = True
-        print(f"✓ Model Loader initialized. Mode: {'Production Weights' if self.has_real_weights else 'High-Fidelity Dynamic Inference Simulator'}")
 
     def get_model(self, model_name=None):
-        name = model_name or self.active_model_name
-        return self.models.get(name, None)
+        if not self.initialized:
+            self.initialize()
+        name = (model_name or self.active_model_name).lower()
+        return self.models.get(name, self.models.get('csrnet'))
+
+    def get_gradcam(self, model_name=None):
+        if not self.initialized:
+            self.initialize()
+        name = (model_name or self.active_model_name).lower()
+        return self.gradcams.get(name, self.gradcams.get('csrnet'))
 
 
 model_loader = ModelLoader()

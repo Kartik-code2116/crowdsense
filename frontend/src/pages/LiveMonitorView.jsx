@@ -1,16 +1,33 @@
 import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
+import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
 export default function LiveMonitorView() {
-  const { cameras, heatmap, setHeatmap, flowVectors, setFlowVectors, activeCameraId, setActiveCameraId } = useCrowdStore();
-  const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3'
-  const [selectedCam, setSelectedCam] = useState(cameras[1]);
+  const {
+    cameras,
+    heatmap,
+    setHeatmap,
+    flowVectors,
+    setFlowVectors,
+    activeCameraId,
+    setActiveCameraId,
+    setSandboxSnapshot,
+    setShowAddCameraModal
+  } = useCrowdStore();
 
-  const displayedCameras = layout === '1x1' 
-    ? [selectedCam] 
-    : layout === '2x2' 
-      ? cameras.slice(0, 4) 
+  const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3'
+
+  const selectedCam = cameras.find((c) => c.id === activeCameraId) || cameras[1] || cameras[0];
+
+  const displayedCameras = layout === '1x1'
+    ? [selectedCam]
+    : layout === '2x2'
+      ? cameras.slice(0, 4)
       : cameras;
+
+  const handleSnapshot = (dataUrl) => {
+    setSandboxSnapshot(dataUrl);
+  };
 
   return (
     <div className="live-monitor-container">
@@ -19,20 +36,20 @@ export default function LiveMonitorView() {
         <div className="toolbar-left">
           <span className="live-badge">● LIVE OPERATOR FEEDS</span>
           <span className="toolbar-divider" />
-          <span className="active-count">{cameras.length} cameras streaming</span>
+          <span className="active-count">{cameras.length} active edge streams</span>
         </div>
 
         <div className="toolbar-right">
           {/* Layout switches */}
           <div className="layout-picker">
             <button className={`layout-btn ${layout === '1x1' ? 'active' : ''}`} onClick={() => setLayout('1x1')}>
-              1×1
+              1×1 Focus
             </button>
             <button className={`layout-btn ${layout === '2x2' ? 'active' : ''}`} onClick={() => setLayout('2x2')}>
-              2×2
+              2×2 Quad
             </button>
             <button className={`layout-btn ${layout === '3x3' ? 'active' : ''}`} onClick={() => setLayout('3x3')}>
-              3×3
+              3×3 Matrix
             </button>
           </div>
 
@@ -51,23 +68,29 @@ export default function LiveMonitorView() {
             <span className="heat-icon">⇗</span> Optical Flow
             <span className={`switch ${flowVectors ? 'on' : ''}`}><i /></span>
           </button>
+
+          <button className="button primary" style={{ height: '28px', fontSize: '9px' }} onClick={() => setShowAddCameraModal(true)}>
+            + Add Stream
+          </button>
         </div>
       </div>
 
       <div className="monitor-main-split">
         {/* Camera Grid View */}
         <div className={`monitor-grid grid-${layout}`}>
-          {displayedCameras.map((cam, idx) => {
+          {displayedCameras.map((cam) => {
             const isCritical = cam.capacity >= 85;
             const isWarning = cam.capacity >= 70 && !isCritical;
+            const isSelected = selectedCam.id === cam.id;
+
             return (
               <div
                 key={cam.id}
-                className={`monitor-tile ${selectedCam.id === cam.id ? 'active-tile' : ''}`}
-                onClick={() => setSelectedCam(cam)}
+                className={`monitor-tile ${isSelected ? 'active-tile' : ''}`}
+                onClick={() => setActiveCameraId(cam.id)}
               >
                 <div className="tile-header">
-                  <span className="tile-id">CAM-0{idx + 1}</span>
+                  <span className="tile-id">{cam.id}</span>
                   <span className="tile-name">{cam.name}</span>
                   <span className={`tile-status ${isCritical ? 'critical' : isWarning ? 'warning' : 'normal'}`}>
                     {cam.capacity}% Cap
@@ -75,24 +98,19 @@ export default function LiveMonitorView() {
                 </div>
 
                 <div className="tile-visual">
-                  <div className={`scene ${cam.scene}`}>
-                    <div className="scene-building building-a" />
-                    <div className="scene-building building-b" />
-                    <div className="scene-floor" />
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <span key={i} className={`person p${i + 1}`}>
-                        <i />
-                        {flowVectors && <span className="flow-arrow">↗</span>}
-                      </span>
-                    ))}
-                    {heatmap && (
-                      <>
-                        <div className="heat heat-a" />
-                        <div className="heat heat-b" />
-                      </>
-                    )}
-                    {!heatmap && <div className="heatmap-off">Heatmap Hidden</div>}
-                  </div>
+                  <CCTVCanvasStream
+                    cameraId={cam.id}
+                    cameraName={cam.name}
+                    count={cam.count}
+                    resolution={cam.resolution}
+                    fps={cam.fps}
+                    latencyMs={cam.latencyMs}
+                    heatmap={heatmap}
+                    flowVectors={flowVectors}
+                    sceneType={cam.scene}
+                    height={layout === '1x1' ? 380 : layout === '2x2' ? 200 : 150}
+                    onSnapshot={handleSnapshot}
+                  />
                 </div>
 
                 <div className="tile-footer">
@@ -169,6 +187,10 @@ export default function LiveMonitorView() {
               <span>Uncertainty (σ)</span>
               <b>± 3.4 heads</b>
             </div>
+            <div className="metric-row">
+              <span>Stream Protocol</span>
+              <b>RTSP over TCP (H.264)</b>
+            </div>
           </div>
 
           <div className="telemetry-card">
@@ -185,6 +207,21 @@ export default function LiveMonitorView() {
               <span>Turbulence Index</span>
               <b style={{ color: '#27b383' }}>Low (0.18)</b>
             </div>
+          </div>
+
+          <div style={{ marginTop: '14px' }}>
+            <button
+              className="button secondary"
+              style={{ width: '100%', fontSize: '10px' }}
+              onClick={() => {
+                const canvas = document.querySelector('.active-tile canvas') || document.querySelector('canvas');
+                if (canvas) {
+                  setSandboxSnapshot(canvas.toDataURL());
+                }
+              }}
+            >
+              🔍 Inspect Frame in AI Sandbox →
+            </button>
           </div>
         </aside>
       </div>
