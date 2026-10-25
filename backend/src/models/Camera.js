@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const cameraSchema = new mongoose.Schema({
+  _id: { type: String },
   name: { type: String, required: true },
   streamUrl: { type: String, default: 'mock://camera_feed_01' },
   zoneId: { type: String, required: true },

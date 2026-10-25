@@ -60,7 +60,7 @@ export default function CamerasView() {
                   <small style={{ display: 'block', color: 'var(--muted)' }}>{cam.id}</small>
                 </td>
                 <td>{cam.zone}</td>
-                <td><code style={{ fontSize: '10px' }}>rtsp://edge.venue.lan/{cam.id}</code></td>
+                <td><code style={{ fontSize: '12.5px' }}>rtsp://edge.venue.lan/{cam.id}</code></td>
                 <td>{cam.resolution}</td>
                 <td>{cam.fps} FPS</td>
                 <td><b>{cam.latencyMs} ms</b></td>
@@ -72,7 +72,7 @@ export default function CamerasView() {
                 <td>
                   <button
                     className="button secondary"
-                    style={{ height: '24px', fontSize: '9px', padding: '0 8px' }}
+                    style={{ height: '32px', fontSize: '12px', padding: '0 12px' }}
                     onClick={() => deleteCamera(cam.id)}
                   >
                     Remove

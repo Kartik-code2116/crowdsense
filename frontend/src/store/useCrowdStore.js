@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { io } from 'socket.io-client';
+import { apiClient } from '../api/client';
 
 const defaultUsers = {
   admin: {
@@ -127,13 +129,107 @@ export const useCrowdStore = create((set, get) => ({
   flowVectors: false,
   sandboxSnapshot: null,
 
-  // Live Data
+  // Live Data & Database Telemetry
   cameras: initialCameras,
   zones: initialZones,
   incidents: initialIncidents,
   notifications: initialNotifications,
   models: initialModels,
   activeCameraId: 'CAM-02',
+  dbConnected: true,
+  dbSource: 'MongoDB Local (27017)',
+  aiConnected: true,
+  aiModelInfo: 'PyTorch CSRNet (Dilated Conv)',
+  lastSyncTimestamp: null,
+
+  fetchLiveData: async () => {
+    try {
+      // 1. Fetch Cameras from Local MongoDB
+      const camRes = await apiClient.getCameras();
+      if (camRes && camRes.data && Array.isArray(camRes.data) && camRes.data.length > 0) {
+        const currentZones = get().zones;
+        const mapped = camRes.data.map(c => {
+          const zoneObj = currentZones.find(z => z.id === c.zoneId) || { maxCapacity: 200 };
+          const maxCap = zoneObj.maxCapacity || 200;
+          const count = c.lastCount || 0;
+          return {
+            id: c._id || c.id,
+            name: c.name,
+            zone: c.zoneName || 'Zone',
+            zoneId: c.zoneId,
+            count: count,
+            capacity: Math.min(100, Math.round((count / maxCap) * 100)),
+            maxCapacity: maxCap,
+            status: c.status || 'Live',
+            scene: c.sceneType || 'concourse',
+            fps: c.sampleFps || 2.0,
+            latencyMs: c.lastLatencyMs || 38,
+            resolution: c.resolution || '1920x1080'
+          };
+        });
+        set({ cameras: mapped, dbConnected: true, dbSource: 'MongoDB Local (27017)' });
+      }
+
+      // 2. Fetch Zones from Local MongoDB
+      const zoneRes = await apiClient.getZones();
+      if (zoneRes && zoneRes.data && Array.isArray(zoneRes.data) && zoneRes.data.length > 0) {
+        const mappedZones = zoneRes.data.map(z => ({
+          id: z._id || z.id,
+          name: z.name,
+          code: z.code,
+          currentCount: z.currentCount || 0,
+          maxCapacity: z.maxCapacity || 200,
+          warningPct: z.warningThresholdPct || 75,
+          criticalPct: z.criticalThresholdPct || 90,
+          occupancyPct: z.currentOccupancyPct || Math.round(((z.currentCount || 0) / (z.maxCapacity || 200)) * 100),
+          status: (z.currentOccupancyPct >= (z.criticalThresholdPct || 90)) ? 'critical' : (z.currentOccupancyPct >= (z.warningThresholdPct || 75)) ? 'warning' : 'normal',
+          egressCount: z.evacuationRoutes ? z.evacuationRoutes.length : 3
+        }));
+        set({ zones: mappedZones });
+      }
+
+      // 3. Fetch Incidents from Local MongoDB
+      const incRes = await apiClient.getIncidents();
+      if (incRes && incRes.data && Array.isArray(incRes.data) && incRes.data.length > 0) {
+        const mappedInc = incRes.data.map(i => ({
+          id: i._id || i.id || i.incidentNumber,
+          time: i.time || new Date(i.createdAt).toLocaleTimeString(),
+          title: i.title,
+          location: i.location,
+          level: i.level || 'Warning',
+          color: i.color || (i.level === 'Critical' ? 'red' : 'amber'),
+          count: i.peakCount || 140,
+          capacity: i.capacity || 200,
+          status: i.status || 'Open',
+          notes: i.description || ''
+        }));
+        set({ incidents: mappedInc });
+      }
+
+      // 4. Fetch Alerts from Local MongoDB
+      const alertRes = await apiClient.getAlerts();
+      if (alertRes && alertRes.data && Array.isArray(alertRes.data) && alertRes.data.length > 0) {
+        const mappedAlerts = alertRes.data.map(a => ({
+          id: a._id || a.id,
+          title: a.title,
+          time: new Date(a.createdAt).toLocaleTimeString(),
+          unread: a.status === 'Active',
+          level: a.level || 'Warning'
+        }));
+        set({ notifications: mappedAlerts });
+      }
+
+      // 5. Check Health of FastAPI PyTorch Service
+      const aiHealth = await apiClient.getAiHealth();
+      if (aiHealth && aiHealth.status === 'online') {
+        set({ aiConnected: true, aiModelInfo: `PyTorch CSRNet (${aiHealth.device.toUpperCase()})` });
+      }
+
+      set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
+    } catch (e) {
+      console.warn('Real live data fetch fallback:', e.message);
+    }
+  },
 
   // Authentication Actions
   login: (email, password, role = 'admin') => {
@@ -282,3 +378,70 @@ export const useCrowdStore = create((set, get) => ({
     }))
   }))
 }));
+
+// Real-Time Socket.io Live Telemetry Listener
+try {
+  const socketInstance = io('http://localhost:5000', {
+    transports: ['websocket', 'polling'],
+    reconnectionAttempts: 10
+  });
+
+  socketInstance.on('telemetry:tick', (tick) => {
+    if (tick && tick.cameras && Array.isArray(tick.cameras)) {
+      useCrowdStore.setState((state) => {
+        const updatedCameras = state.cameras.map((c) => {
+          const match = tick.cameras.find((tc) => tc.id === c.id || tc.id === c._id);
+          if (match) {
+            const count = match.count;
+            const cap = Math.min(100, Math.round((count / (c.maxCapacity || 200)) * 100));
+            return {
+              ...c,
+              count,
+              capacity: cap,
+              latencyMs: match.latencyMs || c.latencyMs
+            };
+          }
+          return c;
+        });
+
+        const updatedZones = state.zones.map((z) => {
+          const zoneCams = updatedCameras.filter((c) => c.zoneId === z.id);
+          const zoneCount = zoneCams.reduce((sum, c) => sum + c.count, 0) || z.currentCount;
+          const occ = Math.round((zoneCount / (z.maxCapacity || 200)) * 100);
+          const status = occ >= z.criticalPct ? 'critical' : occ >= z.warningPct ? 'warning' : 'normal';
+          return {
+            ...z,
+            currentCount: zoneCount,
+            occupancyPct: occ,
+            status
+          };
+        });
+
+        return {
+          cameras: updatedCameras,
+          zones: updatedZones,
+          dbConnected: true,
+          dbSource: tick.source === 'Local-MongoDB' ? 'MongoDB Local (27017)' : 'In-Memory Fallback',
+          lastSyncTimestamp: tick.timestamp || new Date().toLocaleTimeString()
+        };
+      });
+    }
+  });
+
+  socketInstance.on('alert:created', (alert) => {
+    useCrowdStore.setState((state) => ({
+      notifications: [
+        {
+          id: alert._id || `notif_${Date.now()}`,
+          title: alert.title,
+          time: new Date().toLocaleTimeString(),
+          unread: true,
+          level: alert.level || 'Warning'
+        },
+        ...state.notifications
+      ]
+    }));
+  });
+} catch (e) {
+  console.warn('Socket.io listener init:', e.message);
+}

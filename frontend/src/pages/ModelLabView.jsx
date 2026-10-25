@@ -103,16 +103,16 @@ export default function ModelLabView() {
                 <td>{m.partB_MAE}</td>
                 <td>{m.partB_RMSE}</td>
                 <td><b>{m.latencyMs} ms</b></td>
-                <td><code style={{ fontSize: '10px' }}>ONNX / TensorRT</code></td>
+                <td><code style={{ fontSize: '12.5px' }}>ONNX / TensorRT</code></td>
                 <td>
                   {m.isActive ? (
-                    <span className="badge-pill" style={{ background: '#edf8f2', color: '#19a779' }}>
+                    <span className="badge-pill" style={{ background: '#edf8f2', color: '#19a779', fontSize: '11.5px', padding: '4px 10px' }}>
                       ● Active Primary
                     </span>
                   ) : (
                     <button
                       className="button secondary"
-                      style={{ height: '26px', fontSize: '10px' }}
+                      style={{ height: '32px', fontSize: '12px', padding: '0 12px' }}
                       onClick={() => setActiveModel(m.name)}
                     >
                       Set Active

@@ -69,7 +69,7 @@ export default function LiveMonitorView() {
             <span className={`switch ${flowVectors ? 'on' : ''}`}><i /></span>
           </button>
 
-          <button className="button primary" style={{ height: '28px', fontSize: '9px' }} onClick={() => setShowAddCameraModal(true)}>
+          <button className="button primary" style={{ height: '34px', fontSize: '12.5px', padding: '0 14px' }} onClick={() => setShowAddCameraModal(true)}>
             + Add Stream
           </button>
         </div>

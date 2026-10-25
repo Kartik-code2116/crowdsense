@@ -1,38 +1,67 @@
+const Camera = require('../models/Camera');
+const { getIsConnected, getMemoryStore } = require('../config/db');
+
 /**
  * Socket.IO Live Feed Service
  * Broadcasts real-time camera updates, density changes, and urgent safety alerts
- * to connected dashboard operators.
+ * directly from local MongoDB to connected dashboard operators.
  */
 module.exports = function initializeLiveFeedSocket(io) {
   io.on('connection', (socket) => {
-    // console.log(`[Socket.io] Dashboard connected: ${socket.id}`);
-
     socket.emit('system:connected', {
       timestamp: new Date().toISOString(),
-      activeFeeds: 12,
-      model: 'CSRNet v1.2.0'
+      database: getIsConnected() ? 'MongoDB-Connected' : 'In-Memory',
+      activeFeeds: 6,
+      model: 'CSRNet v1.2.0 (ShanghaiTech Dilated Conv)'
     });
 
     socket.on('subscribe:camera', (cameraId) => {
       socket.join(`camera:${cameraId}`);
     });
-
-    socket.on('disconnect', () => {
-      // console.log(`[Socket.io] Client disconnected: ${socket.id}`);
-    });
   });
 
-  // Simulated live camera sampling tick every 3 seconds
-  setInterval(() => {
-    const liveTick = {
-      timestamp: new Date().toLocaleTimeString(),
-      cameras: [
-        { id: 'cam_01', count: 140 + Math.floor(Math.random() * 8) - 4, capacity: 72 },
-        { id: 'cam_02', count: 284 + Math.floor(Math.random() * 6) - 3, capacity: 91 },
-        { id: 'cam_03', count: 85 + Math.floor(Math.random() * 4) - 2, capacity: 43 }
-      ],
-      venueTotal: 1284 + Math.floor(Math.random() * 10) - 5
-    };
-    io.emit('telemetry:tick', liveTick);
+  // Live camera sampling tick every 3 seconds from MongoDB
+  setInterval(async () => {
+    try {
+      let camerasData = [];
+      let totalCount = 0;
+
+      if (getIsConnected()) {
+        const cams = await Camera.find().lean();
+        camerasData = cams.map(c => {
+          totalCount += (c.lastCount || 0);
+          return {
+            id: String(c._id),
+            name: c.name,
+            count: c.lastCount || 0,
+            latencyMs: c.lastLatencyMs || 36,
+            status: c.status
+          };
+        });
+      } else {
+        const store = getMemoryStore();
+        camerasData = store.cameras.map(c => {
+          totalCount += (c.lastCount || 0);
+          return {
+            id: String(c._id),
+            name: c.name,
+            count: c.lastCount || 0,
+            latencyMs: c.lastLatencyMs || 36,
+            status: c.status
+          };
+        });
+      }
+
+      const liveTick = {
+        timestamp: new Date().toLocaleTimeString(),
+        source: getIsConnected() ? 'Local-MongoDB' : 'Memory-Fallback',
+        cameras: camerasData,
+        venueTotal: totalCount
+      };
+
+      io.emit('telemetry:tick', liveTick);
+    } catch (err) {
+      // Continue safely
+    }
   }, 3000);
 };

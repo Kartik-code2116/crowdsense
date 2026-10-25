@@ -1,7 +1,10 @@
+const Alert = require('../models/Alert');
+const { getIsConnected, getMemoryStore } = require('../config/db');
+
 /**
  * Alert Engine Service
  * Compares incoming detection counts against Zone capacities.
- * Fires events to Socket.io when thresholds are breached.
+ * Fires events to Socket.io when thresholds are breached and saves to MongoDB.
  */
 class AlertEngine {
   constructor() {
@@ -12,7 +15,7 @@ class AlertEngine {
     this.io = ioInstance;
   }
 
-  evaluateThresholds(camera, zone, count) {
+  async evaluateThresholds(camera, zone, count) {
     const capacity = zone.maxCapacity || 200;
     const occupancyPct = Math.round((count / capacity) * 100);
     const warningPct = zone.warningThresholdPct || 75;
@@ -26,9 +29,9 @@ class AlertEngine {
         message: `${zone.name} reached ${occupancyPct}% of maximum capacity (${count}/${capacity} people).`,
         level: 'Critical',
         color: 'red',
-        zoneId: zone._id || zone.id,
+        zoneId: String(zone._id || zone.id),
         zoneName: zone.name,
-        cameraId: camera._id || camera.id,
+        cameraId: String(camera._id || camera.id),
         count: count,
         capacity: capacity,
         occupancyPct: occupancyPct,
@@ -41,9 +44,9 @@ class AlertEngine {
         message: `${zone.name} approaching upper threshold at ${occupancyPct}% capacity.`,
         level: 'Warning',
         color: 'amber',
-        zoneId: zone._id || zone.id,
+        zoneId: String(zone._id || zone.id),
         zoneName: zone.name,
-        cameraId: camera._id || camera.id,
+        cameraId: String(camera._id || camera.id),
         count: count,
         capacity: capacity,
         occupancyPct: occupancyPct,
@@ -52,8 +55,18 @@ class AlertEngine {
       };
     }
 
-    if (alert && this.io) {
-      this.io.emit('alert:created', alert);
+    if (alert) {
+      if (getIsConnected()) {
+        try {
+          await Alert.create(alert);
+        } catch (e) {}
+      } else {
+        getMemoryStore().alerts.unshift(alert);
+      }
+
+      if (this.io) {
+        this.io.emit('alert:created', alert);
+      }
     }
 
     return { alert, occupancyPct };

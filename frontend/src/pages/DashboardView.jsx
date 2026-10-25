@@ -268,7 +268,7 @@ export default function DashboardView() {
                 <small>{cam.capacity}% capacity</small>
                 <button
                   className="text-button"
-                  style={{ marginLeft: 'auto', fontSize: '8px' }}
+                  style={{ marginLeft: 'auto', fontSize: '12px' }}
                   onClick={() => { setActiveCameraId(cam.id); setPage('Live monitor'); }}
                 >
                   Inspect →

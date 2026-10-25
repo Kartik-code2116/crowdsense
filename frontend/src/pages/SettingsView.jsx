@@ -66,7 +66,7 @@ export default function SettingsView() {
         <div className="theme-toggle-row">
           <div>
             <b>Dashboard Color Theme</b>
-            <p style={{ margin: '3px 0 0', fontSize: '10px', color: 'var(--muted)' }}>
+            <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
               Currently in <b>{theme === 'light' ? 'Bright / Light Mode' : 'Dark Mode'}</b>.
             </p>
           </div>

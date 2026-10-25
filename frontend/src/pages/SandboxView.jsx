@@ -148,7 +148,7 @@ export default function SandboxView() {
             )}
 
             {/* Real OSD Telemetry Watermark */}
-            <div style={{ position: 'absolute', left: '10px', top: '10px', background: 'rgba(12, 20, 28, 0.85)', padding: '5px 9px', borderRadius: '5px', fontSize: '10px', color: '#fff', fontFamily: 'JetBrains Mono, monospace' }}>
+            <div style={{ position: 'absolute', left: '12px', top: '12px', background: 'rgba(12, 20, 28, 0.88)', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', color: '#fff', fontFamily: 'JetBrains Mono, monospace' }}>
               <span style={{ color: '#00ffcc', fontWeight: '700' }}>PYTORCH CSRNET:</span> {metrics.count} PEOPLE ({metrics.latencyMs}ms)
             </div>
           </div>

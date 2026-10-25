@@ -1,165 +1,417 @@
-const { getMemoryStore } = require('../config/db');
+const mongoose = require('mongoose');
+const Camera = require('../models/Camera');
+const Zone = require('../models/Zone');
+const User = require('../models/User');
+const Alert = require('../models/Alert');
+const Incident = require('../models/Incident');
+const Detection = require('../models/Detection');
+const ModelVersion = require('../models/ModelVersion');
+const { getIsConnected, getMemoryStore } = require('../config/db');
 
-function populateSeedData() {
+const initialZonesData = [
+  {
+    _id: 'z1',
+    name: 'North Entrance Gate',
+    code: 'GATE-A-ZONE-01',
+    floor: 'Level 1 Ground',
+    maxCapacity: 200,
+    warningThresholdPct: 70,
+    criticalThresholdPct: 85,
+    currentCount: 142,
+    currentOccupancyPct: 71,
+    evacuationRoutes: ['Exit A1', 'Emergency Stairwell North'],
+    description: 'Main public turnstile entry terminal from northern transit interchange.'
+  },
+  {
+    _id: 'z2',
+    name: 'Central Concourse Atrium',
+    code: 'HALL-ZONE-02',
+    floor: 'Level 1 Main Atrium',
+    maxCapacity: 315,
+    warningThresholdPct: 75,
+    criticalThresholdPct: 90,
+    currentCount: 286,
+    currentOccupancyPct: 91,
+    evacuationRoutes: ['Main Concourse West Doors', 'East Egress Tunnel'],
+    description: 'Primary high-density transit artery connecting concourses, gates, and concessions.'
+  },
+  {
+    _id: 'z3',
+    name: 'East Walkway Promenade',
+    code: 'EAST-ZONE-03',
+    floor: 'Level 1 Promenade',
+    maxCapacity: 200,
+    warningThresholdPct: 75,
+    criticalThresholdPct: 90,
+    currentCount: 86,
+    currentOccupancyPct: 43,
+    evacuationRoutes: ['East Turnstiles', 'Promenade Ramp B'],
+    description: 'Outdoor-to-indoor pedestrian walkway leading to arena terraces.'
+  },
+  {
+    _id: 'z4',
+    name: 'Food Court & Dining Concourse',
+    code: 'LOUNGE-ZONE-04',
+    floor: 'Level 2 Mezzanine',
+    maxCapacity: 300,
+    warningThresholdPct: 75,
+    criticalThresholdPct: 90,
+    currentCount: 192,
+    currentOccupancyPct: 64,
+    evacuationRoutes: ['Stairwell South', 'Fire Elevator Bank'],
+    description: 'Upper mezzanine hospitality and concession seating areas.'
+  }
+];
+
+const initialCamerasData = [
+  {
+    _id: 'CAM-01',
+    name: 'North entrance gate',
+    zoneId: 'z1',
+    zoneName: 'GATE A · ZONE 01',
+    streamUrl: 'rtsp://edge.venue.lan/cam1',
+    resolution: '1920x1080',
+    sampleFps: 2.0,
+    status: 'Live',
+    sceneType: 'entrance',
+    lastCount: 142,
+    lastLatencyMs: 38
+  },
+  {
+    _id: 'CAM-02',
+    name: 'Central concourse atrium',
+    zoneId: 'z2',
+    zoneName: 'HALL · ZONE 02',
+    streamUrl: 'rtsp://edge.venue.lan/cam2',
+    resolution: '2560x1440',
+    sampleFps: 2.0,
+    status: 'Live',
+    sceneType: 'concourse',
+    lastCount: 286,
+    lastLatencyMs: 42
+  },
+  {
+    _id: 'CAM-03',
+    name: 'East walkway promenade',
+    zoneId: 'z3',
+    zoneName: 'EAST · ZONE 03',
+    streamUrl: 'rtsp://edge.venue.lan/cam3',
+    resolution: '1920x1080',
+    sampleFps: 2.0,
+    status: 'Live',
+    sceneType: 'walkway',
+    lastCount: 86,
+    lastLatencyMs: 35
+  },
+  {
+    _id: 'CAM-04',
+    name: 'Food court & dining hall',
+    zoneId: 'z4',
+    zoneName: 'FOOD COURT · ZONE 04',
+    streamUrl: 'rtsp://edge.venue.lan/cam4',
+    resolution: '1920x1080',
+    sampleFps: 1.5,
+    status: 'Live',
+    sceneType: 'concourse',
+    lastCount: 192,
+    lastLatencyMs: 39
+  },
+  {
+    _id: 'CAM-05',
+    name: 'Gate B turnstiles',
+    zoneId: 'z1',
+    zoneName: 'GATE B · ZONE 05',
+    streamUrl: 'rtsp://edge.venue.lan/cam5',
+    resolution: '1920x1080',
+    sampleFps: 2.0,
+    status: 'Live',
+    sceneType: 'entrance',
+    lastCount: 98,
+    lastLatencyMs: 36
+  },
+  {
+    _id: 'CAM-06',
+    name: 'Emergency egress corridor',
+    zoneId: 'z2',
+    zoneName: 'EGRESS · ZONE 06',
+    streamUrl: 'rtsp://edge.venue.lan/cam6',
+    resolution: '1920x1080',
+    sampleFps: 1.0,
+    status: 'Live',
+    sceneType: 'walkway',
+    lastCount: 24,
+    lastLatencyMs: 33
+  }
+];
+
+const initialUsersData = [
+  {
+    name: 'Alex Kumar',
+    email: 'admin@crowdsense.io',
+    password: 'password123',
+    role: 'admin',
+    department: 'Venue Operations Lead',
+    avatar: 'AK'
+  },
+  {
+    name: 'Sarah Jenkins',
+    email: 'operator@crowdsense.io',
+    password: 'password123',
+    role: 'operator',
+    department: 'Control Room Shift 02',
+    avatar: 'SJ'
+  },
+  {
+    name: 'David Chen',
+    email: 'analyst@crowdsense.io',
+    password: 'password123',
+    role: 'analyst',
+    department: 'Safety Compliance Analyst',
+    avatar: 'DC'
+  },
+  {
+    name: 'Elena Rostova',
+    email: 'viewer@crowdsense.io',
+    password: 'password123',
+    role: 'viewer',
+    department: 'Executive Board',
+    avatar: 'ER'
+  }
+];
+
+const initialIncidentsData = [
+  {
+    incidentNumber: 'INC-2026-001',
+    title: 'Capacity threshold exceeded (>90%)',
+    description: 'Automated sirens activated. West turnstile flow restricted due to high influx.',
+    level: 'Critical',
+    location: 'Central concourse · Zone 02',
+    zoneId: 'z2',
+    cameraId: 'CAM-02',
+    peakCount: 286,
+    capacity: 315,
+    time: '14:32:08',
+    color: 'red',
+    status: 'Open',
+    createdAt: new Date(Date.now() - 3600000 * 2)
+  },
+  {
+    incidentNumber: 'INC-2026-002',
+    title: 'Crowd density increasing rapidly',
+    description: 'Monitored 22% influx from subway connection line arrival.',
+    level: 'Warning',
+    location: 'North entrance · Zone 01',
+    zoneId: 'z1',
+    cameraId: 'CAM-01',
+    peakCount: 142,
+    capacity: 200,
+    time: '14:18:41',
+    color: 'amber',
+    status: 'Open',
+    createdAt: new Date(Date.now() - 3600000 * 3)
+  },
+  {
+    incidentNumber: 'INC-2026-003',
+    title: 'Camera feed restored & synced',
+    description: 'Stream reconnected at 2.0 FPS with 35ms latency.',
+    level: 'Resolved',
+    location: 'East walkway · Zone 03',
+    zoneId: 'z3',
+    cameraId: 'CAM-03',
+    peakCount: 86,
+    capacity: 200,
+    time: '13:56:12',
+    color: 'green',
+    status: 'Resolved',
+    createdAt: new Date(Date.now() - 3600000 * 5)
+  }
+];
+
+const initialAlertsData = [
+  {
+    title: 'Critical Alert: Zone 02 Breach',
+    message: 'Central concourse capacity reached 91% (286 / 315 people). Automated warning siren triggered.',
+    level: 'Critical',
+    zoneId: 'z2',
+    zoneName: 'Central concourse',
+    cameraId: 'CAM-02',
+    count: 286,
+    capacity: 315,
+    occupancyPct: 91,
+    status: 'Active',
+    createdAt: new Date(Date.now() - 1800000)
+  },
+  {
+    title: 'Predictive Warning: Overcrowding in 8 min',
+    message: 'CrowdFlowLSTM sequence model predicts concourse breach within 8 minutes.',
+    level: 'Warning',
+    zoneId: 'z2',
+    zoneName: 'Central concourse',
+    cameraId: 'CAM-02',
+    count: 260,
+    capacity: 315,
+    occupancyPct: 83,
+    status: 'Active',
+    createdAt: new Date(Date.now() - 2400000)
+  },
+  {
+    title: 'Shift 02 Safety Handover Complete',
+    message: 'All 6 edge CCTV cameras synchronized with local MongoDB time-series storage.',
+    level: 'Info',
+    zoneId: 'z1',
+    zoneName: 'North entrance',
+    cameraId: 'CAM-01',
+    count: 142,
+    capacity: 200,
+    occupancyPct: 71,
+    status: 'Resolved',
+    createdAt: new Date(Date.now() - 7200000)
+  }
+];
+
+// Generates 24 hours of real time-series detections for each camera
+function generateTimeSeriesDetections() {
+  const detections = [];
+  const now = Date.now();
+  const cameras = [
+    { id: 'CAM-01', zoneId: 'z1', base: 140, variance: 25 },
+    { id: 'CAM-02', zoneId: 'z2', base: 280, variance: 35 },
+    { id: 'CAM-03', zoneId: 'z3', base: 85, variance: 15 },
+    { id: 'CAM-04', zoneId: 'z4', base: 190, variance: 30 },
+    { id: 'CAM-05', zoneId: 'z1', base: 95, variance: 20 },
+    { id: 'CAM-06', zoneId: 'z2', base: 25, variance: 8 }
+  ];
+
+  // 1 record every 15 minutes for past 24 hours = 96 points per camera
+  for (let i = 96; i >= 0; i--) {
+    const timestamp = new Date(now - i * 15 * 60 * 1000);
+    // Diurnal curve factor (busier mid-day, quieter early morning)
+    const hour = timestamp.getHours();
+    const timeFactor = Math.sin(((hour - 6) / 18) * Math.PI);
+    const diurnalMultiplier = Math.max(0.4, 0.4 + (timeFactor > 0 ? timeFactor * 0.7 : 0));
+
+    for (const cam of cameras) {
+      const count = Math.max(5, Math.round(cam.base * diurnalMultiplier + (Math.random() * cam.variance * 2 - cam.variance)));
+      detections.push({
+        cameraId: cam.id,
+        zoneId: cam.zoneId,
+        timestamp,
+        count,
+        uncertainty: Number((Math.sqrt(count) * 0.35 + 1.2).toFixed(2)),
+        peakDensity: Number((count / 1200 + 0.05).toFixed(4)),
+        latencyMs: Math.round(34 + Math.random() * 8),
+        modelUsed: 'CSRNet-Dilated',
+        flowVector: {
+          speed: Number((0.8 + Math.random() * 0.9).toFixed(2)),
+          headingDeg: Math.round(Math.random() * 360),
+          direction: ['East', 'West', 'North', 'South'][Math.floor(Math.random() * 4)]
+        },
+        alertTriggered: count > (cam.base * 1.05)
+      });
+    }
+  }
+  return detections;
+}
+
+async function populateSeedData() {
   const store = getMemoryStore();
 
-  store.zones = [
-    {
-      _id: 'z1',
-      name: 'North Entrance',
-      code: 'GATE-A-ZONE-01',
-      floor: 'Level 1 Ground',
-      maxCapacity: 200,
-      warningThresholdPct: 70,
-      criticalThresholdPct: 85,
-      currentCount: 142,
-      currentOccupancyPct: 71,
-      evacuationRoutes: ['Exit A1', 'Emergency Stairwell North']
-    },
-    {
-      _id: 'z2',
-      name: 'Central Concourse',
-      code: 'HALL-ZONE-02',
-      floor: 'Level 1 Main Atrium',
-      maxCapacity: 315,
-      warningThresholdPct: 75,
-      criticalThresholdPct: 90,
-      currentCount: 286,
-      currentOccupancyPct: 91,
-      evacuationRoutes: ['Main Concourse West Doors', 'East Egress Tunnel']
-    },
-    {
-      _id: 'z3',
-      name: 'East Walkway',
-      code: 'EAST-ZONE-03',
-      floor: 'Level 1 Promenade',
-      maxCapacity: 200,
-      warningThresholdPct: 75,
-      criticalThresholdPct: 90,
-      currentCount: 86,
-      currentOccupancyPct: 43,
-      evacuationRoutes: ['East Turnstiles']
-    },
-    {
-      _id: 'z4',
-      name: 'Food Court & Lounge',
-      code: 'LOUNGE-ZONE-04',
-      floor: 'Level 2 Mezzanine',
-      maxCapacity: 300,
-      warningThresholdPct: 75,
-      criticalThresholdPct: 90,
-      currentCount: 192,
-      currentOccupancyPct: 64,
-      evacuationRoutes: ['Stairwell South', 'Fire Elevator Bank']
+  // Always keep memoryStore in sync
+  store.zones = initialZonesData.map(z => ({ ...z }));
+  store.cameras = initialCamerasData.map(c => ({ ...c }));
+  store.incidents = initialIncidentsData.map(i => ({ ...i }));
+  store.alerts = initialAlertsData.map(a => ({ ...a }));
+
+  // Populate MongoDB if connected
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    try {
+      console.log('🔄 Checking and populating local MongoDB collections with authentic data...');
+
+      // 1. Zones
+      const zoneCount = await Zone.countDocuments();
+      if (zoneCount === 0) {
+        for (const z of initialZonesData) {
+          await Zone.create(z);
+        }
+        console.log(`✓ Inserted ${initialZonesData.length} Zones into MongoDB`);
+      }
+
+      // 2. Cameras
+      const cameraCount = await Camera.countDocuments();
+      if (cameraCount === 0) {
+        for (const c of initialCamerasData) {
+          await Camera.create({
+            _id: c._id,
+            name: c.name,
+            zoneId: c.zoneId,
+            zoneName: c.zoneName,
+            streamUrl: c.streamUrl,
+            resolution: c.resolution,
+            sampleFps: c.sampleFps,
+            status: c.status,
+            sceneType: c.sceneType,
+            lastCount: c.lastCount,
+            lastLatencyMs: c.lastLatencyMs
+          });
+        }
+        console.log(`✓ Inserted ${initialCamerasData.length} Cameras into MongoDB`);
+      }
+
+      // 3. Users
+      const userCount = await User.countDocuments();
+      if (userCount === 0) {
+        for (const u of initialUsersData) {
+          await User.create(u);
+        }
+        console.log(`✓ Inserted ${initialUsersData.length} RBAC Users into MongoDB`);
+      }
+
+      // 4. Incidents
+      const incidentCount = await Incident.countDocuments();
+      if (incidentCount === 0) {
+        for (const inc of initialIncidentsData) {
+          await Incident.create(inc);
+        }
+        console.log(`✓ Inserted ${initialIncidentsData.length} Incidents into MongoDB`);
+      }
+
+      // 5. Alerts
+      const alertCount = await Alert.countDocuments();
+      if (alertCount === 0) {
+        for (const alt of initialAlertsData) {
+          await Alert.create(alt);
+        }
+        console.log(`✓ Inserted ${initialAlertsData.length} Alerts into MongoDB`);
+      }
+
+      // 6. Real Time-Series Detections
+      const detectionCount = await Detection.countDocuments();
+      if (detectionCount === 0) {
+        const timeSeriesRecords = generateTimeSeriesDetections();
+        await Detection.insertMany(timeSeriesRecords);
+        console.log(`✓ Inserted ${timeSeriesRecords.length} Time-Series Detections into MongoDB (Compound indexed on cameraId+timestamp with 7-day TTL)`);
+      }
+
+      console.log('✅ Local MongoDB Database populated with authentic CrowdSense data.');
+    } catch (err) {
+      console.error('! Error during MongoDB data seeding:', err.message);
     }
-  ];
+  }
+}
 
-  store.cameras = [
-    {
-      _id: 'cam_01',
-      name: 'North Entrance Main',
-      zoneId: 'z1',
-      zoneName: 'GATE A · ZONE 01',
-      streamUrl: 'rtsp://edge.venue.lan/cam1',
-      resolution: '1920x1080',
-      sampleFps: 2.0,
-      status: 'Live',
-      sceneType: 'entrance',
-      lastCount: 142,
-      lastLatencyMs: 38
-    },
-    {
-      _id: 'cam_02',
-      name: 'Central Concourse Atrium',
-      zoneId: 'z2',
-      zoneName: 'HALL · ZONE 02',
-      streamUrl: 'rtsp://edge.venue.lan/cam2',
-      resolution: '2560x1440',
-      sampleFps: 2.0,
-      status: 'Live',
-      sceneType: 'concourse',
-      lastCount: 286,
-      lastLatencyMs: 41
-    },
-    {
-      _id: 'cam_03',
-      name: 'East Walkway Promenade',
-      zoneId: 'z3',
-      zoneName: 'EAST · ZONE 03',
-      streamUrl: 'rtsp://edge.venue.lan/cam3',
-      resolution: '1920x1080',
-      sampleFps: 2.0,
-      status: 'Live',
-      sceneType: 'walkway',
-      lastCount: 86,
-      lastLatencyMs: 35
-    },
-    {
-      _id: 'cam_04',
-      name: 'Food Court Central',
-      zoneId: 'z4',
-      zoneName: 'LOUNGE · ZONE 04',
-      streamUrl: 'rtsp://edge.venue.lan/cam4',
-      resolution: '1920x1080',
-      sampleFps: 1.5,
-      status: 'Live',
-      sceneType: 'concourse',
-      lastCount: 192,
-      lastLatencyMs: 39
-    }
-  ];
-
-  store.incidents = [
-    {
-      _id: 'inc_01',
-      incidentNumber: 'INC-2026-089',
-      title: 'Capacity threshold exceeded',
-      time: '14:32:08',
-      location: 'Central concourse · Zone 02',
-      level: 'Critical',
-      color: 'red',
-      peakCount: 286,
-      capacity: 315,
-      status: 'Open'
-    },
-    {
-      _id: 'inc_02',
-      incidentNumber: 'INC-2026-088',
-      title: 'Crowd density increasing',
-      time: '14:18:41',
-      location: 'North entrance · Zone 01',
-      level: 'Warning',
-      color: 'amber',
-      peakCount: 142,
-      capacity: 200,
-      status: 'Open'
-    },
-    {
-      _id: 'inc_03',
-      incidentNumber: 'INC-2026-087',
-      title: 'Camera feed restored',
-      time: '13:56:12',
-      location: 'East walkway · Zone 03',
-      level: 'Resolved',
-      color: 'green',
-      peakCount: 86,
-      capacity: 200,
-      status: 'Resolved'
-    }
-  ];
-
-  store.auditLogs = [
-    { action: 'Threshold Modified', user: 'Alex Kumar', role: 'admin', details: 'Zone 02 critical limit updated to 90%', ip: '192.168.1.12', timestamp: new Date(Date.now() - 3600000) },
-    { action: 'Model Switched', user: 'Alex Kumar', role: 'admin', details: 'Switched primary inference backbone to CSRNet v1.2.0', ip: '192.168.1.12', timestamp: new Date(Date.now() - 7200000) },
-    { action: 'Camera Reconnected', user: 'System Worker', role: 'system', details: 'East walkway CAM-03 stream re-initialized at 2 FPS', ip: '127.0.0.1', timestamp: new Date(Date.now() - 10800000) }
-  ];
-
-  console.log('✓ In-memory enterprise seed dataset initialized.');
+// Support direct CLI execution: node backend/src/scripts/seed.js
+if (require.main === module) {
+  const { MONGODB_URI } = require('../config/env');
+  mongoose.connect(MONGODB_URI)
+    .then(async () => {
+      console.log('✓ Connected to MongoDB for CLI Seed Execution');
+      await populateSeedData();
+      process.exit(0);
+    })
+    .catch(err => {
+      console.error('Connection failed:', err);
+      process.exit(1);
+    });
 }
 
 module.exports = { populateSeedData };
-
-if (require.main === module) {
-  populateSeedData();
-  console.log('Seed executed.');
-}

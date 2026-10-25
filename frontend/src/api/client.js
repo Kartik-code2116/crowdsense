@@ -89,6 +89,39 @@ export const apiClient = {
     return null;
   },
 
+  async getAlerts() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/alerts`);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    return null;
+  },
+
+  async getTrendAnalytics(range = 'Today', zoneId = '') {
+    try {
+      const url = `${API_BASE_URL}/analytics/trends?range=${encodeURIComponent(range)}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`;
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    return null;
+  },
+
+  async getHealth() {
+    try {
+      const res = await fetch('http://localhost:5000/health');
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    return null;
+  },
+
+  async getAiHealth() {
+    try {
+      const res = await fetch('http://localhost:8000/health');
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    return null;
+  },
+
   async getForecast(zoneId = 'z1', capacity = 250) {
     try {
       const res = await fetch(`${AI_SERVICE_URL}/forecast`, {

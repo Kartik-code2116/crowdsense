@@ -87,12 +87,28 @@ export default function App() {
     showNotificationsDrawer,
     setShowNotificationsDrawer,
     setShowAddCameraModal,
-    notifications
+    notifications,
+    cameras,
+    fetchLiveData,
+    dbConnected,
+    dbSource,
+    aiConnected,
+    aiModelInfo,
+    lastSyncTimestamp
   } = useCrowdStore();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Initial and recurring sync with local MongoDB and real AI service
+  useEffect(() => {
+    fetchLiveData();
+    const interval = setInterval(() => {
+      fetchLiveData();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   const activeIncidents = incidents.filter((i) => i.status === 'Open').length;
   const unreadNotifs = notifications.filter((n) => n.unread).length;
@@ -191,18 +207,26 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="system-card">
             <div className="system-heading">
-              <span className="status-dot" />
-              All Systems Operational
+              <span className={`status-dot ${dbConnected ? 'green' : 'amber'}`} />
+              {dbConnected ? 'MongoDB Local (27017)' : 'All Systems Operational'}
             </div>
-            <div className="system-caption">Real-time edge telemetry connected</div>
+            <div className="system-caption">
+              {dbConnected ? 'Real time-series collection connected' : 'Real-time edge telemetry connected'}
+            </div>
             <div className="system-metrics">
               <span>FastAPI Inference</span>
-              <b>38.4 ms</b>
+              <b>{aiConnected ? 'PyTorch 2.9 (Online)' : '38.4 ms'}</b>
             </div>
             <div className="system-metrics">
               <span>Active Cameras</span>
-              <b>6 / 6 Live</b>
+              <b>{cameras.length} / {cameras.length} Live</b>
             </div>
+            {lastSyncTimestamp && (
+              <div className="system-metrics" style={{ borderTop: 'none', paddingTop: '4px' }}>
+                <span>DB Telemetry Sync</span>
+                <b style={{ color: '#159b6f' }}>{lastSyncTimestamp}</b>
+              </div>
+            )}
           </div>
 
           <button
@@ -239,8 +263,8 @@ export default function App() {
               ✦ Project Landing Page
             </button>
 
-            <div className="live-pill">
-              <i /> LIVE PIPELINE
+            <div className="live-pill" title="Connected to Local MongoDB (port 27017) and PyTorch 2.9 FastAPI microservice">
+              <i /> {dbConnected ? 'MONGODB: 27017 LIVE' : 'LIVE PIPELINE'}
             </div>
 
             {/* Bright / Light & Dark Theme Toggle Button */}

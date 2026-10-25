@@ -283,7 +283,7 @@ export default function PhotoScannerView() {
                   padding: '10px 14px',
                   borderRadius: '7px',
                   color: '#fff',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   zIndex: 20
                 }}
               >
@@ -291,7 +291,7 @@ export default function PhotoScannerView() {
                   <b style={{ color: '#00ffcc' }}>Target Head: {selectedHead.id}</b>
                   <button
                     className="close-btn"
-                    style={{ color: '#fff', fontSize: '12px' }}
+                    style={{ color: '#fff', fontSize: '15px' }}
                     onClick={() => setSelectedHead(null)}
                   >
                     ✕

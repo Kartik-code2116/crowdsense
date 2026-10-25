@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
 const detectionSchema = new mongoose.Schema({
-  cameraId: { type: String, required: true, index: true },
-  zoneId: { type: String, required: true, index: true },
-  timestamp: { type: Date, default: Date.now, index: true },
+  cameraId: { type: String, required: true },
+  zoneId: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
   count: { type: Number, required: true },
   uncertainty: { type: Number, default: 0 },
   peakDensity: { type: Number, default: 0 },
