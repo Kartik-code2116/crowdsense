@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { useCrowdStore } from './store/useCrowdStore';
+import LandingPageView from './pages/LandingPageView';
+import AuthView from './pages/AuthView';
 import DashboardView from './pages/DashboardView';
 import LiveMonitorView from './pages/LiveMonitorView';
 import AnalyticsView from './pages/AnalyticsView';
@@ -19,6 +21,12 @@ import NotificationsDrawer from './components/NotificationsDrawer';
 import AddCameraModal from './components/AddCameraModal';
 
 const navGroups = [
+  {
+    label: 'PORTAL',
+    items: [
+      ['Landing page', '✦']
+    ]
+  },
   {
     label: 'OVERVIEW',
     items: [
@@ -49,6 +57,7 @@ const navGroups = [
 ];
 
 const menuTitles = {
+  'Landing page': 'CrowdSense Platform Architecture & Overview',
   Dashboard: 'Operations Overview & Live Telemetry',
   'Live monitor': 'Live Camera Multi-Monitor & Telemetry',
   Analytics: 'Crowd Intelligence & Throughput Analytics',
@@ -88,6 +97,19 @@ export default function App() {
   const activeIncidents = incidents.filter((i) => i.status === 'Open').length;
   const unreadNotifs = notifications.filter((n) => n.unread).length;
 
+  // Dedicated Full-Page Views (Landing, Login, Register)
+  if (page === 'Landing' || page === 'Landing page') {
+    return <LandingPageView />;
+  }
+
+  if (page === 'Login') {
+    return <AuthView initialMode="login" />;
+  }
+
+  if (page === 'Register') {
+    return <AuthView initialMode="register" />;
+  }
+
   const renderActivePage = () => {
     switch (page) {
       case 'Dashboard':
@@ -123,7 +145,7 @@ export default function App() {
     <div className="app-shell">
       {/* Industry Sidebar */}
       <aside className="sidebar">
-        <div className="brand">
+        <div className="brand" onClick={() => setPage('Landing')} style={{ cursor: 'pointer' }} title="Go to Project Landing Page">
           <div className="brand-mark">
             <span />
             <span />
@@ -151,14 +173,15 @@ export default function App() {
               {group.items.map(([label, icon]) => (
                 <button
                   key={label}
-                  className={`nav-item ${page === label ? 'active' : ''}`}
-                  onClick={() => setPage(label)}
+                  className={`nav-item ${page === label || (label === 'Landing page' && page === 'Landing') ? 'active' : ''}`}
+                  onClick={() => setPage(label === 'Landing page' ? 'Landing' : label)}
                 >
                   <span className="icon" aria-hidden="true">{icon}</span>
                   <span>{label}</span>
                   {label === 'Incidents' && activeIncidents > 0 && <em>{activeIncidents}</em>}
                   {label === 'Crowd search' && <span className="micro-badge pulse">AI</span>}
                   {label === 'Model lab' && <span className="micro-badge">DL</span>}
+                  {label === 'Landing page' && <span className="micro-badge info">INFO</span>}
                 </button>
               ))}
             </section>
@@ -208,6 +231,14 @@ export default function App() {
           </div>
 
           <div className="top-actions">
+            <button
+              className="landing-portal-button"
+              onClick={() => setPage('Landing')}
+              title="View CrowdSense Project Overview & Landing Page"
+            >
+              ✦ Project Landing Page
+            </button>
+
             <div className="live-pill">
               <i /> LIVE PIPELINE
             </div>

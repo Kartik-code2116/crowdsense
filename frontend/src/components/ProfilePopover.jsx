@@ -42,6 +42,10 @@ export default function ProfilePopover() {
       </div>
 
       <div className="popover-section">
+        <button className="popover-action-row" onClick={() => { setPage('Landing'); setShowProfileMenu(false); }}>
+          <span>🌐 Project Landing Page</span>
+          <span>→</span>
+        </button>
         <button className="popover-action-row" onClick={() => { setPage('Settings'); setShowProfileMenu(false); }}>
           <span>⚙ Workspace Settings</span>
           <span>→</span>

@@ -121,7 +121,7 @@ export const useCrowdStore = create((set, get) => ({
 
   // Theme & Navigation
   theme: localStorage.getItem('crowdsense-theme') || 'light',
-  page: 'Dashboard',
+  page: 'Landing',
   range: 'Today',
   heatmap: true,
   flowVectors: false,
@@ -139,10 +139,10 @@ export const useCrowdStore = create((set, get) => ({
   login: (email, password, role = 'admin') => {
     const selected = defaultUsers[role] || {
       id: `usr_${Date.now()}`,
-      name: email.split('@')[0],
-      email,
+      name: email ? email.split('@')[0] : 'Operator',
+      email: email || 'operator@crowdsense.io',
       role,
-      avatar: email.substring(0, 2).toUpperCase(),
+      avatar: (email ? email.substring(0, 2) : 'OP').toUpperCase(),
       department: 'Operations',
       permissions: ['monitor']
     };
@@ -150,7 +150,28 @@ export const useCrowdStore = create((set, get) => ({
       user: selected,
       isAuthenticated: true,
       token: `jwt-token-${selected.role}-${Date.now()}`,
-      showAuthModal: false
+      showAuthModal: false,
+      page: 'Dashboard'
+    });
+  },
+
+  register: (userData) => {
+    const roleKey = userData.role?.toLowerCase() || 'operator';
+    const newUser = {
+      id: `usr_${Date.now()}`,
+      name: userData.name || 'New Member',
+      email: userData.email,
+      role: roleKey,
+      avatar: (userData.name ? userData.name.substring(0, 2) : 'NM').toUpperCase(),
+      department: userData.organization || 'Safety Operations',
+      permissions: roleKey === 'admin' ? ['all'] : ['monitor', 'view_analytics']
+    };
+    set({
+      user: newUser,
+      isAuthenticated: true,
+      token: `jwt-token-${newUser.role}-${Date.now()}`,
+      showAuthModal: false,
+      page: 'Dashboard'
     });
   },
 
@@ -160,7 +181,7 @@ export const useCrowdStore = create((set, get) => ({
       isAuthenticated: false,
       token: null,
       showProfileMenu: false,
-      showAuthModal: true
+      page: 'Landing'
     });
   },
 
