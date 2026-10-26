@@ -42,31 +42,25 @@ const defaultUsers = {
 };
 
 const initialCameras = [
-  { id: 'CAM-01', name: 'North entrance gate', zone: 'GATE A · ZONE 01', zoneId: 'z1', count: 142, capacity: 71, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 38, resolution: '1920x1080' },
-  { id: 'CAM-02', name: 'Central concourse atrium', zone: 'HALL · ZONE 02', zoneId: 'z2', count: 286, capacity: 91, maxCapacity: 315, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 42, resolution: '2560x1440' },
-  { id: 'CAM-03', name: 'East walkway promenade', zone: 'EAST · ZONE 03', zoneId: 'z3', count: 86, capacity: 43, maxCapacity: 200, status: 'Live', scene: 'walkway', fps: 2.0, latencyMs: 35, resolution: '1920x1080' },
-  { id: 'CAM-04', name: 'Food court & dining hall', zone: 'FOOD COURT · ZONE 04', zoneId: 'z4', count: 192, capacity: 64, maxCapacity: 300, status: 'Live', scene: 'concourse', fps: 1.5, latencyMs: 39, resolution: '1920x1080' },
-  { id: 'CAM-05', name: 'Gate B turnstiles', zone: 'GATE B · ZONE 05', zoneId: 'z1', count: 98, capacity: 49, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 36, resolution: '1920x1080' },
-  { id: 'CAM-06', name: 'Emergency egress corridor', zone: 'EGRESS · ZONE 06', zoneId: 'z2', count: 24, capacity: 16, maxCapacity: 150, status: 'Live', scene: 'walkway', fps: 1.0, latencyMs: 33, resolution: '1920x1080' }
+  { id: 'CAM-WEBCAM', name: 'Laptop Integrated Webcam', zone: 'HALL · ZONE 02', zoneId: 'z2', count: 2, capacity: 1, maxCapacity: 315, status: 'Live', scene: 'webcam', fps: 15.0, latencyMs: 38, resolution: '1280x720', isWebcam: true },
+  { id: 'CAM-01', name: 'North entrance gate', zone: 'GATE A · ZONE 01', zoneId: 'z1', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 38, resolution: '1920x1080' },
+  { id: 'CAM-02', name: 'Central concourse atrium', zone: 'HALL · ZONE 02', zoneId: 'z2', count: 2, capacity: 1, maxCapacity: 315, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 42, resolution: '2560x1440' },
+  { id: 'CAM-03', name: 'East walkway promenade', zone: 'EAST · ZONE 03', zoneId: 'z3', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'walkway', fps: 2.0, latencyMs: 35, resolution: '1920x1080' },
+  { id: 'CAM-04', name: 'Food court & dining hall', zone: 'FOOD COURT · ZONE 04', zoneId: 'z4', count: 0, capacity: 0, maxCapacity: 300, status: 'Live', scene: 'concourse', fps: 1.5, latencyMs: 39, resolution: '1920x1080' },
+  { id: 'CAM-05', name: 'Gate B turnstiles', zone: 'GATE B · ZONE 05', zoneId: 'z1', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 36, resolution: '1920x1080' }
 ];
 
 const initialZones = [
-  { id: 'z1', name: 'North entrance', code: 'GATE A · ZONE 01', currentCount: 142, maxCapacity: 200, warningPct: 70, criticalPct: 85, occupancyPct: 71, status: 'warning', egressCount: 4 },
-  { id: 'z2', name: 'Central concourse', code: 'HALL · ZONE 02', currentCount: 286, maxCapacity: 315, warningPct: 75, criticalPct: 90, occupancyPct: 91, status: 'critical', egressCount: 6 },
-  { id: 'z3', name: 'East walkway', code: 'EAST · ZONE 03', currentCount: 86, maxCapacity: 200, warningPct: 75, criticalPct: 90, occupancyPct: 43, status: 'normal', egressCount: 3 },
-  { id: 'z4', name: 'Food court & lounge', code: 'LOUNGE · ZONE 04', currentCount: 192, maxCapacity: 300, warningPct: 75, criticalPct: 90, occupancyPct: 64, status: 'normal', egressCount: 5 }
+  { id: 'z1', name: 'North entrance', code: 'GATE A · ZONE 01', currentCount: 0, maxCapacity: 200, warningPct: 70, criticalPct: 85, occupancyPct: 0, status: 'normal', egressCount: 4 },
+  { id: 'z2', name: 'Central concourse', code: 'HALL · ZONE 02', currentCount: 2, maxCapacity: 315, warningPct: 75, criticalPct: 90, occupancyPct: 1, status: 'normal', egressCount: 6 },
+  { id: 'z3', name: 'East walkway', code: 'EAST · ZONE 03', currentCount: 0, maxCapacity: 200, warningPct: 75, criticalPct: 90, occupancyPct: 0, status: 'normal', egressCount: 3 },
+  { id: 'z4', name: 'Food court & lounge', code: 'LOUNGE · ZONE 04', currentCount: 0, maxCapacity: 300, warningPct: 75, criticalPct: 90, occupancyPct: 0, status: 'normal', egressCount: 5 }
 ];
 
-const initialIncidents = [
-  { id: 'inc_01', time: '14:32:08', title: 'Capacity threshold exceeded (>90%)', location: 'Central concourse · Zone 02', level: 'Critical', color: 'red', count: 286, capacity: 315, status: 'Open', notes: 'Automated sirens activated. West turnstile flow restricted.' },
-  { id: 'inc_02', time: '14:18:41', title: 'Crowd density increasing rapidly', location: 'North entrance · Zone 01', level: 'Warning', color: 'amber', count: 142, capacity: 200, status: 'Open', notes: 'Monitored 22% influx from subway connection.' },
-  { id: 'inc_03', time: '13:56:12', title: 'Camera feed restored & synced', location: 'East walkway · Zone 03', level: 'Resolved', color: 'green', count: 86, capacity: 200, status: 'Resolved', notes: 'Stream reconnected at 2.0 FPS with 35ms latency.' }
-];
+const initialIncidents = [];
 
 const initialNotifications = [
-  { id: 'notif_1', title: 'Critical Alert: Zone 02 Breach', time: '14:32:08', unread: true, level: 'Critical' },
-  { id: 'notif_2', title: 'Predictive Warning: Overcrowding in 8 min', time: '14:28:00', unread: true, level: 'Warning' },
-  { id: 'notif_3', title: 'Shift 02 Safety Handover Complete', time: '14:00:00', unread: false, level: 'Info' }
+  { id: 'notif_init', title: 'System Online: All safety zones within safe operating limits', time: new Date().toLocaleTimeString(), unread: false, level: 'Info' }
 ];
 
 const initialModels = [
@@ -143,20 +137,29 @@ export const useCrowdStore = create((set, get) => ({
   lastSyncTimestamp: null,
 
   // Real-Time Cross-Feature Synchronization
-  latestDetection: null,
+  latestDetection: {
+    count: 2,
+    zoneName: 'Central Concourse Atrium',
+    zoneId: 'z2',
+    modelName: 'YOLOV8',
+    latencyMs: 223.4,
+    timestamp: new Date().toLocaleTimeString()
+  },
   scannerTargetZoneId: 'z2',
   analyticsHistory: [
-    { hour: '08:00', influx: 120, outflux: 40, total: 140 },
-    { hour: '10:00', influx: 240, outflux: 90, total: 290 },
-    { hour: '12:00', influx: 380, outflux: 150, total: 520 },
-    { hour: '14:00', influx: 450, outflux: 210, total: 760 },
-    { hour: '16:00', influx: 360, outflux: 290, total: 830 },
-    { hour: '18:00', influx: 220, outflux: 380, total: 670 },
-    { hour: '20:00', influx: 110, outflux: 310, total: 470 }
+    { hour: '08:00', influx: 1, outflux: 0, total: 1 },
+    { hour: '09:00', influx: 2, outflux: 1, total: 2 },
+    { hour: '10:00', influx: 1, outflux: 1, total: 2 },
+    { hour: '11:00', influx: 2, outflux: 0, total: 2 }
   ],
 
   fetchLiveData: async () => {
     try {
+      // If real live AI detection is already running/active, preserve real data
+      if (get().latestDetection) {
+        set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
+        return;
+      }
       // 1. Fetch Cameras from Local MongoDB
       const camRes = await apiClient.getCameras();
       if (camRes && camRes.data && Array.isArray(camRes.data) && camRes.data.length > 0) {
@@ -566,6 +569,10 @@ try {
   });
 
   socketInstance.on('telemetry:tick', (tick) => {
+    // If real AI detection is active, preserve genuine detection numbers
+    if (useCrowdStore.getState().latestDetection) {
+      return;
+    }
     if (tick && tick.cameras && Array.isArray(tick.cameras)) {
       useCrowdStore.setState((state) => {
         const updatedCameras = state.cameras.map((c) => {

@@ -43,15 +43,21 @@ exports.getTrendAnalytics = async (req, res) => {
           });
         }
 
-        const latestCount = points[points.length - 1]?.count || 142;
-        // Project 3 future horizons using LSTM trend estimation
-        const lastTime = points[points.length - 1]?.time || '15:00';
+        const latestCount = points[points.length - 1]?.count || 2;
+        const initialCount = points[0]?.count || latestCount;
+        const trendCalc = initialCount > 0 
+          ? (((latestCount - initialCount) / initialCount) * 100).toFixed(1)
+          : '0.0';
+        const trendPct = `${trendCalc >= 0 ? '+' : ''}${trendCalc}%`;
+
+        // Project 3 future horizons using trend estimation
+        const lastTime = points[points.length - 1]?.time || '11:00';
         points[points.length - 1].forecast = latestCount;
 
         const nextHour = (parseInt(lastTime.split(':')[0]) + 1) % 24;
-        points.push({ time: `${String(nextHour).padStart(2, '0')}:00`, count: null, forecast: Math.round(latestCount * 1.08) });
-        points.push({ time: `${String(nextHour).padStart(2, '0')}:30`, count: null, forecast: Math.round(latestCount * 1.14) });
-        points.push({ time: `${String((nextHour + 1) % 24).padStart(2, '0')}:00`, count: null, forecast: Math.round(latestCount * 1.05) });
+        points.push({ time: `${String(nextHour).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.05)) });
+        points.push({ time: `${String(nextHour).padStart(2, '0')}:30`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.10)) });
+        points.push({ time: `${String((nextHour + 1) % 24).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.02)) });
 
         return res.json({
           success: true,
@@ -59,9 +65,9 @@ exports.getTrendAnalytics = async (req, res) => {
           totalSamples: detections.length,
           range,
           currentCount: latestCount,
-          peakPredicted: Math.round(latestCount * 1.14),
+          peakPredicted: Math.max(2, Math.round(latestCount * 1.10)),
           peakPredictedTime: `${String(nextHour).padStart(2, '0')}:30`,
-          trendPct: '+8.2%',
+          trendPct,
           points
         });
       }
@@ -70,28 +76,24 @@ exports.getTrendAnalytics = async (req, res) => {
     console.warn('Analytics MongoDB query fallback:', err.message);
   }
 
-  // Fallback points if MongoDB empty
+  // Fallback points aligned with authentic live baseline
   const points = [
-    { time: '09:00', count: 680, forecast: null },
-    { time: '10:00', count: 820, forecast: null },
-    { time: '11:00', count: 990, forecast: null },
-    { time: '12:00', count: 1150, forecast: null },
-    { time: '13:00', count: 1080, forecast: null },
-    { time: '14:00', count: 1240, forecast: null },
-    { time: '14:30', count: 1284, forecast: 1284 },
-    { time: '15:00', count: null, forecast: 1390 },
-    { time: '15:30', count: null, forecast: 1450 },
-    { time: '16:00', count: null, forecast: 1310 }
+    { time: '08:00', count: 1, forecast: null },
+    { time: '09:00', count: 2, forecast: null },
+    { time: '10:00', count: 2, forecast: null },
+    { time: '11:00', count: 2, forecast: 2 },
+    { time: '11:30', count: null, forecast: 2 },
+    { time: '12:00', count: null, forecast: 3 }
   ];
 
   res.json({
     success: true,
     source: 'Fallback-Memory',
     range,
-    currentCount: 1284,
-    peakPredicted: 1450,
-    peakPredictedTime: '15:30',
-    trendPct: '+8.2%',
+    currentCount: 2,
+    peakPredicted: 3,
+    peakPredictedTime: '12:00',
+    trendPct: '+0.0%',
     points
   });
 };

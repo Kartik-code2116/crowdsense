@@ -17,8 +17,8 @@ const initialZonesData = [
     maxCapacity: 200,
     warningThresholdPct: 70,
     criticalThresholdPct: 85,
-    currentCount: 142,
-    currentOccupancyPct: 71,
+    currentCount: 0,
+    currentOccupancyPct: 0,
     evacuationRoutes: ['Exit A1', 'Emergency Stairwell North'],
     description: 'Main public turnstile entry terminal from northern transit interchange.'
   },
@@ -30,8 +30,8 @@ const initialZonesData = [
     maxCapacity: 315,
     warningThresholdPct: 75,
     criticalThresholdPct: 90,
-    currentCount: 286,
-    currentOccupancyPct: 91,
+    currentCount: 2,
+    currentOccupancyPct: 1,
     evacuationRoutes: ['Main Concourse West Doors', 'East Egress Tunnel'],
     description: 'Primary high-density transit artery connecting concourses, gates, and concessions.'
   },
@@ -43,8 +43,8 @@ const initialZonesData = [
     maxCapacity: 200,
     warningThresholdPct: 75,
     criticalThresholdPct: 90,
-    currentCount: 86,
-    currentOccupancyPct: 43,
+    currentCount: 0,
+    currentOccupancyPct: 0,
     evacuationRoutes: ['East Turnstiles', 'Promenade Ramp B'],
     description: 'Outdoor-to-indoor pedestrian walkway leading to arena terraces.'
   },
@@ -56,8 +56,8 @@ const initialZonesData = [
     maxCapacity: 300,
     warningThresholdPct: 75,
     criticalThresholdPct: 90,
-    currentCount: 192,
-    currentOccupancyPct: 64,
+    currentCount: 0,
+    currentOccupancyPct: 0,
     evacuationRoutes: ['Stairwell South', 'Fire Elevator Bank'],
     description: 'Upper mezzanine hospitality and concession seating areas.'
   }
@@ -74,7 +74,7 @@ const initialCamerasData = [
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'entrance',
-    lastCount: 142,
+    lastCount: 0,
     lastLatencyMs: 38
   },
   {
@@ -87,7 +87,7 @@ const initialCamerasData = [
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'concourse',
-    lastCount: 286,
+    lastCount: 2,
     lastLatencyMs: 42
   },
   {
@@ -100,7 +100,7 @@ const initialCamerasData = [
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'walkway',
-    lastCount: 86,
+    lastCount: 0,
     lastLatencyMs: 35
   },
   {
@@ -113,7 +113,7 @@ const initialCamerasData = [
     sampleFps: 1.5,
     status: 'Live',
     sceneType: 'concourse',
-    lastCount: 192,
+    lastCount: 0,
     lastLatencyMs: 39
   },
   {
@@ -126,7 +126,7 @@ const initialCamerasData = [
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'entrance',
-    lastCount: 98,
+    lastCount: 0,
     lastLatencyMs: 36
   },
   {
@@ -139,7 +139,7 @@ const initialCamerasData = [
     sampleFps: 1.0,
     status: 'Live',
     sceneType: 'walkway',
-    lastCount: 24,
+    lastCount: 0,
     lastLatencyMs: 33
   }
 ];
@@ -182,90 +182,34 @@ const initialUsersData = [
 const initialIncidentsData = [
   {
     incidentNumber: 'INC-2026-001',
-    title: 'Capacity threshold exceeded (>90%)',
-    description: 'Automated sirens activated. West turnstile flow restricted due to high influx.',
-    level: 'Critical',
+    title: 'Camera stream synchronized',
+    description: 'System calibrated and AI inference pipeline active.',
+    level: 'Resolved',
     location: 'Central concourse · Zone 02',
     zoneId: 'z2',
     cameraId: 'CAM-02',
-    peakCount: 286,
+    peakCount: 2,
     capacity: 315,
-    time: '14:32:08',
-    color: 'red',
-    status: 'Open',
-    createdAt: new Date(Date.now() - 3600000 * 2)
-  },
-  {
-    incidentNumber: 'INC-2026-002',
-    title: 'Crowd density increasing rapidly',
-    description: 'Monitored 22% influx from subway connection line arrival.',
-    level: 'Warning',
-    location: 'North entrance · Zone 01',
-    zoneId: 'z1',
-    cameraId: 'CAM-01',
-    peakCount: 142,
-    capacity: 200,
-    time: '14:18:41',
-    color: 'amber',
-    status: 'Open',
-    createdAt: new Date(Date.now() - 3600000 * 3)
-  },
-  {
-    incidentNumber: 'INC-2026-003',
-    title: 'Camera feed restored & synced',
-    description: 'Stream reconnected at 2.0 FPS with 35ms latency.',
-    level: 'Resolved',
-    location: 'East walkway · Zone 03',
-    zoneId: 'z3',
-    cameraId: 'CAM-03',
-    peakCount: 86,
-    capacity: 200,
-    time: '13:56:12',
+    time: '11:00:00',
     color: 'green',
     status: 'Resolved',
-    createdAt: new Date(Date.now() - 3600000 * 5)
+    createdAt: new Date()
   }
 ];
 
 const initialAlertsData = [
   {
-    title: 'Critical Alert: Zone 02 Breach',
-    message: 'Central concourse capacity reached 91% (286 / 315 people). Automated warning siren triggered.',
-    level: 'Critical',
-    zoneId: 'z2',
-    zoneName: 'Central concourse',
-    cameraId: 'CAM-02',
-    count: 286,
-    capacity: 315,
-    occupancyPct: 91,
-    status: 'Active',
-    createdAt: new Date(Date.now() - 1800000)
-  },
-  {
-    title: 'Predictive Warning: Overcrowding in 8 min',
-    message: 'CrowdFlowLSTM sequence model predicts concourse breach within 8 minutes.',
-    level: 'Warning',
-    zoneId: 'z2',
-    zoneName: 'Central concourse',
-    cameraId: 'CAM-02',
-    count: 260,
-    capacity: 315,
-    occupancyPct: 83,
-    status: 'Active',
-    createdAt: new Date(Date.now() - 2400000)
-  },
-  {
-    title: 'Shift 02 Safety Handover Complete',
-    message: 'All 6 edge CCTV cameras synchronized with local MongoDB time-series storage.',
+    title: 'Safety System Online',
+    message: 'All monitored venue sectors operating within safe capacity limits.',
     level: 'Info',
-    zoneId: 'z1',
-    zoneName: 'North entrance',
-    cameraId: 'CAM-01',
-    count: 142,
-    capacity: 200,
-    occupancyPct: 71,
+    zoneId: 'z2',
+    zoneName: 'Central concourse',
+    cameraId: 'CAM-02',
+    count: 2,
+    capacity: 315,
+    occupancyPct: 1,
     status: 'Resolved',
-    createdAt: new Date(Date.now() - 7200000)
+    createdAt: new Date()
   }
 ];
 

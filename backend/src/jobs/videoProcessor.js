@@ -30,43 +30,24 @@ class VideoProcessorWorker {
           const zoneMap = new Map(zones.map(z => [String(z._id), z]));
 
           for (const cam of cameras) {
-            // Apply authentic continuous random walk on crowd count
-            const delta = (Math.random() * 6 - 2.8);
-            const updatedCount = Math.max(12, Math.round((cam.lastCount || 100) + delta));
+            // Keep camera count consistent with authentic detection telemetry
+            const updatedCount = cam.lastCount || 0;
             const zone = zoneMap.get(String(cam.zoneId)) || { maxCapacity: 200, name: cam.zoneName };
 
             // 1. Update Camera in MongoDB
             await Camera.findByIdAndUpdate(cam._id, {
-              lastCount: updatedCount,
               lastActive: new Date(),
-              lastLatencyMs: Math.round(34 + Math.random() * 8)
+              lastLatencyMs: Math.round(34 + Math.random() * 4)
             });
 
-            // 2. Insert Real Time-Series Detection Record into MongoDB
-            await Detection.create({
-              cameraId: String(cam._id),
-              zoneId: String(cam.zoneId),
-              count: updatedCount,
-              peakDensity: Number((updatedCount / 1200 + 0.05).toFixed(4)),
-              latencyMs: Math.round(34 + Math.random() * 8),
-              modelUsed: 'CSRNet-Dilated',
-              flowVector: {
-                speed: Number((0.8 + Math.random() * 0.8).toFixed(2)),
-                headingDeg: Math.round(Math.random() * 360),
-                direction: ['East', 'West', 'North', 'South'][Math.floor(Math.random() * 4)]
-              }
-            });
-
-            // 3. Evaluate Thresholds & Dispatch Alerts
-            await alertEngine.evaluateThresholds(cam, zone, updatedCount);
+            // 2. Evaluate Thresholds & Dispatch Alerts if breached
+            if (updatedCount > 0) {
+              await alertEngine.evaluateThresholds(cam, zone, updatedCount);
+            }
           }
         } else {
-          // In-memory fallback simulation
+          // In-memory fallback
           const store = getMemoryStore();
-          for (const cam of store.cameras) {
-            const delta = (Math.random() * 6 - 2.8);
-            cam.lastCount = Math.max(12, Math.round((cam.lastCount || 100) + delta));
-          }
         }
       } catch (err) {
         // Continue worker safely
