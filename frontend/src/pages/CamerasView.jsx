@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function CamerasView() {
-  const { cameras, addCamera, deleteCamera, zones } = useCrowdStore();
+  const { cameras, addCamera, deleteCamera, zones, toggleWebcamFeed } = useCrowdStore();
   const [showModal, setShowModal] = useState(false);
+  const isWebcamAdded = cameras.some((c) => c.id === 'CAM-WEBCAM');
   const [formData, setFormData] = useState({
     name: '',
     zoneId: 'z1',
@@ -31,11 +32,19 @@ export default function CamerasView() {
       <div className="page-action-row">
         <div>
           <h2>Connected Venue Edge Cameras ({cameras.length})</h2>
-          <p>RTSP streams sampled at 1-2 FPS and regressed via Python FastAPI microservice</p>
+          <p>RTSP edge streams & local hardware webcams regressed via Python FastAPI microservice</p>
         </div>
-        <button className="button primary" onClick={() => setShowModal(true)}>
-          + Register New Camera
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            className={`button ${isWebcamAdded ? 'secondary' : 'primary'}`}
+            onClick={toggleWebcamFeed}
+          >
+            {isWebcamAdded ? '✓ Laptop Webcam Active' : '📹 Add Laptop Webcam'}
+          </button>
+          <button className="button primary" onClick={() => setShowModal(true)}>
+            + Register New Camera
+          </button>
+        </div>
       </div>
 
       <div className="panel" style={{ marginTop: '16px' }}>

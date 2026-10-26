@@ -2,28 +2,58 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function AnalyticsView() {
-  const { zones } = useCrowdStore();
+  const { zones, analyticsHistory, cameras, latestDetection, setPage } = useCrowdStore();
   const [timeRange, setTimeRange] = useState('24h');
 
-  const hourlyData = [
-    { hour: '08:00', influx: 320, outflux: 110, total: 210 },
-    { hour: '10:00', influx: 540, outflux: 220, total: 530 },
-    { hour: '12:00', influx: 820, outflux: 410, total: 940 },
-    { hour: '14:00', influx: 980, outflux: 630, total: 1290 },
-    { hour: '16:00', influx: 740, outflux: 810, total: 1220 },
-    { hour: '18:00', influx: 410, outflux: 890, total: 740 },
-    { hour: '20:00', influx: 180, outflux: 520, total: 400 }
+  const hourlyData = analyticsHistory && analyticsHistory.length > 0 ? analyticsHistory : [
+    { hour: '08:00', influx: 120, outflux: 40, total: 140 },
+    { hour: '10:00', influx: 240, outflux: 90, total: 290 },
+    { hour: '12:00', influx: 380, outflux: 150, total: 520 },
+    { hour: '14:00', influx: 450, outflux: 210, total: 760 },
+    { hour: '16:00', influx: 360, outflux: 290, total: 830 },
+    { hour: '18:00', influx: 220, outflux: 380, total: 670 },
+    { hour: '20:00', influx: 110, outflux: 310, total: 470 }
   ];
 
-  const maxTotal = 1400;
+  const maxTotal = Math.max(200, ...hourlyData.map((d) => d.total || 0)) * 1.15;
+  const totalOccupants = cameras.reduce((sum, c) => sum + (c.count || 0), 0);
+  const highestZone = zones.reduce((prev, curr) => (curr.occupancyPct > (prev?.occupancyPct || 0) ? curr : prev), zones[0]);
 
   return (
     <div className="analytics-container">
+      {/* Live AI Detection Telemetry Summary */}
+      {latestDetection && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'linear-gradient(90deg, rgba(39, 109, 224, 0.12), rgba(25, 167, 121, 0.08))',
+          border: '1px solid #276de0',
+          borderRadius: '8px',
+          padding: '12px 18px',
+          marginBottom: '16px',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div>
+            <span className="live-pill" style={{ background: '#276de0', color: '#fff', borderColor: '#276de0', fontWeight: '800' }}>
+              ● REAL-TIME AI TELEMETRY CONNECTED
+            </span>
+            <div style={{ marginTop: '4px', fontSize: '13px' }}>
+              Latest scan: <b>{latestDetection.count} individuals</b> in <b>{latestDetection.zoneName}</b> ({latestDetection.latencyMs}ms inference latency)
+            </div>
+          </div>
+          <button className="button primary" style={{ fontSize: '12px', padding: '6px 14px' }} onClick={() => setPage('Crowd search')}>
+            🔍 Run New Crowd Scan →
+          </button>
+        </div>
+      )}
+
       {/* Analytics Filter Header */}
       <div className="analytics-header">
         <div>
           <h2>Historical Crowd Intelligence & Flow Distribution</h2>
-          <p>Longitudinal analysis based on continuous density regression time-series</p>
+          <p>Longitudinal analysis based on continuous deep learning detection time-series</p>
         </div>
         <div className="range-pills">
           {['1h', '6h', '24h', '7d', '30d'].map((r) => (

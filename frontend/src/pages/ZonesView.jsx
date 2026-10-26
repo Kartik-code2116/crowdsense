@@ -2,7 +2,7 @@ import React from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function ZonesView() {
-  const { zones, updateZoneThresholds } = useCrowdStore();
+  const { zones, updateZoneThresholds, setScannerTargetZoneId, setPage } = useCrowdStore();
 
   return (
     <div className="zones-view-container">
@@ -82,14 +82,26 @@ export default function ZonesView() {
                 </div>
               </div>
 
-              <div className="zone-footer-status">
-                {isCritical ? (
-                  <span className="text-red">⚠ Critical Alert Fired: Automatic Egress Flow Protocol Activated</span>
-                ) : isWarning ? (
-                  <span className="text-amber">▲ Warning: Re-routing gate influx recommended</span>
-                ) : (
-                  <span className="text-green">✓ Normal operating condition within NFPA standards</span>
-                )}
+              <div className="zone-footer-status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <div>
+                  {isCritical ? (
+                    <span className="text-red">⚠ Critical Alert Fired: Automatic Egress Flow Protocol Activated</span>
+                  ) : isWarning ? (
+                    <span className="text-amber">▲ Warning: Re-routing gate influx recommended</span>
+                  ) : (
+                    <span className="text-green">✓ Normal operating condition within NFPA standards</span>
+                  )}
+                </div>
+                <button
+                  className="button secondary"
+                  style={{ fontSize: '11px', padding: '4px 10px', height: '28px' }}
+                  onClick={() => {
+                    setScannerTargetZoneId(zone.id);
+                    setPage('Crowd search');
+                  }}
+                >
+                  🔍 Scan Zone in Crowd Search →
+                </button>
               </div>
             </div>
           );

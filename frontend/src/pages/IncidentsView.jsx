@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function IncidentsView() {
-  const { incidents, resolveIncident } = useCrowdStore();
+  const { incidents, resolveIncident, inspectInCrowdSearch } = useCrowdStore();
   const [filter, setFilter] = useState('All');
   const [selectedIncident, setSelectedIncident] = useState(incidents[0]);
   const [replayOffsetMinutes, setReplayOffsetMinutes] = useState(0); // -15, -10, -5, 0 (trigger), +5
@@ -89,31 +89,55 @@ export default function IncidentsView() {
             </div>
 
             {/* Reconstructed Density Visual Frame */}
-            <div className="replay-visual-box">
-              <div className="scene concourse" style={{ height: '240px' }}>
-                <div className="scene-building building-a" />
-                <div className="scene-building building-b" />
-                <div className="scene-floor" />
-                {Array.from({ length: Math.min(18, Math.floor(scrubbedCount / 16)) }, (_, i) => (
-                  <span key={i} className={`person p${(i % 12) + 1}`}>
-                    <i />
+            <div className="replay-visual-box" style={{ position: 'relative', overflow: 'hidden', height: '240px', background: '#0a1016' }}>
+              {selectedIncident.snapshotUrl ? (
+                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                  <img
+                    src={selectedIncident.snapshotUrl}
+                    alt="Incident Frame"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                  <div style={{ position: 'absolute', top: '10px', left: '12px', background: 'rgba(0,0,0,0.75)', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', color: '#00ffcc', fontFamily: 'monospace' }}>
+                    SOURCE CAPTURE · {selectedIncident.time} · {selectedIncident.count} PERSONS
+                  </div>
+                </div>
+              ) : (
+                <div className="scene concourse" style={{ height: '240px' }}>
+                  <div className="scene-building building-a" />
+                  <div className="scene-building building-b" />
+                  <div className="scene-floor" />
+                  {Array.from({ length: Math.min(18, Math.floor(scrubbedCount / 16)) }, (_, i) => (
+                    <span key={i} className={`person p${(i % 12) + 1}`}>
+                      <i />
+                    </span>
+                  ))}
+                  <div
+                    className="heat heat-a"
+                    style={{ transform: `scale(${0.7 + scrubbedCount / 250})` }}
+                  />
+                  <div
+                    className="heat heat-b"
+                    style={{ transform: `scale(${0.7 + scrubbedCount / 250})` }}
+                  />
+                  <span className="camera-label">
+                    REPLAY · {replayOffsetMinutes === 0 ? 'TRIGGER MOMENT' : `${replayOffsetMinutes > 0 ? '+' : ''}${replayOffsetMinutes} MIN`}
                   </span>
-                ))}
-                {/* Dynamic heat opacity based on scrubber */}
-                <div
-                  className="heat heat-a"
-                  style={{ transform: `scale(${0.7 + scrubbedCount / 250})` }}
-                />
-                <div
-                  className="heat heat-b"
-                  style={{ transform: `scale(${0.7 + scrubbedCount / 250})` }}
-                />
-                <span className="camera-label">
-                  REPLAY CAM-02 · {replayOffsetMinutes === 0 ? 'TRIGGER MOMENT' : `${replayOffsetMinutes > 0 ? '+' : ''}${replayOffsetMinutes} MIN`}
-                </span>
-                <span className="scene-time">14:32:{replayOffsetMinutes >= 0 ? 10 + replayOffsetMinutes : 50 + replayOffsetMinutes}</span>
-              </div>
+                  <span className="scene-time">14:32:{replayOffsetMinutes >= 0 ? 10 + replayOffsetMinutes : 50 + replayOffsetMinutes}</span>
+                </div>
+              )}
             </div>
+
+            {selectedIncident.snapshotUrl && (
+              <div style={{ marginTop: '10px', textAlign: 'right' }}>
+                <button
+                  className="button secondary"
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                  onClick={() => inspectInCrowdSearch(selectedIncident.snapshotUrl)}
+                >
+                  🔍 Deep Inspect Source Frame in Crowd Search →
+                </button>
+              </div>
+            )}
 
             {/* Scrubber Timeline Controls */}
             <div className="scrubber-control-box">
@@ -154,9 +178,13 @@ export default function IncidentsView() {
             <div className="incident-diagnostic-notes">
               <h4>Safety Officer Forensic Log</h4>
               <p>
-                At 14:32:08, the CSRNet model recorded a 32-person density spike within 180 seconds in Zone 02 Central Concourse. 
-                Spatial density peaked at <b>1.12 heads/m²</b> near Turnstile West, crossing the 90% critical threshold. 
-                Automated audio sirens were triggered, and entrance turnstiles were temporarily metered.
+                {selectedIncident.notes || (
+                  <>
+                    At {selectedIncident.time}, deep learning crowd detection recorded an active threshold trigger in {selectedIncident.location}. 
+                    Peak count recorded at <b>{selectedIncident.count} persons</b> against a ceiling of <b>{selectedIncident.capacity}</b>. 
+                    Automated safety telemetry dispatched to control room.
+                  </>
+                )}
               </p>
             </div>
           </div>

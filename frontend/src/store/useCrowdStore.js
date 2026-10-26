@@ -139,8 +139,21 @@ export const useCrowdStore = create((set, get) => ({
   dbConnected: true,
   dbSource: 'MongoDB Local (27017)',
   aiConnected: true,
-  aiModelInfo: 'PyTorch CSRNet (Dilated Conv)',
+  aiModelInfo: 'PyTorch YOLOv8 + CSRNet',
   lastSyncTimestamp: null,
+
+  // Real-Time Cross-Feature Synchronization
+  latestDetection: null,
+  scannerTargetZoneId: 'z2',
+  analyticsHistory: [
+    { hour: '08:00', influx: 120, outflux: 40, total: 140 },
+    { hour: '10:00', influx: 240, outflux: 90, total: 290 },
+    { hour: '12:00', influx: 380, outflux: 150, total: 520 },
+    { hour: '14:00', influx: 450, outflux: 210, total: 760 },
+    { hour: '16:00', influx: 360, outflux: 290, total: 830 },
+    { hour: '18:00', influx: 220, outflux: 380, total: 670 },
+    { hour: '20:00', influx: 110, outflux: 310, total: 470 }
+  ],
 
   fetchLiveData: async () => {
     try {
@@ -335,6 +348,172 @@ export const useCrowdStore = create((set, get) => ({
   deleteCamera: (id) => set((state) => ({
     cameras: state.cameras.filter((c) => c.id !== id)
   })),
+
+  toggleWebcamFeed: () => {
+    const state = get();
+    const existing = state.cameras.find((c) => c.id === 'CAM-WEBCAM');
+    if (existing) {
+      set({
+        cameras: state.cameras.filter((c) => c.id !== 'CAM-WEBCAM'),
+        activeCameraId: state.cameras.find((c) => c.id !== 'CAM-WEBCAM')?.id || 'CAM-01'
+      });
+    } else {
+      const webcamCam = {
+        id: 'CAM-WEBCAM',
+        name: 'Laptop Camera Feed (Live)',
+        zone: 'OPERATOR · LOCAL 01',
+        zoneId: 'z1',
+        count: 1,
+        capacity: 10,
+        maxCapacity: 50,
+        status: 'Live',
+        scene: 'webcam',
+        fps: 15.0,
+        latencyMs: 32,
+        resolution: '1280x720',
+        isWebcam: true
+      };
+      set({
+        cameras: [webcamCam, ...state.cameras],
+        activeCameraId: 'CAM-WEBCAM'
+      });
+    }
+  },
+
+  setScannerTargetZoneId: (scannerTargetZoneId) => set({ scannerTargetZoneId }),
+
+  inspectInCrowdSearch: (imageSrc, zoneId) => {
+    set({
+      sandboxSnapshot: imageSrc,
+      scannerTargetZoneId: zoneId || 'z2',
+      page: 'Crowd search'
+    });
+  },
+
+  // Central Real Detection Dispatcher - connects Crowd Search & Cameras to Dashboard, Live Monitor, Analytics & Incidents
+  recordRealDetection: (payload) => {
+    const state = get();
+    const count = Number(payload.count) || 0;
+    const latencyMs = Number(payload.latencyMs) || 38;
+    const targetZoneId = payload.zoneId || state.scannerTargetZoneId || 'z2';
+    const targetZone = state.zones.find((z) => z.id === targetZoneId) || state.zones[1] || state.zones[0];
+    const targetCameraId = payload.cameraId || (state.cameras.some((c) => c.id === 'CAM-WEBCAM') ? 'CAM-WEBCAM' : 'CAM-02');
+
+    // 1. Update Camera in State
+    const updatedCameras = state.cameras.map((c) => {
+      if (c.id === targetCameraId || (payload.isWebcam && c.id === 'CAM-WEBCAM')) {
+        const cap = Math.min(100, Math.round((count / (targetZone.maxCapacity || 200)) * 100));
+        return {
+          ...c,
+          count,
+          capacity: cap,
+          maxCapacity: targetZone.maxCapacity || c.maxCapacity,
+          latencyMs,
+          status: 'Live',
+          resolution: payload.resolution ? `${payload.resolution.width}x${payload.resolution.height}` : c.resolution,
+          lastDetection: payload
+        };
+      }
+      return c;
+    });
+
+    // 2. Update Zone in State
+    const updatedZones = state.zones.map((z) => {
+      if (z.id === targetZoneId) {
+        const occPct = Math.round((count / z.maxCapacity) * 100);
+        const status = occPct >= z.criticalPct ? 'critical' : occPct >= z.warningPct ? 'warning' : 'normal';
+        return {
+          ...z,
+          currentCount: count,
+          occupancyPct: occPct,
+          status
+        };
+      }
+      return z;
+    });
+
+    // 3. Automated Threshold Breach -> Generate Incident & Notification
+    const occPct = Math.round((count / targetZone.maxCapacity) * 100);
+    const isCritical = occPct >= targetZone.criticalPct;
+    const isWarning = occPct >= targetZone.warningPct && !isCritical;
+
+    let newIncidents = [...state.incidents];
+    let newNotifications = [...state.notifications];
+
+    if (isCritical || isWarning) {
+      const nowStr = new Date().toLocaleTimeString();
+      const level = isCritical ? 'Critical' : 'Warning';
+      const color = isCritical ? 'red' : 'amber';
+      const incidentId = `inc_${Date.now()}`;
+
+      const newInc = {
+        id: incidentId,
+        time: nowStr,
+        title: isCritical
+          ? `Capacity ceiling breach (> ${targetZone.criticalPct}%)`
+          : `Crowd influx surge alert (> ${targetZone.warningPct}%)`,
+        location: `${targetZone.name} · ${targetZone.code}`,
+        level,
+        color,
+        count,
+        capacity: targetZone.maxCapacity,
+        status: 'Open',
+        notes: `Automated detection trigger via ${payload.modelName || 'YOLOv8'}. Detected ${count} persons with ${latencyMs}ms inference latency.`,
+        snapshotUrl: payload.imageSrc || payload.heatmapUrl,
+        realDetection: payload
+      };
+
+      const newNotif = {
+        id: `notif_${Date.now()}`,
+        title: `${level === 'Critical' ? '🚨' : '⚠️'} ${targetZone.name}: ${occPct}% capacity (${count} people detected)`,
+        time: nowStr,
+        unread: true,
+        level
+      };
+
+      // Avoid consecutive duplicate spam
+      if (!newIncidents.some((i) => i.title === newInc.title && i.count === count)) {
+        newIncidents = [newInc, ...newIncidents.slice(0, 15)];
+      }
+      newNotifications = [newNotif, ...newNotifications.slice(0, 15)];
+    }
+
+    // 4. Update Analytics History Time-Series
+    const currentHourStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const currentTotal = updatedCameras.reduce((sum, c) => sum + c.count, 0);
+    const existingHist = [...state.analyticsHistory];
+    const lastHist = existingHist[existingHist.length - 1];
+
+    const updatedHistory = [
+      ...existingHist.slice(0, -1),
+      {
+        ...lastHist,
+        total: currentTotal,
+        influx: Math.max(10, Math.round(count * 0.45)),
+        outflux: Math.max(5, Math.round(count * 0.2))
+      },
+      {
+        hour: currentHourStr,
+        influx: Math.max(15, Math.round(count * 0.5)),
+        outflux: Math.max(5, Math.round(count * 0.15)),
+        total: currentTotal
+      }
+    ].slice(-8);
+
+    set({
+      cameras: updatedCameras,
+      zones: updatedZones,
+      incidents: newIncidents,
+      notifications: newNotifications,
+      analyticsHistory: updatedHistory,
+      latestDetection: {
+        ...payload,
+        zoneName: targetZone.name,
+        timestamp: new Date().toLocaleTimeString()
+      },
+      lastSyncTimestamp: new Date().toLocaleTimeString()
+    });
+  },
 
   // Zone Thresholds
   updateZoneThresholds: (zoneId, warningPct, criticalPct) => set((state) => ({

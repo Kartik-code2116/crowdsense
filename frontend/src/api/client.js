@@ -4,7 +4,7 @@ const API_BASE_URL = 'http://localhost:5000/api/v1';
 
 export const apiClient = {
   // Real PyTorch Deep Learning Inference
-  async predictImage(fileBlob, model = 'csrnet', capacity = 250) {
+  async predictImage(fileBlob, model = 'yolov8', capacity = 250) {
     try {
       const formData = new FormData();
       if (fileBlob) {
@@ -42,6 +42,28 @@ export const apiClient = {
       }
     } catch (e) {}
 
+    return null;
+  },
+
+  // List system connected cameras (laptop webcam and any USB/external cameras)
+  async listConnectedCameras() {
+    try {
+      const res = await fetch(`${AI_SERVICE_URL}/camera/devices`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Camera device listing deferred:', e.message);
+    }
+    return { status: 'fallback', devices: [] };
+  },
+
+  // Grab snapshot and detect from connected hardware camera (OpenCV)
+  async captureCameraFrame(deviceIndex = 0, model = 'yolov8', capacity = 200) {
+    try {
+      const res = await fetch(`${AI_SERVICE_URL}/camera/capture?device_index=${deviceIndex}&model=${model}&zone_capacity=${capacity}`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Camera frame capture failed:', e.message);
+    }
     return null;
   },
 

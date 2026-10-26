@@ -11,11 +11,13 @@ export default function LiveMonitorView() {
     setFlowVectors,
     activeCameraId,
     setActiveCameraId,
-    setSandboxSnapshot,
-    setShowAddCameraModal
+    setShowAddCameraModal,
+    toggleWebcamFeed,
+    inspectInCrowdSearch
   } = useCrowdStore();
 
   const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3'
+  const isWebcamLive = cameras.some((c) => c.id === 'CAM-WEBCAM');
 
   const selectedCam = cameras.find((c) => c.id === activeCameraId) || cameras[1] || cameras[0];
 
@@ -26,7 +28,7 @@ export default function LiveMonitorView() {
       : cameras;
 
   const handleSnapshot = (dataUrl) => {
-    setSandboxSnapshot(dataUrl);
+    inspectInCrowdSearch(dataUrl, selectedCam?.zoneId);
   };
 
   return (
@@ -52,6 +54,15 @@ export default function LiveMonitorView() {
               3×3 Matrix
             </button>
           </div>
+
+          <button
+            className={`toggle-chip ${isWebcamLive ? 'selected' : ''}`}
+            onClick={toggleWebcamFeed}
+            title="Enable live video stream from laptop integrated camera or connected webcam"
+          >
+            <span className="heat-icon">📹</span> Laptop Camera
+            <span className={`switch ${isWebcamLive ? 'on' : ''}`}><i /></span>
+          </button>
 
           <button
             className={`toggle-chip ${heatmap ? 'selected' : ''}`}
@@ -211,16 +222,16 @@ export default function LiveMonitorView() {
 
           <div style={{ marginTop: '14px' }}>
             <button
-              className="button secondary"
-              style={{ width: '100%', fontSize: '10px' }}
+              className="button primary"
+              style={{ width: '100%', fontSize: '12px', padding: '10px' }}
               onClick={() => {
                 const canvas = document.querySelector('.active-tile canvas') || document.querySelector('canvas');
                 if (canvas) {
-                  setSandboxSnapshot(canvas.toDataURL());
+                  inspectInCrowdSearch(canvas.toDataURL(), selectedCam?.zoneId);
                 }
               }}
             >
-              🔍 Inspect Frame in AI Sandbox →
+              🔍 Deep Inspect in Crowd Search →
             </button>
           </div>
         </aside>

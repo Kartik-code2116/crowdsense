@@ -9,7 +9,7 @@ class AIClient {
     });
   }
 
-  async predictFrame(imageBuffer, model = 'csrnet', zoneCapacity = 200) {
+  async predictFrame(imageBuffer, model = 'yolov8', zoneCapacity = 200) {
     try {
       const FormData = require('form-data');
       const form = new FormData();

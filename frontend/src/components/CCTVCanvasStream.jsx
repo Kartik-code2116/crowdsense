@@ -35,14 +35,38 @@ export default function CCTVCanvasStream({
 
   const photoSrc = scenePhotoMap[sceneType] || '/samples/mall_concourse.jpg';
   const imgRef = useRef(null);
+  const videoRef = useRef(null);
+  const mediaStreamRef = useRef(null);
 
   useEffect(() => {
-    const img = new Image();
-    img.src = photoSrc;
-    img.onload = () => {
-      imgRef.current = img;
-    };
-  }, [photoSrc]);
+    if (sceneType === 'webcam' || cameraId === 'CAM-WEBCAM') {
+      const vid = document.createElement('video');
+      vid.autoplay = true;
+      vid.muted = true;
+      vid.playsInline = true;
+      videoRef.current = vid;
+
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then((stream) => {
+          mediaStreamRef.current = stream;
+          vid.srcObject = stream;
+          vid.play().catch(() => {});
+        })
+        .catch((e) => console.warn('CCTV Webcam stream error:', e.message));
+
+      return () => {
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+        }
+      };
+    } else {
+      const img = new Image();
+      img.src = photoSrc;
+      img.onload = () => {
+        imgRef.current = img;
+      };
+    }
+  }, [photoSrc, sceneType, cameraId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -82,7 +106,11 @@ export default function CCTVCanvasStream({
       }
 
       // 1. Draw Real Crowd Camera Frame
-      if (imgRef.current && imgRef.current.complete) {
+      if ((sceneType === 'webcam' || cameraId === 'CAM-WEBCAM') && videoRef.current && videoRef.current.readyState >= 2) {
+        ctx.drawImage(videoRef.current, 0, 0, w, h);
+        ctx.fillStyle = 'rgba(10, 25, 40, 0.08)';
+        ctx.fillRect(0, 0, w, h);
+      } else if (imgRef.current && imgRef.current.complete) {
         ctx.drawImage(imgRef.current, 0, 0, w, h);
         // Slight CCTV high-contrast grading
         ctx.fillStyle = 'rgba(10, 25, 40, 0.15)';

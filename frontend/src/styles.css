@@ -508,6 +508,95 @@ h1 { font: 800 27px Manrope, sans-serif; letter-spacing: -0.8px; margin: 8px 0 6
   100% { transform: scale(0.9); opacity: 0.8; }
 }
 
+.bbox-box {
+  position: absolute;
+  border: 2px solid #00ffcc;
+  background: rgba(0, 255, 204, 0.12);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 12;
+  box-sizing: border-box;
+}
+.bbox-box:hover, .bbox-box.selected {
+  border-color: #ff3344;
+  background: rgba(255, 51, 68, 0.25);
+  box-shadow: 0 0 12px rgba(255, 51, 68, 0.6);
+  z-index: 25;
+}
+.bbox-label {
+  position: absolute;
+  top: -18px;
+  left: -2px;
+  background: #00ffcc;
+  color: #0b131b;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.bbox-box:hover .bbox-label, .bbox-box.selected .bbox-label {
+  background: #ff3344;
+  color: #fff;
+}
+.camera-tab-buttons {
+  display: flex;
+  gap: 8px;
+  background: var(--surface-soft);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.camera-tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.camera-tab-btn.active {
+  background: #276de0;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(39, 109, 224, 0.3);
+}
+.camera-stream-box {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-stream-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.crowd-density-meter {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 6px 0 12px;
+}
+.crowd-density-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
 .scanning-overlay-modal {
   position: absolute; inset: 0; background: rgba(10, 18, 26, 0.85); display: flex;
   flex-direction: column; align-items: center; justify-content: center; gap: 12px;

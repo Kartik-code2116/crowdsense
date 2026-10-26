@@ -74,6 +74,29 @@ class ModelLoader:
         else:
             print("! Notice: PyTorch weights file not found on disk.")
 
+        # Load real YOLOv8 weights for deep crowd detection & bounding boxes
+        yolo_paths = [
+            os.path.abspath("ai-service/weights/yolov8n.pt"),
+            os.path.abspath("weights/yolov8n.pt"),
+            os.path.abspath("yolov8n.pt"),
+            os.path.abspath("../yolov8n.pt")
+        ]
+        chosen_yolo = None
+        for yp in yolo_paths:
+            if os.path.exists(yp):
+                chosen_yolo = yp
+                break
+        if chosen_yolo:
+            try:
+                from ultralytics import YOLO
+                print(f"Loading real YOLOv8 model from: {chosen_yolo}")
+                yolo_model = YOLO(chosen_yolo)
+                self.models['yolo'] = yolo_model
+                self.models['yolov8'] = yolo_model
+                print("[OK] Production YOLOv8 crowd detection model loaded successfully!")
+            except Exception as ey:
+                print(f"! Error loading YOLOv8: {ey}")
+
         self.initialized = True
 
     def get_model(self, model_name=None):

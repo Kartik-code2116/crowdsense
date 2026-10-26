@@ -45,20 +45,58 @@ export default function DashboardView() {
     setPage,
     setActiveCameraId,
     setSandboxSnapshot,
-    setShowAddCameraModal
+    setShowAddCameraModal,
+    latestDetection,
+    inspectInCrowdSearch
   } = useCrowdStore();
 
-  const totalPeopleBase = cameras.reduce((sum, c) => sum + c.count, 774);
+  const totalPeopleBase = cameras.reduce((sum, c) => sum + (c.count || 0), 0);
   const totalPeople = range === 'This week' ? totalPeopleBase * 4 : range === 'Last 24 hours' ? totalPeopleBase * 2 : totalPeopleBase;
-  const avgCapacity = Math.round(zones.reduce((sum, z) => sum + z.occupancyPct, 0) / zones.length);
+  const avgCapacity = zones.length > 0 ? Math.round(zones.reduce((sum, z) => sum + (z.occupancyPct || 0), 0) / zones.length) : 0;
   const activeIncidentsCount = incidents.filter((i) => i.status === 'Open').length;
 
   const handleCameraSnapshot = (dataUrl) => {
-    setSandboxSnapshot(dataUrl);
+    inspectInCrowdSearch(dataUrl);
   };
 
   return (
     <div className="dashboard-content-wrapper">
+      {/* Live AI Crowd Detection Banner */}
+      {latestDetection && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'linear-gradient(90deg, rgba(39, 109, 224, 0.12), rgba(0, 255, 204, 0.08))',
+          border: '1px solid #276de0',
+          borderRadius: '8px',
+          padding: '12px 18px',
+          marginBottom: '16px',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span className="live-pill" style={{ background: '#276de0', color: '#fff', borderColor: '#276de0', fontWeight: '800' }}>
+              ● LIVE AI SCAN ACTIVE
+            </span>
+            <div>
+              <b style={{ fontSize: '14px', color: 'var(--text)' }}>
+                {latestDetection.count} {latestDetection.count === 1 ? 'person' : 'people'} detected in {latestDetection.zoneName || 'Venue Zone'}
+              </b>
+              <small style={{ display: 'block', color: 'var(--muted)', marginTop: '2px' }}>
+                Via {latestDetection.modelName?.toUpperCase() || 'YOLOv8'} · Latency: {latestDetection.latencyMs}ms · Synced at {latestDetection.timestamp}
+              </small>
+            </div>
+          </div>
+          <button
+            className="button primary"
+            style={{ height: '34px', fontSize: '12px', padding: '0 14px' }}
+            onClick={() => setPage('Crowd search')}
+          >
+            🔍 Open in Crowd Search →
+          </button>
+        </div>
+      )}
       {/* Top 4 Real-time Stat Cards */}
       <div className="stat-grid">
         <article className="stat-card">
