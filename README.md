@@ -143,44 +143,156 @@ crowdsense/
 
 ---
 
-## ⚡ Quickstart Guide
+## ⚡ How to Run This Project
 
-### Option A: Run with Docker Compose (Recommended)
+CrowdSense consists of three microservices designed to run cooperatively:
+1. **Python FastAPI AI Microservice** (Port `8000`): Hosts PyTorch CSRNet and Ultralytics YOLOv8 inference engines, continuous density mapping, and OpenCV camera ingestion.
+2. **Node.js Express API Gateway & WebSocket Server** (Port `5000`): Handles REST endpoints, JWT authentication, RBAC, alert threshold engine, and real-time Socket.io telemetry.
+3. **React Vite Frontend Console** (Port `5173`): Interactive operator dashboard with dark/light mode, live multi-monitor grid, webcam deep inspection, and analytics.
 
+---
+
+### Prerequisites
+
+- **Node.js**: v18.x or v20.x+ ([Download Node.js](https://nodejs.org/))
+- **Python**: 3.10+ with `pip` ([Download Python](https://www.python.org/))
+- **MongoDB** *(Optional)*: Runs locally on `mongodb://127.0.0.1:27017`. If MongoDB is not running, the backend automatically engages its built-in in-memory fallback so all features continue working seamlessly without any extra setup.
+- **Webcam / External Camera** *(Optional)*: Laptop integrated camera or USB camera for live crowd detection.
+
+---
+
+### Step-by-Step Local Run Instructions
+
+Open **3 separate terminal windows** (one for each service):
+
+#### Terminal 1: Python FastAPI AI Microservice
+```bash
+# Navigate to the AI microservice directory
+cd ai-service
+
+# (Optional but recommended) Create and activate a Python virtual environment
+# Windows:
+python -m venv venv
+venv\Scripts\activate
+# macOS/Linux:
+python3 -m venv venv
+source venv/bin/activate
+
+# Install required deep learning and computer vision dependencies
+pip install -r requirements.txt
+
+# Start the FastAPI server on port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+- **Service URL**: `http://localhost:8000`
+- **Interactive Swagger API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+*(Note: On first startup, the service automatically downloads the official lightweight `yolov8n.pt` weights if not already present).*
+
+---
+
+#### Terminal 2: Node.js Express API Gateway & WebSockets
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Install Node dependencies
+npm install
+
+# (Recommended) Reset database to clean, authentic real-time baseline (CAM-02 = 2 people, 0 active incidents)
+node src/scripts/resetData.js
+
+# Start backend with automatic reload
+npm run dev
+```
+- **Service URL**: `http://localhost:5000`
+- **Health Check**: [http://localhost:5000/health](http://localhost:5000/health)
+- **CCTV Camera API**: [http://localhost:5000/api/v1/cameras](http://localhost:5000/api/v1/cameras)
+
+---
+
+#### Terminal 3: React Production Frontend Console
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install UI dependencies
+npm install
+
+# Start Vite development server
+npm run dev
+```
+- **Dashboard URL**: [http://localhost:5173](http://localhost:5173)
+
+---
+
+### Alternative: Run All Services via Docker Compose
+
+If you have Docker and Docker Compose installed:
 ```bash
 docker-compose up --build
 ```
-- Frontend: `http://localhost:3000`
-- Node.js API Gateway: `http://localhost:5000`
-- Python FastAPI AI Microservice: `http://localhost:8000/docs`
-- MongoDB: `localhost:27017`
+- **Frontend Console**: `http://localhost:3000`
+- **Node.js API Gateway**: `http://localhost:5000`
+- **FastAPI AI Microservice**: `http://localhost:8000/docs`
+- **MongoDB**: `localhost:27017`
 
-### Option B: Local Multi-Service Development
+---
 
-#### 1. Start the React Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+## 🔍 How to Test Real-Time Crowd Detection & Counting
 
-#### 2. Start the Node.js API Gateway
-```bash
-cd backend
-npm install
-npm run seed     # Seeds realistic cameras, zones, and incidents
-npm start
-```
-Runs on [http://localhost:5000](http://localhost:5000). If MongoDB is not running locally, it automatically activates the enterprise in-memory datastore fallback.
+1. Open [http://localhost:5173](http://localhost:5173) in your browser.
+2. In the left navigation menu, click **Crowd search** (or use the top navigation pill **🔍 Crowd search**).
+3. **Testing with your Laptop Integrated Camera**:
+   - Click the **💻 Laptop Camera (Integrated / USB)** tab.
+   - Select your camera device from the dropdown menu (e.g., *Integrated Camera* or connected USB webcam).
+   - Click **▶ Start Camera Feed** and allow camera permissions in your browser.
+   - Click **⚡ Continuous AI Tracking (1 FPS)** for real-time tracking, or **📸 Capture & Run AI Inference** for a single frame.
+   - Stand in front of your camera: The system uses real **YOLOv8 person detection** to detect humans, draw precise green bounding boxes, pinpoint head coordinates, and render a 2D Gaussian density heatmap.
+4. **Testing with Photo Upload**:
+   - Click the **📁 Upload Crowd Photo** tab.
+   - Drag and drop or browse any image of a crowd (stadium, auditorium, concert, street).
+   - Choose your model: **YOLOv8 Detection Baseline (BBox + Count)** or **CSRNet (Dilated Density Regression)**.
+   - Select a target safety zone (e.g., *Central Concourse Atrium*).
+   - Click **🚀 Run AI Crowd Inference**.
+   - Review detected crowd count, peak density, inference latency, bounding boxes, and Turbo/Jet colormap density heatmap.
+5. **Verify Cross-Feature Synchronization**:
+   - **Dashboard**: "PEOPLE IN VENUE" immediately updates to your detected count, and a blue `● LIVE AI SCAN ACTIVE` banner indicates active real-time AI sync.
+   - **Live Monitor**: Navigate to **Live monitor** and click **CAM-WEBCAM** or inspect any edge stream.
+   - **Analytics**: Navigate to **Analytics** to see live hourly influx/outflux and zone capacity share dynamically adjust.
+   - **Incidents & Safety Alerts**: If your detected count breaches a zone's threshold (>75% for Warning, >90% for Critical), an automated incident is logged with timestamped forensic snapshots in the **Incidents** view.
 
-#### 3. Start the Python FastAPI AI Microservice
-```bash
-cd ai-service
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-Swagger UI interactive docs available at [http://localhost:8000/docs](http://localhost:8000/docs).
+---
+
+## 👥 Default RBAC Operator Accounts
+
+Use the **Sign In** modal on the top-right of the dashboard to switch roles:
+
+| Role | Email | Password | Permissions |
+| :--- | :--- | :--- | :--- |
+| **Safety Administrator** | `admin@crowdsense.io` | `admin123` | Full access: Add/edit cameras, configure safety thresholds, AI model selection, export reports |
+| **Control Room Operator** | `operator@crowdsense.io` | `operator123` | Live monitoring, acknowledge alerts, resolve incidents, trigger emergency protocols |
+| **Safety Compliance Analyst** | `analyst@crowdsense.io` | `analyst123` | Historical crowd analytics, LSTM trend forecast, audit reports |
+| **Executive Viewer** | `viewer@crowdsense.io` | `viewer123` | Read-only executive view across all venue sectors |
+
+---
+
+## 🛠 Troubleshooting & FAQ
+
+- **Port already in use (`EADDRINUSE: 5000` or `8000`)**:
+  - *Windows (PowerShell)*:
+    ```powershell
+    Get-NetTCPConnection -LocalPort 5000, 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+    ```
+  - *macOS/Linux*:
+    ```bash
+    lsof -ti:5000,8000 | xargs kill -9
+    ```
+- **Webcam feed blank or permission denied**:
+  - Ensure browser permissions for camera access are granted for `http://localhost:5173`.
+  - In Windows Settings > Privacy & security > Camera, ensure "Let desktop apps access your camera" is toggled **On**.
+- **MongoDB connection refused**:
+  - The backend will automatically fall back to the in-memory datastore with no user intervention required. To use MongoDB locally, ensure the MongoDB service is started (`mongod` or via Windows Services).
 
 ---
 
@@ -197,3 +309,34 @@ Swagger UI interactive docs available at [http://localhost:8000/docs](http://loc
 
 4. **Why separate Node.js and FastAPI?**
    - *Answer*: Node.js is single-threaded and excels at non-blocking I/O (handling thousands of real-time WebSocket dashboard connections), but cannot execute PyTorch neural networks directly. FastAPI hosts PyTorch/ONNX inference on Python worker processes, enabling horizontal scaling and GPU offloading.
+
+---
+
+## 🔄 Cross-Feature AI Synchronization Pipeline
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│               CROWD SEARCH & DETECTION ENGINE                          │
+│   (Uploaded Photo / Laptop Webcam / Connected External Cameras)        │
+│   • Exact Person Count   • Bounding Boxes   • Density Heatmap          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │  recordRealDetection()
+        ┌───────────────────────────┼───────────────────────────┐
+        ▼                           ▼                           ▼
+┌───────────────┐           ┌───────────────┐           ┌───────────────┐
+│   DASHBOARD   │           │ LIVE MONITOR  │           │   ANALYTICS   │
+│ • Total venue │           │ • Edge camera │           │ • Hourly      │
+│   headcount   │           │   counts      │           │   throughput  │
+│ • Live banner │           │ • Telemetry   │           │ • Zone share  │
+│ • Trend chart │           │ • Snap & send │           │ • Influx bar  │
+└───────┬───────┘           └───────┬───────┘           └───────┬───────┘
+        │                           │                           │
+        └───────────────────────────┼───────────────────────────┘
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │  INCIDENT CENTER & ALERTS     │
+                    │ • Auto-trigger on threshold   │
+                    │ • Forensic snapshot replay    │
+                    │ • One-click deep inspection   │
+                    └───────────────────────────────┘
+```
