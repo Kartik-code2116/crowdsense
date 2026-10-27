@@ -207,15 +207,17 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="system-card">
             <div className="system-heading">
-              <span className={`status-dot ${dbConnected ? 'green' : 'amber'}`} />
-              {dbConnected ? 'MongoDB Local (27017)' : 'All Systems Operational'}
+              <span className={`status-dot ${dbConnected ? 'green' : 'red'}`} />
+              {dbConnected ? dbSource : 'Database Offline'}
             </div>
             <div className="system-caption">
-              {dbConnected ? 'Real time-series collection connected' : 'Real-time edge telemetry connected'}
+              {dbConnected ? 'Real time-series collection connected' : 'Backend not reachable'}
             </div>
             <div className="system-metrics">
-              <span>FastAPI Inference</span>
-              <b>{aiConnected ? 'PyTorch 2.9 (Online)' : '38.4 ms'}</b>
+              <span>FastAPI AI Service</span>
+              <b style={{ color: aiConnected ? '#19a779' : '#e05555' }}>
+                {aiConnected ? aiModelInfo : '⚠ Offline'}
+              </b>
             </div>
             <div className="system-metrics">
               <span>Active Cameras</span>
@@ -263,8 +265,17 @@ export default function App() {
               ✦ Project Landing Page
             </button>
 
-            <div className="live-pill" title="Connected to Local MongoDB (port 27017) and PyTorch 2.9 FastAPI microservice">
-              <i /> {dbConnected ? 'MONGODB: 27017 LIVE' : 'LIVE PIPELINE'}
+            <div
+              className="live-pill"
+              style={{
+                background: dbConnected ? undefined : 'rgba(224, 85, 85, 0.15)',
+                borderColor: dbConnected ? undefined : '#e05555',
+                color: dbConnected ? undefined : '#e05555'
+              }}
+              title={dbConnected ? 'Connected to MongoDB and FastAPI AI service' : 'Services offline — running on static data'}
+            >
+              <i style={{ background: dbConnected ? undefined : '#e05555' }} />
+              {dbConnected ? 'MONGODB: 27017 LIVE' : 'SERVICES OFFLINE'}
             </div>
 
             {/* Bright / Light & Dark Theme Toggle Button */}
@@ -306,7 +317,7 @@ export default function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow">
-                SUNDAY, OCTOBER 25, 2026 <span className="heading-dot">•</span> SHIFT 02
+                {new Date().toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()} <span className="heading-dot">•</span> SHIFT 02
               </div>
               <h1>
                 {page === 'Dashboard' && user ? `Welcome back, ${user.name}` : menuTitles[page] || page}

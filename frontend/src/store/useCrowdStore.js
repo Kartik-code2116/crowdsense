@@ -130,21 +130,15 @@ export const useCrowdStore = create((set, get) => ({
   notifications: initialNotifications,
   models: initialModels,
   activeCameraId: 'CAM-02',
-  dbConnected: true,
-  dbSource: 'MongoDB Local (27017)',
-  aiConnected: true,
-  aiModelInfo: 'PyTorch YOLOv8 + CSRNet',
+  dbConnected: false,
+  dbSource: 'Not connected',
+  aiConnected: false,
+  aiModelInfo: 'AI Service Offline',
   lastSyncTimestamp: null,
 
   // Real-Time Cross-Feature Synchronization
-  latestDetection: {
-    count: 2,
-    zoneName: 'Central Concourse Atrium',
-    zoneId: 'z2',
-    modelName: 'YOLOV8',
-    latencyMs: 223.4,
-    timestamp: new Date().toLocaleTimeString()
-  },
+  latestDetection: null,
+  detectionLog: [],  // Accumulated real scan results from Crowd Search → feeds Forecast
   scannerTargetZoneId: 'z2',
   analyticsHistory: [
     { hour: '08:00', influx: 1, outflux: 0, total: 1 },
@@ -155,11 +149,6 @@ export const useCrowdStore = create((set, get) => ({
 
   fetchLiveData: async () => {
     try {
-      // If real live AI detection is already running/active, preserve real data
-      if (get().latestDetection) {
-        set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
-        return;
-      }
       // 1. Fetch Cameras from Local MongoDB
       const camRes = await apiClient.getCameras();
       if (camRes && camRes.data && Array.isArray(camRes.data) && camRes.data.length > 0) {
@@ -184,6 +173,9 @@ export const useCrowdStore = create((set, get) => ({
           };
         });
         set({ cameras: mapped, dbConnected: true, dbSource: 'MongoDB Local (27017)' });
+      } else {
+        // Backend not reachable — keep static cameras but mark db as offline
+        set({ dbConnected: false, dbSource: 'Not connected' });
       }
 
       // 2. Fetch Zones from Local MongoDB
@@ -235,15 +227,22 @@ export const useCrowdStore = create((set, get) => ({
         set({ notifications: mappedAlerts });
       }
 
-      // 5. Check Health of FastAPI PyTorch Service
+      // 5. Check Health of FastAPI PyTorch AI Service
       const aiHealth = await apiClient.getAiHealth();
       if (aiHealth && aiHealth.status === 'online') {
-        set({ aiConnected: true, aiModelInfo: `PyTorch CSRNet (${aiHealth.device.toUpperCase()})` });
+        set({
+          aiConnected: true,
+          aiModelInfo: `PyTorch CSRNet (${aiHealth.device.toUpperCase()})`
+        });
+      } else {
+        // AI service is not reachable — mark as offline
+        set({ aiConnected: false, aiModelInfo: 'AI Service Offline' });
       }
 
       set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
     } catch (e) {
       console.warn('Real live data fetch fallback:', e.message);
+      set({ aiConnected: false, aiModelInfo: 'AI Service Offline', dbConnected: false });
     }
   },
 
@@ -335,8 +334,8 @@ export const useCrowdStore = create((set, get) => ({
         name: newCam.name || 'New Camera Stream',
         zone: newCam.zone || 'GATE C · ZONE 05',
         zoneId: newCam.zoneId || 'z1',
-        count: Math.floor(Math.random() * 60) + 40,
-        capacity: 45,
+        count: 0,
+        capacity: 0,
         maxCapacity: 200,
         status: 'Live',
         scene: 'entrance',
@@ -503,12 +502,28 @@ export const useCrowdStore = create((set, get) => ({
       }
     ].slice(-8);
 
+    // 5. Append to detection log (feeds Forecast page with real data)
+    const detectionEntry = {
+      time: new Date().toLocaleTimeString(),
+      timestamp: Date.now(),
+      count,
+      zoneId: targetZoneId,
+      zoneName: targetZone.name,
+      latencyMs,
+      modelName: payload.modelName || 'YOLOv8',
+      occupancyPct: occPct,
+      capacity: targetZone.maxCapacity
+    };
+    const prevLog = get().detectionLog || [];
+    const updatedLog = [...prevLog, detectionEntry].slice(-50); // keep last 50 scans
+
     set({
       cameras: updatedCameras,
       zones: updatedZones,
       incidents: newIncidents,
       notifications: newNotifications,
       analyticsHistory: updatedHistory,
+      detectionLog: updatedLog,
       latestDetection: {
         ...payload,
         zoneName: targetZone.name,
@@ -569,10 +584,6 @@ try {
   });
 
   socketInstance.on('telemetry:tick', (tick) => {
-    // If real AI detection is active, preserve genuine detection numbers
-    if (useCrowdStore.getState().latestDetection) {
-      return;
-    }
     if (tick && tick.cameras && Array.isArray(tick.cameras)) {
       useCrowdStore.setState((state) => {
         const updatedCameras = state.cameras.map((c) => {

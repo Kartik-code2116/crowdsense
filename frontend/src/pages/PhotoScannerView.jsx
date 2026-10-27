@@ -541,6 +541,13 @@ export default function PhotoScannerView() {
           <button className="button secondary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => setPage('Incidents')}>
             ⚑ Incidents →
           </button>
+          <button
+            className="button primary"
+            style={{ padding: '5px 12px', fontSize: '12px', background: 'linear-gradient(135deg,#3478e5,#7c3aed)' }}
+            onClick={() => setPage('Forecast')}
+          >
+            📈 Forecast →
+          </button>
         </div>
       </div>
 

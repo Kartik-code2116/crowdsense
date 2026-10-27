@@ -13,7 +13,10 @@ export default function LiveMonitorView() {
     setActiveCameraId,
     setShowAddCameraModal,
     toggleWebcamFeed,
-    inspectInCrowdSearch
+    inspectInCrowdSearch,
+    aiConnected,
+    aiModelInfo,
+    latestDetection
   } = useCrowdStore();
 
   const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3'
@@ -183,20 +186,26 @@ export default function LiveMonitorView() {
           <div className="telemetry-card">
             <h3>AI Inference Telemetry</h3>
             <div className="metric-row">
+              <span>AI Service Status</span>
+              <b style={{ color: aiConnected ? '#19a779' : '#e05555' }}>
+                {aiConnected ? '✓ Online' : '⚠ Offline — AI not running'}
+              </b>
+            </div>
+            <div className="metric-row">
               <span>Active Model</span>
-              <b>CSRNet Dilated (PyTorch)</b>
+              <b>{aiConnected ? (aiModelInfo || 'CSRNet Dilated (PyTorch)') : '—'}</b>
             </div>
             <div className="metric-row">
               <span>Inference Time</span>
-              <b>{selectedCam.latencyMs} ms</b>
+              <b>{aiConnected && latestDetection ? `${latestDetection.latencyMs} ms` : (aiConnected ? `${selectedCam.latencyMs} ms` : '—')}</b>
             </div>
             <div className="metric-row">
               <span>Peak Crowd Density</span>
-              <b>0.92 heads/m²</b>
+              <b>{aiConnected ? '0.92 heads/m²' : '— (AI offline)'}</b>
             </div>
             <div className="metric-row">
               <span>Uncertainty (σ)</span>
-              <b>± 3.4 heads</b>
+              <b>{aiConnected ? '± 3.4 heads' : '—'}</b>
             </div>
             <div className="metric-row">
               <span>Stream Protocol</span>
@@ -208,15 +217,17 @@ export default function LiveMonitorView() {
             <h3>Crowd Motion Dynamics</h3>
             <div className="metric-row">
               <span>Farneback Velocity</span>
-              <b>1.42 px/frame</b>
+              <b>{aiConnected ? '1.42 px/frame' : '— (AI offline)'}</b>
             </div>
             <div className="metric-row">
               <span>Dominant Vector</span>
-              <b>East-Southeast (52°)</b>
+              <b>{aiConnected ? 'East-Southeast (52°)' : '—'}</b>
             </div>
             <div className="metric-row">
               <span>Turbulence Index</span>
-              <b style={{ color: '#27b383' }}>Low (0.18)</b>
+              <b style={{ color: aiConnected ? '#27b383' : 'var(--muted)' }}>
+                {aiConnected ? 'Low (0.18)' : '—'}
+              </b>
             </div>
           </div>
 
