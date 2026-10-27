@@ -42,19 +42,26 @@ const defaultUsers = {
 };
 
 const initialCameras = [
-  { id: 'CAM-WEBCAM', name: 'Laptop Integrated Webcam', zone: 'HALL · ZONE 02', zoneId: 'z2', count: 2, capacity: 1, maxCapacity: 315, status: 'Live', scene: 'webcam', fps: 15.0, latencyMs: 38, resolution: '1280x720', isWebcam: true },
-  { id: 'CAM-01', name: 'North entrance gate', zone: 'GATE A · ZONE 01', zoneId: 'z1', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 38, resolution: '1920x1080' },
-  { id: 'CAM-02', name: 'Central concourse atrium', zone: 'HALL · ZONE 02', zoneId: 'z2', count: 2, capacity: 1, maxCapacity: 315, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 42, resolution: '2560x1440' },
-  { id: 'CAM-03', name: 'East walkway promenade', zone: 'EAST · ZONE 03', zoneId: 'z3', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'walkway', fps: 2.0, latencyMs: 35, resolution: '1920x1080' },
-  { id: 'CAM-04', name: 'Food court & dining hall', zone: 'FOOD COURT · ZONE 04', zoneId: 'z4', count: 0, capacity: 0, maxCapacity: 300, status: 'Live', scene: 'concourse', fps: 1.5, latencyMs: 39, resolution: '1920x1080' },
-  { id: 'CAM-05', name: 'Gate B turnstiles', zone: 'GATE B · ZONE 05', zoneId: 'z1', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'entrance', fps: 2.0, latencyMs: 36, resolution: '1920x1080' }
+  { id: 'CAM-01', name: 'Demo Zone Camera', zone: 'DEMO-ZONE-01', zoneId: 'zone-demo-01', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
 ];
 
 const initialZones = [
-  { id: 'z1', name: 'North entrance', code: 'GATE A · ZONE 01', currentCount: 0, maxCapacity: 200, warningPct: 70, criticalPct: 85, occupancyPct: 0, status: 'normal', egressCount: 4 },
-  { id: 'z2', name: 'Central concourse', code: 'HALL · ZONE 02', currentCount: 2, maxCapacity: 315, warningPct: 75, criticalPct: 90, occupancyPct: 1, status: 'normal', egressCount: 6 },
-  { id: 'z3', name: 'East walkway', code: 'EAST · ZONE 03', currentCount: 0, maxCapacity: 200, warningPct: 75, criticalPct: 90, occupancyPct: 0, status: 'normal', egressCount: 3 },
-  { id: 'z4', name: 'Food court & lounge', code: 'LOUNGE · ZONE 04', currentCount: 0, maxCapacity: 300, warningPct: 75, criticalPct: 90, occupancyPct: 0, status: 'normal', egressCount: 5 }
+  {
+    id: 'zone-demo-01',
+    name: 'Demo Safety Zone',
+    code: 'DEMO-ZONE-01',
+    floor: 'Level 1 Ground',
+    currentCount: 0,
+    maxCapacity: 200,
+    warningPct: 70,
+    criticalPct: 85,
+    occupancyPct: 0,
+    status: 'normal',
+    egressCount: 2,
+    streamUrl: '/samples/mall_concourse.jpg',
+    streamType: 'demo',
+    description: 'Default demonstration safety sector. Configure live stream URL or webcam to initiate continuous crowd scanning.'
+  }
 ];
 
 const initialIncidents = [];
@@ -129,7 +136,7 @@ export const useCrowdStore = create((set, get) => ({
   incidents: initialIncidents,
   notifications: initialNotifications,
   models: initialModels,
-  activeCameraId: 'CAM-02',
+  activeCameraId: 'CAM-01',
   dbConnected: false,
   dbSource: 'Not connected',
   aiConnected: false,
@@ -139,7 +146,7 @@ export const useCrowdStore = create((set, get) => ({
   // Real-Time Cross-Feature Synchronization
   latestDetection: null,
   detectionLog: [],  // Accumulated real scan results from Crowd Search → feeds Forecast
-  scannerTargetZoneId: 'z2',
+  scannerTargetZoneId: 'zone-demo-01',
   analyticsHistory: [
     { hour: '08:00', influx: 1, outflux: 0, total: 1 },
     { hour: '09:00', influx: 2, outflux: 1, total: 2 },
@@ -185,13 +192,17 @@ export const useCrowdStore = create((set, get) => ({
           id: z._id || z.id,
           name: z.name,
           code: z.code,
+          floor: z.floor || 'Ground Level',
           currentCount: z.currentCount || 0,
           maxCapacity: z.maxCapacity || 200,
-          warningPct: z.warningThresholdPct || 75,
-          criticalPct: z.criticalThresholdPct || 90,
+          warningPct: z.warningThresholdPct || 70,
+          criticalPct: z.criticalThresholdPct || 85,
           occupancyPct: z.currentOccupancyPct || Math.round(((z.currentCount || 0) / (z.maxCapacity || 200)) * 100),
-          status: (z.currentOccupancyPct >= (z.criticalThresholdPct || 90)) ? 'critical' : (z.currentOccupancyPct >= (z.warningThresholdPct || 75)) ? 'warning' : 'normal',
-          egressCount: z.evacuationRoutes ? z.evacuationRoutes.length : 3
+          status: (z.currentOccupancyPct >= (z.criticalThresholdPct || 85)) ? 'critical' : (z.currentOccupancyPct >= (z.warningThresholdPct || 70)) ? 'warning' : 'normal',
+          egressCount: z.evacuationRoutes ? z.evacuationRoutes.length : 2,
+          streamUrl: z.streamUrl || '',
+          streamType: z.streamType || 'url',
+          description: z.description || ''
         }));
         set({ zones: mappedZones });
       }
@@ -385,9 +396,10 @@ export const useCrowdStore = create((set, get) => ({
   setScannerTargetZoneId: (scannerTargetZoneId) => set({ scannerTargetZoneId }),
 
   inspectInCrowdSearch: (imageSrc, zoneId) => {
+    const defaultZoneId = get().zones[0]?.id || 'zone-demo-01';
     set({
       sandboxSnapshot: imageSrc,
-      scannerTargetZoneId: zoneId || 'z2',
+      scannerTargetZoneId: zoneId || defaultZoneId,
       page: 'Crowd search'
     });
   },
@@ -397,9 +409,10 @@ export const useCrowdStore = create((set, get) => ({
     const state = get();
     const count = Number(payload.count) || 0;
     const latencyMs = Number(payload.latencyMs) || 38;
-    const targetZoneId = payload.zoneId || state.scannerTargetZoneId || 'z2';
-    const targetZone = state.zones.find((z) => z.id === targetZoneId) || state.zones[1] || state.zones[0];
-    const targetCameraId = payload.cameraId || (state.cameras.some((c) => c.id === 'CAM-WEBCAM') ? 'CAM-WEBCAM' : 'CAM-02');
+    const defaultZone = state.zones[0] || { id: 'zone-demo-01', maxCapacity: 200, name: 'Default Zone', code: 'ZONE-01', criticalPct: 85, warningPct: 70 };
+    const targetZoneId = payload.zoneId || state.scannerTargetZoneId || defaultZone.id;
+    const targetZone = state.zones.find((z) => z.id === targetZoneId) || defaultZone;
+    const targetCameraId = payload.cameraId || (state.cameras.some((c) => c.id === 'CAM-WEBCAM') ? 'CAM-WEBCAM' : state.cameras[0]?.id || 'CAM-01');
 
     // 1. Update Camera in State
     const updatedCameras = state.cameras.map((c) => {
@@ -533,17 +546,97 @@ export const useCrowdStore = create((set, get) => ({
     });
   },
 
+  // Zone Management Actions
+  addZone: async (newZone) => {
+    const id = newZone.id || `zone_${Date.now()}`;
+    const zoneObj = {
+      id,
+      name: newZone.name || 'New Safety Zone',
+      code: newZone.code || `ZONE-0${get().zones.length + 1}`,
+      floor: newZone.floor || 'Ground Level',
+      currentCount: 0,
+      maxCapacity: Number(newZone.maxCapacity) || 200,
+      warningPct: Number(newZone.warningPct) || 70,
+      criticalPct: Number(newZone.criticalPct) || 85,
+      occupancyPct: 0,
+      status: 'normal',
+      egressCount: Number(newZone.egressCount) || 2,
+      streamUrl: newZone.streamUrl || '',
+      streamType: newZone.streamType || 'url',
+      description: newZone.description || 'Configured monitoring safety zone.'
+    };
+
+    set((state) => ({
+      zones: [...state.zones, zoneObj]
+    }));
+
+    try {
+      await apiClient.createZone({
+        id,
+        name: zoneObj.name,
+        code: zoneObj.code,
+        floor: zoneObj.floor,
+        maxCapacity: zoneObj.maxCapacity,
+        warningThresholdPct: zoneObj.warningPct,
+        criticalThresholdPct: zoneObj.criticalPct,
+        evacuationRoutes: ['Main Egress Door', 'Emergency Exit'],
+        streamUrl: zoneObj.streamUrl,
+        streamType: zoneObj.streamType,
+        description: zoneObj.description
+      });
+    } catch (e) {
+      console.warn('Persist zone failed:', e.message);
+    }
+  },
+
+  deleteZone: async (zoneId) => {
+    set((state) => ({
+      zones: state.zones.filter((z) => z.id !== zoneId)
+    }));
+    try {
+      await apiClient.deleteZone(zoneId);
+    } catch (e) {
+      console.warn('Delete zone failed:', e.message);
+    }
+  },
+
+  updateZone: async (zoneId, updates) => {
+    set((state) => ({
+      zones: state.zones.map((z) => {
+        if (z.id === zoneId) {
+          const updated = { ...z, ...updates };
+          const cap = updated.maxCapacity || 200;
+          const occ = Math.round(((updated.currentCount || 0) / cap) * 100);
+          const status = occ >= updated.criticalPct ? 'critical' : occ >= updated.warningPct ? 'warning' : 'normal';
+          return { ...updated, occupancyPct: occ, status };
+        }
+        return z;
+      })
+    }));
+
+    try {
+      await apiClient.updateZone(zoneId, updates);
+    } catch (e) {
+      console.warn('Update zone failed:', e.message);
+    }
+  },
+
   // Zone Thresholds
-  updateZoneThresholds: (zoneId, warningPct, criticalPct) => set((state) => ({
-    zones: state.zones.map((z) => {
-      if (z.id === zoneId) {
-        const occ = Math.round((z.currentCount / z.maxCapacity) * 100);
-        const status = occ >= criticalPct ? 'critical' : occ >= warningPct ? 'warning' : 'normal';
-        return { ...z, warningPct, criticalPct, status, occupancyPct: occ };
-      }
-      return z;
-    })
-  })),
+  updateZoneThresholds: async (zoneId, warningPct, criticalPct) => {
+    set((state) => ({
+      zones: state.zones.map((z) => {
+        if (z.id === zoneId) {
+          const occ = Math.round((z.currentCount / z.maxCapacity) * 100);
+          const status = occ >= criticalPct ? 'critical' : occ >= warningPct ? 'warning' : 'normal';
+          return { ...z, warningPct, criticalPct, status, occupancyPct: occ };
+        }
+        return z;
+      })
+    }));
+    try {
+      await apiClient.updateZone(zoneId, { warningThresholdPct: warningPct, criticalThresholdPct: criticalPct });
+    } catch (e) {}
+  },
 
   // Incident Actions
   resolveIncident: (id) => set((state) => ({

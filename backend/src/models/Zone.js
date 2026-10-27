@@ -12,6 +12,8 @@ const zoneSchema = new mongoose.Schema({
   currentOccupancyPct: { type: Number, default: 0 },
   evacuationRoutes: [{ type: String }],
   description: { type: String },
+  streamUrl: { type: String, default: '' },
+  streamType: { type: String, default: 'url' }, // 'url', 'webcam', 'demo'
   createdAt: { type: Date, default: Date.now }
 });
 

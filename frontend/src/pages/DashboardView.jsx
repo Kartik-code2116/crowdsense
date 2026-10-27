@@ -254,8 +254,22 @@ export default function DashboardView() {
           </div>
 
           <div className="zone-foot">
-            <span className="status-dot amber-dot" />
-            1 zone nearing critical capacity
+            {zones.some(z => z.status === 'critical') ? (
+              <>
+                <span className="status-dot red-dot" />
+                <span className="text-red">Critical capacity alert in {zones.filter(z => z.status === 'critical').length} zone(s)</span>
+              </>
+            ) : zones.some(z => z.status === 'warning') ? (
+              <>
+                <span className="status-dot amber-dot" />
+                <span className="text-amber">{zones.filter(z => z.status === 'warning').length} zone nearing warning threshold</span>
+              </>
+            ) : (
+              <>
+                <span className="status-dot green-dot" />
+                <span className="text-green">All {zones.length} zone(s) operating within safe capacity</span>
+              </>
+            )}
             <button onClick={() => setPage('Forecast')}>Inspect forecast →</button>
           </div>
         </section>

@@ -103,6 +103,60 @@ export const apiClient = {
     return null;
   },
 
+  async createZone(zoneData) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/zones`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(zoneData)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('createZone error:', e.message);
+    }
+    return null;
+  },
+
+  async updateZone(zoneId, updates) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/zones/${zoneId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('updateZone error:', e.message);
+    }
+    return null;
+  },
+
+  async deleteZone(zoneId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/zones/${zoneId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('deleteZone error:', e.message);
+    }
+    return null;
+  },
+
+  // Scan live streaming URL via AI service
+  async scanStreamUrl(streamUrl, model = 'yolov8', capacity = 200) {
+    try {
+      const url = `${AI_SERVICE_URL}/stream/scan-url?stream_url=${encodeURIComponent(streamUrl)}&model=${encodeURIComponent(model)}&zone_capacity=${encodeURIComponent(capacity)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('AI microservice stream scan deferred, trying direct predict if image:', e.message);
+    }
+    return null;
+  },
+
   async getIncidents() {
     try {
       const res = await fetch(`${API_BASE_URL}/alerts/incidents`);

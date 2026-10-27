@@ -35,8 +35,8 @@ export default function PhotoScannerView() {
   const [modelType, setModelType] = useState('yolov8');
 
   // Selected Venue Zone
-  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || 'z2');
-  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[1] || zones[0];
+  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || 'zone-demo-01');
+  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || { maxCapacity: 200, name: 'Demo Zone', code: 'DEMO-ZONE-01' };
   const [zoneCapacity, setZoneCapacity] = useState(currentZone.maxCapacity || 200);
 
   // When zone selection changes, sync capacity

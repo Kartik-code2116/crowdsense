@@ -10,137 +10,35 @@ const { getIsConnected, getMemoryStore } = require('../config/db');
 
 const initialZonesData = [
   {
-    _id: 'z1',
-    name: 'North Entrance Gate',
-    code: 'GATE-A-ZONE-01',
+    _id: 'zone-demo-01',
+    name: 'Demo Safety Zone',
+    code: 'DEMO-ZONE-01',
     floor: 'Level 1 Ground',
     maxCapacity: 200,
     warningThresholdPct: 70,
     criticalThresholdPct: 85,
     currentCount: 0,
     currentOccupancyPct: 0,
-    evacuationRoutes: ['Exit A1', 'Emergency Stairwell North'],
-    description: 'Main public turnstile entry terminal from northern transit interchange.'
-  },
-  {
-    _id: 'z2',
-    name: 'Central Concourse Atrium',
-    code: 'HALL-ZONE-02',
-    floor: 'Level 1 Main Atrium',
-    maxCapacity: 315,
-    warningThresholdPct: 75,
-    criticalThresholdPct: 90,
-    currentCount: 2,
-    currentOccupancyPct: 1,
-    evacuationRoutes: ['Main Concourse West Doors', 'East Egress Tunnel'],
-    description: 'Primary high-density transit artery connecting concourses, gates, and concessions.'
-  },
-  {
-    _id: 'z3',
-    name: 'East Walkway Promenade',
-    code: 'EAST-ZONE-03',
-    floor: 'Level 1 Promenade',
-    maxCapacity: 200,
-    warningThresholdPct: 75,
-    criticalThresholdPct: 90,
-    currentCount: 0,
-    currentOccupancyPct: 0,
-    evacuationRoutes: ['East Turnstiles', 'Promenade Ramp B'],
-    description: 'Outdoor-to-indoor pedestrian walkway leading to arena terraces.'
-  },
-  {
-    _id: 'z4',
-    name: 'Food Court & Dining Concourse',
-    code: 'LOUNGE-ZONE-04',
-    floor: 'Level 2 Mezzanine',
-    maxCapacity: 300,
-    warningThresholdPct: 75,
-    criticalThresholdPct: 90,
-    currentCount: 0,
-    currentOccupancyPct: 0,
-    evacuationRoutes: ['Stairwell South', 'Fire Elevator Bank'],
-    description: 'Upper mezzanine hospitality and concession seating areas.'
+    evacuationRoutes: ['Main Egress Gate A', 'Emergency Stairwell North'],
+    description: 'Default demonstration safety sector. Configure live stream URL or webcam to initiate continuous crowd scanning.',
+    streamUrl: '/samples/mall_concourse.jpg',
+    streamType: 'demo'
   }
 ];
 
 const initialCamerasData = [
   {
     _id: 'CAM-01',
-    name: 'North entrance gate',
-    zoneId: 'z1',
-    zoneName: 'GATE A · ZONE 01',
-    streamUrl: 'rtsp://edge.venue.lan/cam1',
+    name: 'Demo Zone Camera',
+    zoneId: 'zone-demo-01',
+    zoneName: 'DEMO-ZONE-01',
+    streamUrl: '/samples/mall_concourse.jpg',
     resolution: '1920x1080',
     sampleFps: 2.0,
     status: 'Live',
-    sceneType: 'entrance',
+    sceneType: 'concourse',
     lastCount: 0,
     lastLatencyMs: 38
-  },
-  {
-    _id: 'CAM-02',
-    name: 'Central concourse atrium',
-    zoneId: 'z2',
-    zoneName: 'HALL · ZONE 02',
-    streamUrl: 'rtsp://edge.venue.lan/cam2',
-    resolution: '2560x1440',
-    sampleFps: 2.0,
-    status: 'Live',
-    sceneType: 'concourse',
-    lastCount: 2,
-    lastLatencyMs: 42
-  },
-  {
-    _id: 'CAM-03',
-    name: 'East walkway promenade',
-    zoneId: 'z3',
-    zoneName: 'EAST · ZONE 03',
-    streamUrl: 'rtsp://edge.venue.lan/cam3',
-    resolution: '1920x1080',
-    sampleFps: 2.0,
-    status: 'Live',
-    sceneType: 'walkway',
-    lastCount: 0,
-    lastLatencyMs: 35
-  },
-  {
-    _id: 'CAM-04',
-    name: 'Food court & dining hall',
-    zoneId: 'z4',
-    zoneName: 'FOOD COURT · ZONE 04',
-    streamUrl: 'rtsp://edge.venue.lan/cam4',
-    resolution: '1920x1080',
-    sampleFps: 1.5,
-    status: 'Live',
-    sceneType: 'concourse',
-    lastCount: 0,
-    lastLatencyMs: 39
-  },
-  {
-    _id: 'CAM-05',
-    name: 'Gate B turnstiles',
-    zoneId: 'z1',
-    zoneName: 'GATE B · ZONE 05',
-    streamUrl: 'rtsp://edge.venue.lan/cam5',
-    resolution: '1920x1080',
-    sampleFps: 2.0,
-    status: 'Live',
-    sceneType: 'entrance',
-    lastCount: 0,
-    lastLatencyMs: 36
-  },
-  {
-    _id: 'CAM-06',
-    name: 'Emergency egress corridor',
-    zoneId: 'z2',
-    zoneName: 'EGRESS · ZONE 06',
-    streamUrl: 'rtsp://edge.venue.lan/cam6',
-    resolution: '1920x1080',
-    sampleFps: 1.0,
-    status: 'Live',
-    sceneType: 'walkway',
-    lastCount: 0,
-    lastLatencyMs: 33
   }
 ];
 

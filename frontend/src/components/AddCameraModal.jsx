@@ -5,7 +5,7 @@ export default function AddCameraModal() {
   const { showAddCameraModal, setShowAddCameraModal, addCamera, zones } = useCrowdStore();
   const [formData, setFormData] = useState({
     name: '',
-    zoneId: 'z1',
+    zoneId: zones[0]?.id || 'zone-demo-01',
     streamUrl: 'rtsp://edge.venue.lan/cam_feed',
     resolution: '1920x1080',
     fps: '2.0'
