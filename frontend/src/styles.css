@@ -2766,6 +2766,469 @@ h1 { font: 800 27px Manrope, sans-serif; letter-spacing: -0.8px; margin: 8px 0 6
   font-size: 12px;
 }
 
+/* Reports & Audits Enhanced Styles */
+.reports-view-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-tabs-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.report-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.report-tab-btn:hover {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.report-tab-btn.active {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.tab-pill-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+
+.tab-pill-badge.green {
+  background: rgba(21, 155, 111, 0.15);
+  color: #159b6f;
+}
+
+.report-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.filter-group label {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.filter-group select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+  outline: none;
+}
+
+.compliance-tag {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.stat-icon-lucide {
+  color: var(--muted);
+}
+
+.stat-icon-lucide.blue { color: #276de0; }
+.stat-icon-lucide.green { color: #159b6f; }
+.stat-icon-lucide.amber { color: #cc841b; }
+.stat-icon-lucide.red { color: #cf4b54; }
+
+.report-audit-table {
+  font-size: 13px;
+}
+
+.zone-code-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.integral-symbol {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 13px;
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.model-chip-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--blue-soft);
+  color: var(--blue);
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.egress-cell-text {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.badge-pill.safe {
+  background: #edf8f2;
+  color: #159b6f;
+  border: 1px solid rgba(21, 155, 111, 0.2);
+}
+
+.badge-pill.warning {
+  background: #fff8e8;
+  color: #cc841b;
+  border: 1px solid rgba(204, 132, 27, 0.2);
+}
+
+.badge-pill.critical {
+  background: #fff0ef;
+  color: #cf4b54;
+  border: 1px solid rgba(207, 75, 84, 0.2);
+}
+
+.critical-row td {
+  background: rgba(207, 75, 84, 0.03);
+}
+
+/* Regulatory Certificate Dossier */
+.certificate-dossier-card {
+  padding: 32px 36px;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+}
+
+.certificate-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.certificate-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--line);
+}
+
+.cert-seal {
+  width: 64px;
+  height: 64px;
+  background: #edf8f2;
+  border: 2px solid #159b6f;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.cert-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #159b6f;
+}
+
+.cert-title-block h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.cert-title-block p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cert-body-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.cert-spec-box {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cert-spec-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+}
+
+.cert-spec-box strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cert-spec-box small {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.cert-signatures-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.cert-sign-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sign-line {
+  height: 1px;
+  background: var(--text);
+  margin-bottom: 8px;
+  opacity: 0.3;
+}
+
+.cert-sign-block b {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.cert-sign-block small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cert-footer-notice {
+  background: var(--surface-soft);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-left: 3px solid var(--primary);
+}
+.cert-footer-notice p { margin: 0; }
+
+/* Print-only dossier header */
+.print-only-dossier-header {
+  display: none;
+}
+
+/* Official Print & PDF Stylesheet */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12px !important;
+  }
+  .sidebar,
+  .topbar,
+  .no-print,
+  .telemetry-dock-card,
+  .telemetry-dock-pill {
+    display: none !important;
+  }
+  .main-area {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  .content {
+    padding: 0 !important;
+  }
+  .page-heading {
+    display: none !important;
+  }
+  .print-only-dossier-header {
+    display: block !important;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+  .print-brand-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .print-brand-bar h1 {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0;
+  }
+  .print-brand-bar h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+    margin: 4px 0 0;
+  }
+  .print-meta-right {
+    text-align: right;
+    font-size: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .print-divider-line {
+    height: 2px;
+    background: #000;
+    margin-top: 12px;
+  }
+  .panel {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .stat-card {
+    border: 1px solid #ccc !important;
+    background: #fff !important;
+  }
+  .custom-table th, .custom-table td {
+    padding: 8px 10px !important;
+    border-bottom: 1px solid #ccc !important;
+  }
+  .custom-table {
+    font-size: 11px !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* Dark mode adjustments for reports */
+[data-theme=dark] .report-tab-btn {
+  background: #141c24;
+  border-color: #24303c;
+  color: #9aa8b7;
+}
+[data-theme=dark] .report-tab-btn:hover {
+  background: #1c2733;
+  color: #fff;
+}
+[data-theme=dark] .report-tab-btn.active {
+  background: #1a2c42;
+  border-color: #6c9ef0;
+  color: #84b1fa;
+}
+[data-theme=dark] .report-filter-bar {
+  background: #16202c;
+  border-color: #24303c;
+}
+[data-theme=dark] .filter-group select {
+  background: #141c24;
+  border-color: #24303c;
+  color: #e1e8ef;
+}
+[data-theme=dark] .compliance-tag {
+  background: #141c24;
+  border-color: #24303c;
+}
+[data-theme=dark] .zone-code-tag {
+  background: #1a2530;
+  border-color: #24303c;
+  color: #8fa1b4;
+}
+[data-theme=dark] .model-chip-tag {
+  background: #192b42;
+  color: #84b1fa;
+}
+[data-theme=dark] .badge-pill.safe {
+  background: #193327;
+  color: #48c99b;
+  border-color: #204d38;
+}
+[data-theme=dark] .badge-pill.warning {
+  background: #382d1c;
+  color: #e5b25d;
+  border-color: #554124;
+}
+[data-theme=dark] .badge-pill.critical {
+  background: #3d2327;
+  color: #f17a7e;
+  border-color: #5e2f36;
+}
+[data-theme=dark] .critical-row td {
+  background: rgba(207, 75, 84, 0.08);
+}
+[data-theme=dark] .certificate-dossier-card {
+  background: #141c24;
+  border-color: #24303c;
+}
+[data-theme=dark] .cert-seal {
+  background: #193327;
+  border-color: #48c99b;
+}
+[data-theme=dark] .cert-seal svg {
+  color: #48c99b !important;
+}
+[data-theme=dark] .cert-spec-box {
+  background: #192430;
+  border-color: #24303c;
+}
+[data-theme=dark] .cert-footer-notice {
+  background: #182330;
+  border-color: #6c9ef0;
+}
+
 /* Responsive adjustments */
 @media (max-width: 960px) {
   .hero-kpi-ribbon {
