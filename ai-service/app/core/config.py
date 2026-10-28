@@ -1,5 +1,9 @@
 import os
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load .env from the ai-service root directory
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
 
 class Settings(BaseModel):

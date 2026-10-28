@@ -19,45 +19,56 @@ import AuthModal from './components/AuthModal';
 import ProfilePopover from './components/ProfilePopover';
 import NotificationsDrawer from './components/NotificationsDrawer';
 import AddCameraModal from './components/AddCameraModal';
+import TelemetryDock from './components/TelemetryDock';
+
+import {
+  LayoutDashboard,
+  Video,
+  BarChart3,
+  Camera,
+  Layers,
+  AlertTriangle,
+  FileText,
+  ScanSearch,
+  TrendingUp,
+  Cpu,
+  FlaskConical,
+  Settings,
+  ChevronDown,
+  MoreHorizontal
+} from 'lucide-react';
 
 const navGroups = [
   {
-    label: 'PORTAL',
-    items: [
-      ['Landing page', '✦']
-    ]
-  },
-  {
     label: 'OVERVIEW',
     items: [
-      ['Dashboard', '⌂'],
-      ['Live monitor', '▦'],
-      ['Analytics', '⌁']
+      { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'Live monitor', label: 'Live Monitor', icon: Video },
+      { id: 'Analytics', label: 'Analytics', icon: BarChart3 }
     ]
   },
   {
     label: 'OPERATIONS',
     items: [
-      ['Cameras', '◉'],
-      ['Zones', '◇'],
-      ['Incidents', '⚑'],
-      ['Reports', '▤']
+      { id: 'Cameras', label: 'Cameras', icon: Camera },
+      { id: 'Zones', label: 'Zones & Ceilings', icon: Layers },
+      { id: 'Incidents', label: 'Incidents', icon: AlertTriangle, hasCounter: true },
+      { id: 'Reports', label: 'Reports & Audits', icon: FileText }
     ]
   },
   {
     label: 'INTELLIGENCE',
     items: [
-      ['Crowd search', '🔍'],
-      ['Forecast', '📈'],
-      ['Model lab', '✳'],
-      ['Sandbox', '🧪'],
-      ['Settings', '⚙']
+      { id: 'Crowd search', label: 'Crowd Scanner', icon: ScanSearch, badge: 'AI', badgeClass: 'pulse' },
+      { id: 'Forecast', label: 'LSTM Forecast', icon: TrendingUp },
+      { id: 'Model lab', label: 'Model Lab', icon: Cpu, badge: 'DL' },
+      { id: 'Sandbox', label: 'AI Sandbox', icon: FlaskConical },
+      { id: 'Settings', label: 'Settings', icon: Settings }
     ]
   }
 ];
 
 const menuTitles = {
-  'Landing page': 'CrowdSense Platform Architecture & Overview',
   Dashboard: 'Operations Overview & Live Telemetry',
   'Live monitor': 'Live Camera Multi-Monitor & Telemetry',
   Analytics: 'Crowd Intelligence & Throughput Analytics',
@@ -161,7 +172,7 @@ export default function App() {
     <div className="app-shell">
       {/* Industry Sidebar */}
       <aside className="sidebar">
-        <div className="brand" onClick={() => setPage('Landing')} style={{ cursor: 'pointer' }} title="Go to Project Landing Page">
+        <div className="brand" onClick={() => setPage('Dashboard')} style={{ cursor: 'pointer' }} title="CrowdSense Operations Dashboard">
           <div className="brand-mark">
             <span />
             <span />
@@ -179,69 +190,51 @@ export default function App() {
             <strong>Venue Central</strong>
             <small>{user ? `${user.name} (${user.role})` : 'Operations Lead'}</small>
           </div>
-          <span className="chevron">⌄</span>
+          <ChevronDown size={14} className="chevron-icon" />
         </div>
 
         <nav>
           {navGroups.map((group) => (
             <section key={group.label}>
               <div className="nav-label">{group.label}</div>
-              {group.items.map(([label, icon]) => (
-                <button
-                  key={label}
-                  className={`nav-item ${page === label || (label === 'Landing page' && page === 'Landing') ? 'active' : ''}`}
-                  onClick={() => setPage(label === 'Landing page' ? 'Landing' : label)}
-                >
-                  <span className="icon" aria-hidden="true">{icon}</span>
-                  <span>{label}</span>
-                  {label === 'Incidents' && activeIncidents > 0 && <em>{activeIncidents}</em>}
-                  {label === 'Crowd search' && <span className="micro-badge pulse">AI</span>}
-                  {label === 'Model lab' && <span className="micro-badge">DL</span>}
-                  {label === 'Landing page' && <span className="micro-badge info">INFO</span>}
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const IconComponent = item.icon;
+                const isActive = page === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${isActive ? 'active' : ''}`}
+                    onClick={() => setPage(item.id)}
+                  >
+                    <span className="nav-icon" aria-hidden="true">
+                      <IconComponent size={17} strokeWidth={isActive ? 2.2 : 1.8} />
+                    </span>
+                    <span>{item.label}</span>
+                    {item.hasCounter && activeIncidents > 0 && <em>{activeIncidents}</em>}
+                    {item.badge && (
+                      <span className={`micro-badge ${item.badgeClass || ''}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </section>
           ))}
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="system-card">
-            <div className="system-heading">
-              <span className={`status-dot ${dbConnected ? 'green' : 'red'}`} />
-              {dbConnected ? dbSource : 'Database Offline'}
-            </div>
-            <div className="system-caption">
-              {dbConnected ? 'Real time-series collection connected' : 'Backend not reachable'}
-            </div>
-            <div className="system-metrics">
-              <span>FastAPI AI Service</span>
-              <b style={{ color: aiConnected ? '#19a779' : '#e05555' }}>
-                {aiConnected ? aiModelInfo : '⚠ Offline'}
-              </b>
-            </div>
-            <div className="system-metrics">
-              <span>Active Cameras</span>
-              <b>{cameras.length} / {cameras.length} Live</b>
-            </div>
-            {lastSyncTimestamp && (
-              <div className="system-metrics" style={{ borderTop: 'none', paddingTop: '4px' }}>
-                <span>DB Telemetry Sync</span>
-                <b style={{ color: '#159b6f' }}>{lastSyncTimestamp}</b>
-              </div>
-            )}
-          </div>
-
           <button
             className="profile"
             onClick={() => setShowProfileMenu(!showProfileMenu)}
             title="Open Account & RBAC menu"
           >
             <div className="avatar">{user ? user.avatar : 'AK'}</div>
-            <span>
+            <div className="profile-details">
               <b>{user ? user.name : 'Sign In'}</b>
-              <small>{user ? `${user.department} (${user.role})` : 'Unauthenticated'}</small>
-            </span>
-            <span className="profile-dots">···</span>
+              <small>{user ? `${user.department || user.role}` : 'Unauthenticated'}</small>
+            </div>
+            <MoreHorizontal size={18} className="profile-dots" />
           </button>
         </div>
       </aside>
@@ -257,14 +250,6 @@ export default function App() {
           </div>
 
           <div className="top-actions">
-            <button
-              className="landing-portal-button"
-              onClick={() => setPage('Landing')}
-              title="View CrowdSense Project Overview & Landing Page"
-            >
-              ✦ Project Landing Page
-            </button>
-
             <div
               className="live-pill"
               style={{
@@ -350,6 +335,7 @@ export default function App() {
       <ProfilePopover />
       <NotificationsDrawer />
       <AddCameraModal />
+      <TelemetryDock />
     </div>
   );
 }

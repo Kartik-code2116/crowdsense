@@ -170,6 +170,10 @@ Open **3 separate terminal windows** (one for each service):
 # Navigate to the AI microservice directory
 cd ai-service
 
+cd ai-service
+.\venv\Scripts\activate
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
 # (Optional but recommended) Create and activate a Python virtual environment
 # Windows:
 python -m venv venv

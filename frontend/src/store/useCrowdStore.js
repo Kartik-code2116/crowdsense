@@ -124,7 +124,7 @@ export const useCrowdStore = create((set, get) => ({
 
   // Theme & Navigation
   theme: localStorage.getItem('crowdsense-theme') || 'light',
-  page: 'Landing',
+  page: 'Dashboard',
   range: 'Today',
   heatmap: true,
   flowVectors: false,
@@ -303,7 +303,7 @@ export const useCrowdStore = create((set, get) => ({
       isAuthenticated: false,
       token: null,
       showProfileMenu: false,
-      page: 'Landing'
+      page: 'Dashboard'
     });
   },
 
