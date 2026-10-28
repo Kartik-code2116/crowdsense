@@ -80,17 +80,17 @@ const initialUsersData = [
 const initialIncidentsData = [
   {
     incidentNumber: 'INC-2026-001',
-    title: 'Camera stream synchronized',
-    description: 'System calibrated and AI inference pipeline active.',
-    level: 'Resolved',
-    location: 'Central concourse · Zone 02',
-    zoneId: 'z2',
-    cameraId: 'CAM-02',
-    peakCount: 2,
-    capacity: 315,
-    time: '11:00:00',
-    color: 'green',
-    status: 'Resolved',
+    title: 'Peak Ingress Surge Monitored (> 50% capacity)',
+    description: 'Real-time deep learning detection on CAM-01 recorded 184 individuals during peak venue ingress. Egress corridors 1-4 operating at normal flow (1.42 m/s).',
+    level: 'Warning',
+    location: 'Arena Main Concourse · ARENA-CONCOURSE-01',
+    zoneId: 'zone-arena-01',
+    cameraId: 'CAM-01',
+    peakCount: 184,
+    capacity: 350,
+    time: '14:32:08',
+    color: 'amber',
+    status: 'Open',
     createdAt: new Date()
   }
 ];
@@ -98,14 +98,14 @@ const initialIncidentsData = [
 const initialAlertsData = [
   {
     title: 'Safety System Online',
-    message: 'All monitored venue sectors operating within safe capacity limits.',
+    message: 'Arena Main Concourse continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.',
     level: 'Info',
-    zoneId: 'z2',
-    zoneName: 'Central concourse',
-    cameraId: 'CAM-02',
-    count: 2,
-    capacity: 315,
-    occupancyPct: 1,
+    zoneId: 'zone-arena-01',
+    zoneName: 'Arena Main Concourse',
+    cameraId: 'CAM-01',
+    count: 184,
+    capacity: 350,
+    occupancyPct: 52,
     status: 'Resolved',
     createdAt: new Date()
   }
@@ -116,12 +116,7 @@ function generateTimeSeriesDetections() {
   const detections = [];
   const now = Date.now();
   const cameras = [
-    { id: 'CAM-01', zoneId: 'z1', base: 140, variance: 25 },
-    { id: 'CAM-02', zoneId: 'z2', base: 280, variance: 35 },
-    { id: 'CAM-03', zoneId: 'z3', base: 85, variance: 15 },
-    { id: 'CAM-04', zoneId: 'z4', base: 190, variance: 30 },
-    { id: 'CAM-05', zoneId: 'z1', base: 95, variance: 20 },
-    { id: 'CAM-06', zoneId: 'z2', base: 25, variance: 8 }
+    { id: 'CAM-01', zoneId: 'zone-arena-01', base: 184, variance: 22 }
   ];
 
   // 1 record every 15 minutes for past 24 hours = 96 points per camera

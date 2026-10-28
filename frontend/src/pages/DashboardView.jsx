@@ -2,18 +2,33 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
-function TrendLineChart({ totalCount = 2, range = 'Today' }) {
-  const base = Math.max(1, totalCount);
-  const maxVal = Math.max(6, Math.round(base * 1.5));
+function TrendLineChart({ totalCount = 184, range = 'Today', detectionLog = [] }) {
+  const base = Math.max(10, totalCount);
+  const maxVal = Math.max(50, Math.round(base * 1.35));
   const getY = (val) => Math.round(102 - (val / maxVal) * 82);
 
-  const p1 = Math.max(0, Math.round(base * 0.7));
-  const p2 = Math.max(0, Math.round(base * 0.85));
-  const p3 = Math.max(0, Math.round(base * 0.95));
-  const p4 = base;
-  const p5 = Math.round(base * 1.15);
+  // Derive actual trend from real detectionLog history if available
+  let counts = detectionLog.slice(-5).map(d => d.count);
+  if (counts.length < 5) {
+    counts = [
+      Math.round(base * 0.75),
+      Math.round(base * 0.84),
+      Math.round(base * 0.91),
+      Math.round(base * 0.96),
+      base
+    ];
+  } else {
+    counts[counts.length - 1] = base;
+  }
 
-  const actualPoints = `0,${getY(p1)} 70,${getY(p1)} 140,${getY(p2)} 210,${getY(p3)} 280,${getY(p4)} 330,${getY(p4)}`;
+  const p0 = counts[0] || Math.round(base * 0.75);
+  const p1 = counts[1] || Math.round(base * 0.84);
+  const p2 = counts[2] || Math.round(base * 0.91);
+  const p3 = counts[3] || Math.round(base * 0.96);
+  const p4 = base;
+  const p5 = Math.round(base * 1.08);
+
+  const actualPoints = `0,${getY(p0)} 70,${getY(p1)} 140,${getY(p2)} 210,${getY(p3)} 280,${getY(p4)} 330,${getY(p4)}`;
   const forecastPoints = `330,${getY(p4)} 370,${getY(p5)} 410,${getY(p5)} 450,${getY(p4)}`;
 
   return (
@@ -51,6 +66,7 @@ export default function DashboardView() {
     setSandboxSnapshot,
     setShowAddCameraModal,
     latestDetection,
+    detectionLog,
     inspectInCrowdSearch
   } = useCrowdStore();
 
@@ -203,7 +219,7 @@ export default function DashboardView() {
               <span>{Math.max(2, Math.round(totalPeople * 0.5))}</span>
               <span>0</span>
             </div>
-            <TrendLineChart totalCount={totalPeople} range={range} />
+            <TrendLineChart totalCount={totalPeople} range={range} detectionLog={detectionLog} />
             <div className="x-labels">
               <span>-30m</span>
               <span>-20m</span>

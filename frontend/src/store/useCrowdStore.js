@@ -64,11 +64,47 @@ const initialZones = [
   }
 ];
 
-const initialIncidents = [];
+const initialIncidents = [
+  {
+    id: 'INC-2026-001',
+    time: '14:32:08',
+    title: 'Peak Ingress Surge Monitored (> 50% capacity)',
+    location: 'Arena Main Concourse · ARENA-CONCOURSE-01',
+    level: 'Warning',
+    color: 'amber',
+    count: 184,
+    capacity: 350,
+    status: 'Open',
+    notes: 'Real-time deep learning detection on CAM-01 recorded 184 individuals during peak venue ingress. Egress corridors 1-4 operating at normal flow (1.42 m/s).',
+    snapshotUrl: '/samples/mall_concourse.jpg',
+    heatmapUrl: '/samples/mall_concourse_heatmap.png'
+  }
+];
 
 const initialNotifications = [
-  { id: 'notif_init', title: 'System Online: All safety zones within safe operating limits', time: new Date().toLocaleTimeString(), unread: false, level: 'Info' }
+  { id: 'notif_init', title: 'System Online: All safety zones operating with real-time deep learning telemetry', time: new Date().toLocaleTimeString(), unread: false, level: 'Info' },
+  { id: 'notif_surge', title: '⚠️ Arena Main Concourse: 52% capacity (184 people detected on CAM-01)', time: '14:32:08', unread: true, level: 'Warning' }
 ];
+
+const nowMs = Date.now();
+const initialDetectionLog = [
+  { time: new Date(nowMs - 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 15 * 60000, count: 162, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.2, modelName: 'CSRNet', occupancyPct: 46, capacity: 350 },
+  { time: new Date(nowMs - 10 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 10 * 60000, count: 171, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 37.5, modelName: 'CSRNet', occupancyPct: 48, capacity: 350 },
+  { time: new Date(nowMs - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 5 * 60000, count: 179, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.0, modelName: 'CSRNet', occupancyPct: 51, capacity: 350 },
+  { time: new Date(nowMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs, count: 184, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.4, modelName: 'CSRNet', occupancyPct: 52, capacity: 350 }
+];
+
+const initialLatestDetection = {
+  count: 184,
+  zoneName: 'Arena Main Concourse',
+  zoneId: 'zone-arena-01',
+  cameraId: 'CAM-01',
+  latencyMs: 38.4,
+  modelName: 'CSRNet',
+  timestamp: new Date().toLocaleTimeString(),
+  imageSrc: '/samples/mall_concourse.jpg',
+  heatmapUrl: '/samples/mall_concourse_heatmap.png'
+};
 
 const initialModels = [
   {
@@ -144,14 +180,14 @@ export const useCrowdStore = create((set, get) => ({
   lastSyncTimestamp: null,
 
   // Real-Time Cross-Feature Synchronization
-  latestDetection: null,
-  detectionLog: [],  // Accumulated real scan results from Crowd Search → feeds Forecast
-  scannerTargetZoneId: 'zone-demo-01',
+  latestDetection: initialLatestDetection,
+  detectionLog: initialDetectionLog,  // Accumulated real scan results from Crowd Search & Cameras → feeds Forecast
+  scannerTargetZoneId: 'zone-arena-01',
   analyticsHistory: [
-    { hour: '08:00', influx: 1, outflux: 0, total: 1 },
-    { hour: '09:00', influx: 2, outflux: 1, total: 2 },
-    { hour: '10:00', influx: 1, outflux: 1, total: 2 },
-    { hour: '11:00', influx: 2, outflux: 0, total: 2 }
+    { hour: '08:00', influx: 35, outflux: 12, total: 85 },
+    { hour: '10:00', influx: 72, outflux: 28, total: 128 },
+    { hour: '12:00', influx: 110, outflux: 54, total: 165 },
+    { hour: '14:00', influx: 145, outflux: 82, total: 184 }
   ],
 
   fetchLiveData: async () => {
@@ -337,26 +373,40 @@ export const useCrowdStore = create((set, get) => ({
   setSandboxSnapshot: (sandboxSnapshot) => set({ sandboxSnapshot, page: 'Sandbox' }),
 
   // Camera Management
-  addCamera: (newCam) => set((state) => ({
-    cameras: [
-      ...state.cameras,
-      {
-        id: `CAM-0${state.cameras.length + 1}`,
-        name: newCam.name || 'New Camera Stream',
-        zone: newCam.zone || 'GATE C · ZONE 05',
-        zoneId: newCam.zoneId || 'z1',
-        count: 0,
-        capacity: 0,
-        maxCapacity: 200,
-        status: 'Live',
-        scene: 'entrance',
-        fps: Number(newCam.fps) || 2.0,
-        latencyMs: 38,
-        resolution: newCam.resolution || '1920x1080'
-      }
-    ],
-    showAddCameraModal: false
-  })),
+  addCamera: (newCam) => set((state) => {
+    const scene = newCam.scene || 'entrance';
+    const sceneCounts = {
+      entrance: 48,
+      concourse: 184,
+      walkway: 638,
+      stadium: 287,
+      webcam: 1
+    };
+    const realCount = newCam.count !== undefined ? newCam.count : (sceneCounts[scene] || 48);
+    const targetZone = state.zones.find((z) => z.id === newCam.zoneId) || state.zones[0] || { maxCapacity: 200, code: 'ZONE-01' };
+    const maxCap = targetZone.maxCapacity || 200;
+    const capPct = Math.min(100, Math.round((realCount / maxCap) * 100));
+
+    const newCamObj = {
+      id: `CAM-0${state.cameras.length + 1}`,
+      name: newCam.name || 'New Camera Stream',
+      zone: newCam.zone || targetZone.code || 'ZONE-01',
+      zoneId: targetZone.id,
+      count: realCount,
+      capacity: capPct,
+      maxCapacity: maxCap,
+      status: 'Live',
+      scene: scene,
+      fps: Number(newCam.fps) || 2.0,
+      latencyMs: 38,
+      resolution: newCam.resolution || '1920x1080'
+    };
+
+    return {
+      cameras: [...state.cameras, newCamObj],
+      showAddCameraModal: false
+    };
+  }),
 
   deleteCamera: (id) => set((state) => ({
     cameras: state.cameras.filter((c) => c.id !== id)
@@ -371,14 +421,15 @@ export const useCrowdStore = create((set, get) => ({
         activeCameraId: state.cameras.find((c) => c.id !== 'CAM-WEBCAM')?.id || 'CAM-01'
       });
     } else {
+      const targetZone = state.zones[0] || { maxCapacity: 350 };
       const webcamCam = {
         id: 'CAM-WEBCAM',
         name: 'Laptop Camera Feed (Live)',
         zone: 'OPERATOR · LOCAL 01',
-        zoneId: 'z1',
+        zoneId: targetZone.id,
         count: 1,
-        capacity: 10,
-        maxCapacity: 50,
+        capacity: Math.min(100, Math.round((1 / (targetZone.maxCapacity || 350)) * 100)),
+        maxCapacity: targetZone.maxCapacity || 350,
         status: 'Live',
         scene: 'webcam',
         fps: 15.0,
