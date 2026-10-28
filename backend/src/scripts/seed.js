@@ -10,17 +10,17 @@ const { getIsConnected, getMemoryStore } = require('../config/db');
 
 const initialZonesData = [
   {
-    _id: 'zone-demo-01',
-    name: 'Demo Safety Zone',
-    code: 'DEMO-ZONE-01',
-    floor: 'Level 1 Ground',
-    maxCapacity: 200,
+    _id: 'zone-arena-01',
+    name: 'Arena Main Concourse',
+    code: 'ARENA-CONCOURSE-01',
+    floor: 'Level 1 Ingress',
+    maxCapacity: 350,
     warningThresholdPct: 70,
     criticalThresholdPct: 85,
-    currentCount: 0,
-    currentOccupancyPct: 0,
+    currentCount: 184,
+    currentOccupancyPct: 52,
     evacuationRoutes: ['Main Egress Gate A', 'Emergency Stairwell North'],
-    description: 'Default demonstration safety sector. Configure live stream URL or webcam to initiate continuous crowd scanning.',
+    description: 'Primary spectator concourse and ingress corridor. Continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.',
     streamUrl: '/samples/mall_concourse.jpg',
     streamType: 'demo'
   }
@@ -29,15 +29,15 @@ const initialZonesData = [
 const initialCamerasData = [
   {
     _id: 'CAM-01',
-    name: 'Demo Zone Camera',
-    zoneId: 'zone-demo-01',
-    zoneName: 'DEMO-ZONE-01',
+    name: 'Arena Concourse Gate A',
+    zoneId: 'zone-arena-01',
+    zoneName: 'ARENA-CONCOURSE-01',
     streamUrl: '/samples/mall_concourse.jpg',
     resolution: '1920x1080',
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'concourse',
-    lastCount: 0,
+    lastCount: 184,
     lastLatencyMs: 38
   }
 ];

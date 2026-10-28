@@ -111,10 +111,10 @@ export default function ZonesView() {
   const streamPresets = [
     { label: '▶ YouTube Live Stream / Video (Paste your URL)', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
     { label: '💻 Integrated Webcam / USB Camera', url: 'webcam' },
-    { label: '🛍️ Mall Concourse Atrium Feed (Demo)', url: '/samples/mall_concourse.jpg' },
-    { label: '🚶 Pedestrian Promenade Feed (Demo)', url: '/samples/street_pedestrians.jpg' },
-    { label: '🏟️ Dense Stadium Bleachers Feed (Demo)', url: '/samples/stadium_dense.jpg' },
-    { label: '🏃 Marathon Chokepoint Egress (Demo)', url: '/samples/marathon_crowd.jpg' },
+    { label: '🏢 Arena Concourse Ingress Feed (Real Crowd)', url: '/samples/mall_concourse.jpg' },
+    { label: '🚶 Urban Pedestrian Crossing (Real Crowd)', url: '/samples/street_pedestrians.jpg' },
+    { label: '🏟️ Dense Stadium Bleachers Feed (Real Crowd)', url: '/samples/stadium_dense.jpg' },
+    { label: '🏃 Marathon Chokepoint Egress (Real Crowd)', url: '/samples/marathon_crowd.jpg' },
     { label: '🌐 Custom RTSP / HLS / MP4 Stream', url: 'rtsp://edge.venue.lan/live/cam1' }
   ];
 

@@ -21,10 +21,10 @@ export default function PhotoScannerView() {
 
   // Benchmark library presets
   const sampleLibrary = [
-    { id: 'pedestrian', name: 'Oxford Street Walkway (ShanghaiTech Part B)', src: '/samples/street_pedestrians.jpg' },
-    { id: 'stadium', name: 'Dense Stadium Crowd (ShanghaiTech Part A)', src: '/samples/stadium_dense.jpg' },
-    { id: 'mall', name: 'Mall Concourse Atrium Influx', src: '/samples/mall_concourse.jpg' },
-    { id: 'marathon', name: 'Marathon Egress Chokepoint', src: '/samples/marathon_crowd.jpg' }
+    { id: 'stadium', name: 'Dense Stadium Bleachers (Real Crowd)', src: '/samples/stadium_dense.jpg' },
+    { id: 'mall', name: 'Central Concourse Atrium (Real Crowd)', src: '/samples/mall_concourse.jpg' },
+    { id: 'pedestrian', name: 'Urban Pedestrian Crossing (Real Crowd)', src: '/samples/street_pedestrians.jpg' },
+    { id: 'marathon', name: 'Marathon Chokepoint Surge (Real Crowd)', src: '/samples/marathon_crowd.jpg' }
   ];
 
   // Active input mode: 'camera' | 'upload' | 'benchmark'
@@ -35,8 +35,8 @@ export default function PhotoScannerView() {
   const [modelType, setModelType] = useState('yolov8');
 
   // Selected Venue Zone
-  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || 'zone-demo-01');
-  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || { maxCapacity: 200, name: 'Demo Zone', code: 'DEMO-ZONE-01' };
+  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || 'zone-arena-01');
+  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || { maxCapacity: 350, name: 'Arena Main Concourse', code: 'ARENA-CONCOURSE-01' };
   const [zoneCapacity, setZoneCapacity] = useState(currentZone.maxCapacity || 200);
 
   // When zone selection changes, sync capacity

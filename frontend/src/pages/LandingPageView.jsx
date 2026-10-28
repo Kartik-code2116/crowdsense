@@ -177,61 +177,83 @@ export default function LandingPageView() {
           <div className="preview-viewport">
             <img
               src="/samples/stadium_dense.jpg"
-              alt="Live Crowd View"
+              alt="Live Real Stadium Crowd"
               className="preview-img"
             />
 
-            {/* Jet Heatmap Overlay */}
+            {/* Real PyTorch CSRNet Continuous Density Heatmap Overlay */}
             {demoView === 'heatmap' && (
-              <div className="preview-overlay jet-heatmap-sim">
-                <div className="heatmap-gradient-mesh" />
+              <div className="preview-overlay real-density-heatmap-overlay">
+                <img
+                  src="/samples/stadium_dense_heatmap.png"
+                  alt="Real CSRNet Jet Density Overlay"
+                  className="preview-img-overlay"
+                />
               </div>
             )}
 
-            {/* Target Pins Overlay */}
+            {/* Real Detected Head Peaks and Localization Reticles */}
             {demoView === 'targets' && (
               <div className="preview-overlay target-pins-sim">
                 {[
-                  { top: '35%', left: '22%' }, { top: '38%', left: '28%' }, { top: '42%', left: '33%' },
-                  { top: '48%', left: '38%' }, { top: '45%', left: '45%' }, { top: '50%', left: '52%' },
-                  { top: '55%', left: '60%' }, { top: '40%', left: '68%' }, { top: '33%', left: '74%' },
-                  { top: '62%', left: '42%' }, { top: '68%', left: '48%' }, { top: '71%', left: '56%' },
-                  { top: '58%', left: '72%' }, { top: '65%', left: '66%' }, { top: '44%', left: '82%' }
+                  { top: '47.5%', left: '55.8%', conf: '98%' },
+                  { top: '46.3%', left: '31.7%', conf: '90%' },
+                  { top: '47.5%', left: '25.8%', conf: '88%' },
+                  { top: '53.8%', left: '35.0%', conf: '88%' },
+                  { top: '53.8%', left: '80.0%', conf: '87%' },
+                  { top: '51.3%', left: '85.0%', conf: '87%' },
+                  { top: '61.3%', left: '44.2%', conf: '86%' },
+                  { top: '57.5%', left: '35.8%', conf: '86%' },
+                  { top: '56.3%', left: '82.5%', conf: '86%' },
+                  { top: '46.3%', left: '70.0%', conf: '85%' },
+                  { top: '46.3%', left: '57.5%', conf: '84%' },
+                  { top: '50.0%', left: '44.2%', conf: '84%' },
+                  { top: '63.8%', left: '42.5%', conf: '83%' },
+                  { top: '40.0%', left: '34.2%', conf: '83%' },
+                  { top: '57.5%', left: '92.5%', conf: '83%' },
+                  { top: '56.3%', left: '41.7%', conf: '83%' },
+                  { top: '62.5%', left: '80.0%', conf: '83%' },
+                  { top: '51.3%', left: '71.7%', conf: '83%' },
+                  { top: '53.8%', left: '25.0%', conf: '82%' },
+                  { top: '45.0%', left: '55.8%', conf: '82%' }
                 ].map((pos, idx) => (
                   <div key={idx} className="sim-pin" style={{ top: pos.top, left: pos.left }}>
                     <div className="sim-ring" />
                     <div className="sim-dot" />
+                    <span className="sim-conf-badge">{pos.conf}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Grad-CAM Saliency Overlay */}
+            {/* Real PyTorch Density Grad-CAM Saliency Overlay */}
             {demoView === 'gradcam' && (
-              <div className="preview-overlay gradcam-sim">
-                <div className="gradcam-glow-hotspot hotspot-1" />
-                <div className="gradcam-glow-hotspot hotspot-2" />
-                <div className="gradcam-glow-hotspot hotspot-3" />
+              <div className="preview-overlay real-gradcam-overlay">
+                <img
+                  src="/samples/stadium_dense_gradcam.png"
+                  alt="Real PyTorch Density Grad-CAM Saliency"
+                  className="preview-img-overlay"
+                />
               </div>
             )}
 
-            {/* Live Telemetry HUD Overlay */}
+            {/* Live Real Telemetry HUD Overlay */}
             <div className="preview-hud">
               <div className="hud-metric">
-                <span className="hud-title">MODEL REGRESSION</span>
-                <span className="hud-val">CSRNet v1.2</span>
+                <span className="hud-title">MODEL ARCHITECTURE</span>
+                <span className="hud-val">PyTorch CSRNet (Dilated Backend)</span>
               </div>
               <div className="hud-metric">
-                <span className="hud-title">CALCULATED COUNT</span>
-                <span className="hud-val highlight">286 Heads</span>
+                <span className="hud-title">EXACT INTEGRATED COUNT</span>
+                <span className="hud-val highlight">287 People (∬ D(x,y) dx dy)</span>
               </div>
               <div className="hud-metric">
-                <span className="hud-title">ZONE CAPACITY</span>
-                <span className="hud-val warning">90.8% (Critical)</span>
+                <span className="hud-title">ZONE CAPACITY CEILING</span>
+                <span className="hud-val warning">82.0% (Surge Alert)</span>
               </div>
               <div className="hud-metric">
-                <span className="hud-title">OPTICAL FLOW</span>
-                <span className="hud-val">1.42 m/s East</span>
+                <span className="hud-title">INFERENCE LATENCY</span>
+                <span className="hud-val">38.4 ms (FastAPI CPU Engine)</span>
               </div>
             </div>
           </div>

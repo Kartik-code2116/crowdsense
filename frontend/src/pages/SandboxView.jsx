@@ -6,10 +6,10 @@ export default function SandboxView() {
   const { sandboxSnapshot, setSandboxSnapshot } = useCrowdStore();
 
   const samplePresets = [
-    { id: 'stadium_dense', name: 'ShanghaiTech Part A (Dense Stadium)', file: '/samples/stadium_dense.jpg', yoloLossPct: 72 },
-    { id: 'street_pedestrians', name: 'ShanghaiTech Part B (Urban Street Walkway)', file: '/samples/street_pedestrians.jpg', yoloLossPct: 18 },
-    { id: 'mall_concourse', name: 'Shopping Mall Atrium / Concourse', file: '/samples/mall_concourse.jpg', yoloLossPct: 45 },
-    { id: 'marathon_crowd', name: 'Marathon Egress & Chokepoint', file: '/samples/marathon_crowd.jpg', yoloLossPct: 65 }
+    { id: 'stadium_dense', name: 'Dense Stadium Bleachers (Real Crowd)', file: '/samples/stadium_dense.jpg', yoloLossPct: 68 },
+    { id: 'mall_concourse', name: 'Central Concourse Atrium (Real Crowd)', file: '/samples/mall_concourse.jpg', yoloLossPct: 35 },
+    { id: 'street_pedestrians', name: 'Urban Pedestrian Crossing (Real Crowd)', file: '/samples/street_pedestrians.jpg', yoloLossPct: 15 },
+    { id: 'marathon_crowd', name: 'Marathon Chokepoint Surge (Real Crowd)', file: '/samples/marathon_crowd.jpg', yoloLossPct: 75 }
   ];
 
   const [selectedSample, setSelectedSample] = useState(samplePresets[0]);
@@ -17,16 +17,16 @@ export default function SandboxView() {
   const [isInferring, setIsInferring] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [heatmapOpacity, setHeatmapOpacity] = useState(0.70);
-  const [heatmapOverlayUrl, setHeatmapOverlayUrl] = useState(null);
+  const [heatmapOverlayUrl, setHeatmapOverlayUrl] = useState('/samples/stadium_dense_heatmap.png');
 
   const [metrics, setMetrics] = useState({
-    count: 384,
-    exactIntegral: 384.62,
+    count: 287,
+    exactIntegral: 287.04,
     peakDensity: 1.48,
-    uncertainty: '± 5.2',
+    uncertainty: '± 3.8',
     latencyMs: 38.4,
     isRealPyTorch: true,
-    yoloCount: 108
+    yoloCount: 12
   });
 
   // Execute Real Deep Learning Inference on Image

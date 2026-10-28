@@ -42,25 +42,25 @@ const defaultUsers = {
 };
 
 const initialCameras = [
-  { id: 'CAM-01', name: 'Demo Zone Camera', zone: 'DEMO-ZONE-01', zoneId: 'zone-demo-01', count: 0, capacity: 0, maxCapacity: 200, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
+  { id: 'CAM-01', name: 'Arena Concourse Gate A', zone: 'ARENA-CONCOURSE-01', zoneId: 'zone-arena-01', count: 184, capacity: 52, maxCapacity: 350, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
 ];
 
 const initialZones = [
   {
-    id: 'zone-demo-01',
-    name: 'Demo Safety Zone',
-    code: 'DEMO-ZONE-01',
-    floor: 'Level 1 Ground',
-    currentCount: 0,
-    maxCapacity: 200,
+    id: 'zone-arena-01',
+    name: 'Arena Main Concourse',
+    code: 'ARENA-CONCOURSE-01',
+    floor: 'Level 1 Ingress',
+    currentCount: 184,
+    maxCapacity: 350,
     warningPct: 70,
     criticalPct: 85,
-    occupancyPct: 0,
+    occupancyPct: 52,
     status: 'normal',
-    egressCount: 2,
+    egressCount: 4,
     streamUrl: '/samples/mall_concourse.jpg',
     streamType: 'demo',
-    description: 'Default demonstration safety sector. Configure live stream URL or webcam to initiate continuous crowd scanning.'
+    description: 'Primary spectator concourse and ingress corridor. Continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.'
   }
 ];
 

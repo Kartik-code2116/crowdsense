@@ -33,8 +33,17 @@ export default function CCTVCanvasStream({
     stadium: '/samples/stadium_dense.jpg'
   };
 
+  const sceneHeatmapMap = {
+    entrance: '/samples/street_pedestrians_heatmap.png',
+    concourse: '/samples/mall_concourse_heatmap.png',
+    walkway: '/samples/marathon_crowd_heatmap.png',
+    stadium: '/samples/stadium_dense_heatmap.png'
+  };
+
   const photoSrc = scenePhotoMap[sceneType] || '/samples/mall_concourse.jpg';
+  const heatmapSrc = sceneHeatmapMap[sceneType] || '/samples/mall_concourse_heatmap.png';
   const imgRef = useRef(null);
+  const heatmapImgRef = useRef(null);
   const videoRef = useRef(null);
   const mediaStreamRef = useRef(null);
 
@@ -65,8 +74,14 @@ export default function CCTVCanvasStream({
       img.onload = () => {
         imgRef.current = img;
       };
+
+      const heatImg = new Image();
+      heatImg.src = heatmapSrc;
+      heatImg.onload = () => {
+        heatmapImgRef.current = heatImg;
+      };
     }
-  }, [photoSrc, sceneType, cameraId]);
+  }, [photoSrc, heatmapSrc, sceneType, cameraId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -127,28 +142,30 @@ export default function CCTVCanvasStream({
       // 2. Real Continuous Density Heatmap Overlay
       if (heatmap) {
         ctx.save();
-        ctx.globalCompositeOperation = 'screen';
+        if (heatmapImgRef.current && heatmapImgRef.current.complete) {
+          ctx.globalAlpha = 0.65;
+          ctx.globalCompositeOperation = 'screen';
+          ctx.drawImage(heatmapImgRef.current, 0, 0, w, h);
+        } else {
+          ctx.globalCompositeOperation = 'screen';
+          const heatCenters = [
+            { x: w * 0.45, y: h * 0.55, r: 85 },
+            { x: w * 0.65, y: h * 0.60, r: 95 }
+          ];
 
-        // 3 major crowd density cluster centers
-        const heatCenters = [
-          { x: w * 0.35, y: h * 0.55, r: 75, intensity: 0.85 },
-          { x: w * 0.55, y: h * 0.60, r: 90, intensity: 0.92 },
-          { x: w * 0.75, y: h * 0.50, r: 65, intensity: 0.75 }
-        ];
+          heatCenters.forEach((c) => {
+            const radial = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
+            radial.addColorStop(0, 'rgba(255, 30, 0, 0.85)');    // Red high density
+            radial.addColorStop(0.35, 'rgba(255, 180, 0, 0.6)'); // Yellow
+            radial.addColorStop(0.7, 'rgba(0, 220, 180, 0.35)'); // Cyan/Green
+            radial.addColorStop(1, 'rgba(0, 50, 255, 0)');        // Clear
 
-        heatCenters.forEach((c) => {
-          const radial = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
-          radial.addColorStop(0, 'rgba(255, 30, 0, 0.85)');    // Red high density
-          radial.addColorStop(0.35, 'rgba(255, 180, 0, 0.6)'); // Yellow
-          radial.addColorStop(0.7, 'rgba(0, 220, 180, 0.35)'); // Cyan/Green
-          radial.addColorStop(1, 'rgba(0, 50, 255, 0)');        // Clear
-
-          ctx.fillStyle = radial;
-          ctx.beginPath();
-          ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
+            ctx.fillStyle = radial;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
         ctx.restore();
       }
 

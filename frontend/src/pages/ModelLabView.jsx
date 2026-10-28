@@ -222,19 +222,19 @@ export default function ModelLabView() {
               className={`pill-btn ${activeImageSrc.includes('stadium') ? 'active' : ''}`}
               onClick={() => setActiveImageSrc('/samples/stadium_dense.jpg')}
             >
-              Dense Stadium
+              Dense Stadium (Real Crowd)
             </button>
             <button
               className={`pill-btn ${activeImageSrc.includes('street') ? 'active' : ''}`}
               onClick={() => setActiveImageSrc('/samples/street_pedestrians.jpg')}
             >
-              Pedestrian Street
+              Pedestrian Crossing (Real Crowd)
             </button>
             <button
               className={`pill-btn ${activeImageSrc.includes('mall') ? 'active' : ''}`}
               onClick={() => setActiveImageSrc('/samples/mall_concourse.jpg')}
             >
-              Mall Atrium
+              Mall Atrium (Real Crowd)
             </button>
           </div>
         </div>
