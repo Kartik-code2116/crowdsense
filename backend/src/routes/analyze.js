@@ -83,18 +83,21 @@ router.post('/record', async (req, res, next) => {
       peakDensity = 0,
       uncertainty = 1.2,
       snapshotUrl = null,
+      snapshotBase64 = null,
+      heatmapUrl = null,
       source = 'live-stream'
     } = req.body;
 
     const numCount = Number(count) || 0;
     const numLatency = Number(latencyMs) || 38;
     const numOcc = Number(occupancyPct) || 0;
+    const realSnapshot = snapshotUrl || snapshotBase64 || null;
 
     let savedDetection = null;
     let createdIncident = null;
 
     if (getIsConnected()) {
-      // 1. Create Detection document in MongoDB time-series collection
+      // 1. Create Detection document in MongoDB time-series collection (preserved permanently)
       savedDetection = await Detection.create({
         cameraId: String(cameraId),
         zoneId: String(zoneId),
@@ -103,32 +106,44 @@ router.post('/record', async (req, res, next) => {
         latencyMs: numLatency,
         uncertainty: Number(uncertainty) || 1.2,
         modelUsed: String(modelUsed).toUpperCase(),
+        snapshotUrl: realSnapshot,
+        snapshotBase64: realSnapshot,
+        heatmapUrl: heatmapUrl || null,
         timestamp: new Date()
       });
 
-      // 2. Update Camera in MongoDB
+      // 2. Update Camera in MongoDB with real capture frame
+      const camUpdate = {
+        lastCount: numCount,
+        lastActive: new Date(),
+        lastLatencyMs: numLatency,
+        status: 'Live'
+      };
+      if (realSnapshot) {
+        camUpdate.lastSnapshot = realSnapshot;
+        camUpdate.snapshotUrl = realSnapshot;
+      }
+      if (heatmapUrl) {
+        camUpdate.heatmapUrl = heatmapUrl;
+      }
+
       await Camera.findOneAndUpdate(
         { $or: [{ _id: cameraId }, { id: cameraId }] },
-        {
-          $set: {
-            lastCount: numCount,
-            lastActive: new Date(),
-            lastLatencyMs: numLatency,
-            status: 'Live'
-          }
-        },
+        { $set: camUpdate },
         { upsert: false }
       );
 
       // 3. Update Zone in MongoDB
+      const zoneUpdate = {
+        currentCount: numCount,
+        currentOccupancyPct: numOcc
+      };
+      if (realSnapshot) zoneUpdate.lastSnapshot = realSnapshot;
+      if (heatmapUrl) zoneUpdate.heatmapUrl = heatmapUrl;
+
       const zoneDoc = await Zone.findOneAndUpdate(
         { $or: [{ _id: zoneId }, { id: zoneId }] },
-        {
-          $set: {
-            currentCount: numCount,
-            currentOccupancyPct: numOcc
-          }
-        },
+        { $set: zoneUpdate },
         { new: true }
       );
 
@@ -158,7 +173,9 @@ router.post('/record', async (req, res, next) => {
           capacity: cap,
           time: new Date().toLocaleTimeString(),
           color,
-          snapshotBase64: snapshotUrl,
+          snapshotBase64: realSnapshot,
+          snapshotUrl: realSnapshot,
+          heatmapUrl: heatmapUrl || null,
           status: 'Open'
         });
 

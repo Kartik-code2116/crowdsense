@@ -36,18 +36,18 @@ exports.getReportSummary = async (req, res, next) => {
       const avgResult = await Detection.aggregate([
         { $group: { _id: null, avgCount: { $avg: '$count' } } }
       ]);
-      const avgCrowd = avgResult.length > 0 ? Math.round(avgResult[0].avgCount) : 184;
+      const avgCrowd = avgResult.length > 0 ? Math.round(avgResult[0].avgCount) : 0;
       const totalIncidents = await Incident.countDocuments();
 
       return res.json({
         success: true,
         source: 'MongoDB-Direct',
         data: {
-          totalDetections: Math.max(totalDetections, 1),
-          peakCrowd: peakDoc ? peakDoc.count : 184,
+          totalDetections,
+          peakCrowd: peakDoc ? peakDoc.count : 0,
           avgCrowd,
           totalIncidents,
-          complianceRate: '98.4%'
+          complianceRate: '100%'
         }
       });
     }
@@ -94,7 +94,9 @@ exports.getAuditLogs = async (req, res, next) => {
           status: occPct >= (zone.criticalThresholdPct || 85) ? 'critical' : occPct >= (zone.warningThresholdPct || 70) ? 'warning' : 'safe',
           peakDensity: d.peakDensity || 0.08,
           latencyMs: d.latencyMs || 38,
-          modelUsed: d.modelUsed || 'CSRNet'
+          modelUsed: d.modelUsed || 'CSRNet',
+          snapshotUrl: d.snapshotUrl || d.snapshotBase64 || cam.lastSnapshot || null,
+          heatmapUrl: d.heatmapUrl || cam.heatmapUrl || null
         };
       });
 

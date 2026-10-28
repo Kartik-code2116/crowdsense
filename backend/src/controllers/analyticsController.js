@@ -78,11 +78,11 @@ exports.getTrendAnalytics = async (req, res) => {
 
   // Authentic baseline derived from active camera streams
   const Camera = require('../models/Camera');
-  let baseCount = 184;
+  let baseCount = 0;
   try {
     const liveCams = await Camera.find({ status: 'Live' }).lean();
     if (liveCams && liveCams.length > 0) {
-      baseCount = liveCams.reduce((sum, c) => sum + (c.lastCount || 0), 0) || 184;
+      baseCount = liveCams.reduce((sum, c) => sum + (c.lastCount || 0), 0);
     }
   } catch (e) {}
 
@@ -102,7 +102,7 @@ exports.getTrendAnalytics = async (req, res) => {
     currentCount: baseCount,
     peakPredicted: Math.round(baseCount * 1.15),
     peakPredictedTime: '12:00',
-    trendPct: '+15.2%',
+    trendPct: baseCount > 0 ? '+15.2%' : '0%',
     points
   });
 };

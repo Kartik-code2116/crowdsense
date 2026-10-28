@@ -9,7 +9,7 @@ import { webcamManager } from '../services/webcamManager';
 export default function CCTVCanvasStream({
   cameraId = 'CAM-01',
   cameraName = 'Central Concourse',
-  count = 142,
+  count = 0,
   resolution = '1920x1080',
   fps = 2.0,
   latencyMs = 38,
@@ -18,6 +18,10 @@ export default function CCTVCanvasStream({
   sceneType = 'concourse',
   interactive = true,
   height = 180,
+  streamUrl = null,
+  snapshotUrl = null,
+  lastSnapshot = null,
+  heatmapUrl = null,
   onSnapshot = null
 }) {
   const canvasRef = useRef(null);
@@ -41,8 +45,10 @@ export default function CCTVCanvasStream({
     stadium: '/samples/stadium_dense_heatmap.png'
   };
 
-  const photoSrc = scenePhotoMap[sceneType] || '/samples/mall_concourse.jpg';
-  const heatmapSrc = sceneHeatmapMap[sceneType] || '/samples/mall_concourse_heatmap.png';
+  // Determine real frame source: prioritizes real captured frame from camera/store/MongoDB
+  const realCapture = snapshotUrl || lastSnapshot || (streamUrl && !streamUrl.startsWith('mock') ? streamUrl : null);
+  const photoSrc = realCapture || scenePhotoMap[sceneType] || '/samples/mall_concourse.jpg';
+  const heatmapSrc = heatmapUrl || sceneHeatmapMap[sceneType] || '/samples/mall_concourse_heatmap.png';
   const imgRef = useRef(null);
   const heatmapImgRef = useRef(null);
   const videoRef = useRef(null);
@@ -72,12 +78,14 @@ export default function CCTVCanvasStream({
       };
     } else {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.src = photoSrc;
       img.onload = () => {
         imgRef.current = img;
       };
 
       const heatImg = new Image();
+      heatImg.crossOrigin = 'anonymous';
       heatImg.src = heatmapSrc;
       heatImg.onload = () => {
         heatmapImgRef.current = heatImg;
@@ -211,14 +219,15 @@ export default function CCTVCanvasStream({
       }
       ctx.fillStyle = '#ffffff';
       ctx.font = '700 8.5px "JetBrains Mono", monospace';
-      ctx.fillText(`${cameraId} · LIVE REC`, 26, 21);
+      ctx.fillText(`${cameraId} · ${realCapture ? 'REAL CAPTURE' : 'LIVE EDGE'}`, 26, 21);
 
       // Live Timestamp (Top Right)
       ctx.fillStyle = 'rgba(10, 18, 25, 0.78)';
       ctx.fillRect(w - 145, 8, 137, 20);
       ctx.fillStyle = '#ffffff';
       ctx.font = '600 8.5px "JetBrains Mono", monospace';
-      ctx.fillText(`2026-10-25 ${timeStr}`, w - 138, 21);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      ctx.fillText(`${todayStr} ${timeStr}`, w - 138, 21);
 
       // AI Density Telemetry (Bottom Left)
       ctx.fillStyle = 'rgba(10, 18, 25, 0.85)';

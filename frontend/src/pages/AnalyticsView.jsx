@@ -17,7 +17,7 @@ export default function AnalyticsView() {
   const baseLiveTotal = useMemo(() => {
     if (selectedCamera) return selectedCamera.count || 0;
     const camSum = cameras.reduce((sum, c) => sum + (c.count || 0), 0);
-    return camSum > 0 ? camSum : (latestDetection?.count || 184);
+    return camSum > 0 ? camSum : (latestDetection?.count || 0);
   }, [cameras, selectedCamera, latestDetection]);
 
   // Max capacity ceiling for active scope
@@ -28,68 +28,74 @@ export default function AnalyticsView() {
 
   // Longitudinal configuration computed dynamically from live camera detections
   const rangeConfig = useMemo(() => {
+    const isZero = baseLiveTotal === 0;
+
     // 1. PAST 60 MINUTES (10-minute micro-corridor telemetry)
     const data1h = [
-      { label: '50m ago', total: Math.max(1, Math.round(baseLiveTotal * 0.86)) },
-      { label: '40m ago', total: Math.max(1, Math.round(baseLiveTotal * 0.90)) },
-      { label: '30m ago', total: Math.max(1, Math.round(baseLiveTotal * 0.94)) },
-      { label: '20m ago', total: Math.max(1, Math.round(baseLiveTotal * 0.97)) },
-      { label: '10m ago', total: Math.max(1, Math.round(baseLiveTotal * 0.99)) },
-      { label: '5m ago', total: Math.max(1, Math.round(baseLiveTotal * 1.01)) },
+      { label: '50m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 0.86) },
+      { label: '40m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 0.90) },
+      { label: '30m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 0.94) },
+      { label: '20m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 0.97) },
+      { label: '10m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 0.99) },
+      { label: '5m ago', total: isZero ? 0 : Math.round(baseLiveTotal * 1.01) },
       { label: 'Live Now', total: baseLiveTotal }
     ].map((d, i, arr) => {
+      if (isZero) return { ...d, influx: 0, outflux: 0 };
       const prev = i > 0 ? arr[i - 1].total : Math.round(d.total * 0.95);
       const delta = d.total - prev;
-      const influx = Math.max(4, Math.round(d.total * 0.16) + (delta > 0 ? delta : 0));
-      const outflux = Math.max(2, Math.round(d.total * 0.11) + (delta < 0 ? -delta : 0));
+      const influx = Math.max(1, Math.round(d.total * 0.16) + (delta > 0 ? delta : 0));
+      const outflux = Math.max(1, Math.round(d.total * 0.11) + (delta < 0 ? -delta : 0));
       return { ...d, influx, outflux };
     });
 
     // 2. PAST 6 HOURS (1-hour rolling venue throughput)
     const data6h = [
-      { label: '11:00', total: Math.max(2, Math.round(baseLiveTotal * 0.58)) },
-      { label: '12:00', total: Math.max(4, Math.round(baseLiveTotal * 0.72)) },
-      { label: '13:00', total: Math.max(6, Math.round(baseLiveTotal * 0.86)) },
-      { label: '14:00', total: Math.max(8, Math.round(baseLiveTotal * 0.96)) },
-      { label: '15:00', total: Math.max(10, Math.round(baseLiveTotal * 1.04)) },
-      { label: '16:00', total: Math.max(8, Math.round(baseLiveTotal * 0.98)) },
+      { label: '11:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.58) },
+      { label: '12:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.72) },
+      { label: '13:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.86) },
+      { label: '14:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.96) },
+      { label: '15:00', total: isZero ? 0 : Math.round(baseLiveTotal * 1.04) },
+      { label: '16:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.98) },
       { label: 'Current', total: baseLiveTotal }
     ].map((d, i, arr) => {
+      if (isZero) return { ...d, influx: 0, outflux: 0 };
       const prev = i > 0 ? arr[i - 1].total : Math.round(d.total * 0.8);
       const delta = d.total - prev;
-      const influx = Math.max(15, Math.round(d.total * 0.45) + (delta > 0 ? delta : 0));
-      const outflux = Math.max(10, Math.round(d.total * 0.35) + (delta < 0 ? -delta : 0));
+      const influx = Math.max(1, Math.round(d.total * 0.45) + (delta > 0 ? delta : 0));
+      const outflux = Math.max(1, Math.round(d.total * 0.35) + (delta < 0 ? -delta : 0));
       return { ...d, influx, outflux };
     });
 
     // 3. PAST 24 HOURS (Complete diurnal cycle in 3-hour blocks)
     const data24h = [
-      { label: '00:00', total: Math.max(1, Math.round(baseLiveTotal * 0.18)) },
-      { label: '04:00', total: Math.max(1, Math.round(baseLiveTotal * 0.09)) },
-      { label: '08:00', total: Math.max(4, Math.round(baseLiveTotal * 0.48)) },
-      { label: '12:00', total: Math.max(10, Math.round(baseLiveTotal * 0.84)) },
-      { label: '15:00', total: Math.max(12, Math.round(baseLiveTotal * 1.08)) },
-      { label: '18:00', total: Math.max(8, Math.round(baseLiveTotal * 0.96)) },
-      { label: '21:00', total: Math.max(4, Math.round(baseLiveTotal * 0.54)) },
+      { label: '00:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.18) },
+      { label: '04:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.09) },
+      { label: '08:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.48) },
+      { label: '12:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.84) },
+      { label: '15:00', total: isZero ? 0 : Math.round(baseLiveTotal * 1.08) },
+      { label: '18:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.96) },
+      { label: '21:00', total: isZero ? 0 : Math.round(baseLiveTotal * 0.54) },
       { label: 'Now', total: baseLiveTotal }
     ].map((d, i, arr) => {
+      if (isZero) return { ...d, influx: 0, outflux: 0 };
       const prev = i > 0 ? arr[i - 1].total : Math.round(d.total * 0.5);
       const delta = d.total - prev;
-      const influx = Math.max(8, Math.round(d.total * 0.65) + (delta > 0 ? delta : 0));
-      const outflux = Math.max(5, Math.round(d.total * 0.55) + (delta < 0 ? -delta : 0));
+      const influx = Math.max(1, Math.round(d.total * 0.65) + (delta > 0 ? delta : 0));
+      const outflux = Math.max(1, Math.round(d.total * 0.55) + (delta < 0 ? -delta : 0));
       return { ...d, influx, outflux };
     });
 
     // 4. PAST 7 DAYS (Daily longitudinal footfall)
     const data7d = [
-      { label: 'Day -6', total: Math.round(baseLiveTotal * 0.84) },
-      { label: 'Day -5', total: Math.round(baseLiveTotal * 0.90) },
-      { label: 'Day -4', total: Math.round(baseLiveTotal * 0.96) },
-      { label: 'Day -3', total: Math.round(baseLiveTotal * 1.18) },
-      { label: 'Day -2', total: Math.round(baseLiveTotal * 1.26) },
-      { label: 'Yesterday', total: Math.round(baseLiveTotal * 1.02) },
+      { label: 'Day -6', total: isZero ? 0 : Math.round(baseLiveTotal * 0.84) },
+      { label: 'Day -5', total: isZero ? 0 : Math.round(baseLiveTotal * 0.90) },
+      { label: 'Day -4', total: isZero ? 0 : Math.round(baseLiveTotal * 0.96) },
+      { label: 'Day -3', total: isZero ? 0 : Math.round(baseLiveTotal * 1.18) },
+      { label: 'Day -2', total: isZero ? 0 : Math.round(baseLiveTotal * 1.26) },
+      { label: 'Yesterday', total: isZero ? 0 : Math.round(baseLiveTotal * 1.02) },
       { label: 'Today', total: baseLiveTotal }
     ].map((d) => {
+      if (isZero) return { ...d, influx: 0, outflux: 0 };
       const dailyInflux = Math.round(d.total * 9.2);
       const dailyOutflux = Math.round(d.total * 8.7);
       return { ...d, influx: dailyInflux, outflux: dailyOutflux };
@@ -97,12 +103,13 @@ export default function AnalyticsView() {
 
     // 5. PAST 30 DAYS (Weekly aggregated blocks)
     const data30d = [
-      { label: 'Week 1', total: Math.round(baseLiveTotal * 0.88) },
-      { label: 'Week 2', total: Math.round(baseLiveTotal * 0.94) },
-      { label: 'Week 3', total: Math.round(baseLiveTotal * 1.12) },
-      { label: 'Week 4', total: Math.round(baseLiveTotal * 1.18) },
+      { label: 'Week 1', total: isZero ? 0 : Math.round(baseLiveTotal * 0.88) },
+      { label: 'Week 2', total: isZero ? 0 : Math.round(baseLiveTotal * 0.94) },
+      { label: 'Week 3', total: isZero ? 0 : Math.round(baseLiveTotal * 1.12) },
+      { label: 'Week 4', total: isZero ? 0 : Math.round(baseLiveTotal * 1.18) },
       { label: 'Current Week', total: baseLiveTotal }
     ].map((d) => {
+      if (isZero) return { ...d, influx: 0, outflux: 0 };
       const weeklyInflux = Math.round(d.total * 68);
       const weeklyOutflux = Math.round(d.total * 65);
       return { ...d, influx: weeklyInflux, outflux: weeklyOutflux };
@@ -116,9 +123,9 @@ export default function AnalyticsView() {
         if (d.total > peak.total) peak = d;
       });
       return {
-        netTurnover: `+${sumIn.toLocaleString()} In / -${sumOut.toLocaleString()} Out`,
-        peakWindow: `${peak.label} (${peak.total.toLocaleString()} Count)`,
-        meanVelocity: baseLiveTotal > 250 ? '0.94 m/s (Restricted)' : '1.42 m/s (Free Flow)',
+        netTurnover: isZero ? '0 In / 0 Out' : `+${sumIn.toLocaleString()} In / -${sumOut.toLocaleString()} Out`,
+        peakWindow: isZero ? 'Awaiting Data (0 Count)' : `${peak.label} (${peak.total.toLocaleString()} Count)`,
+        meanVelocity: isZero ? '0.00 m/s (Idle)' : (baseLiveTotal > 250 ? '0.94 m/s (Restricted)' : '1.42 m/s (Free Flow)'),
         samplingRate: samplingLabel
       };
     };

@@ -13,6 +13,8 @@ const incidentSchema = new mongoose.Schema({
   time: { type: String },
   color: { type: String, default: 'amber' },
   snapshotBase64: { type: String },
+  snapshotUrl: { type: String },
+  heatmapUrl: { type: String },
   timelineEvents: [{
     timestamp: { type: Date, default: Date.now },
     description: { type: String },

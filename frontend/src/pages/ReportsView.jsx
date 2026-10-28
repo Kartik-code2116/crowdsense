@@ -174,15 +174,16 @@ export default function ReportsView() {
         const maxCap = zone.maxCapacity || 350;
 
         // Base live count
-        let baseCount = zone.currentCount || matchingCam.count || 184;
-        if (intIdx > 0) {
+        let baseCount = zone.currentCount || matchingCam?.count || (latestDetection?.count || 0);
+        if (baseCount === 0) {
+          baseCount = 0;
+        } else if (intIdx > 0) {
           // Deterministic realistic variance over time
           const variance = Math.sin((intIdx + 1) * (zIdx + 2)) * 0.18;
-          baseCount = Math.round(baseCount * interval.mult * (1 + variance));
+          baseCount = Math.max(0, Math.round(baseCount * interval.mult * (1 + variance)));
         }
 
-        baseCount = Math.max(12, Math.min(maxCap + 15, baseCount));
-        const occupancyPct = Math.round((baseCount / maxCap) * 100);
+        const occupancyPct = maxCap > 0 ? Math.round((baseCount / maxCap) * 100) : 0;
 
         let status = 'safe';
         let statusLabel = 'NFPA Compliant (Safe)';
@@ -590,7 +591,7 @@ export default function ReportsView() {
                         </span>
                       </td>
                       <td>
-                        <b>{inc.count || 184}</b> / {inc.capacity || 200}
+                        <b>{inc.count ?? 0}</b> / {inc.capacity || 200}
                       </td>
                       <td>
                         <span className={`status-dot ${inc.status === 'Resolved' ? 'green' : 'red'}`} style={{ marginRight: '6px' }} />

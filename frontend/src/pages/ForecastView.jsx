@@ -150,17 +150,18 @@ export default function ForecastView() {
 
   // If detectionLog has entries, use them; otherwise seamlessly use live camera telemetry
   const effectiveLog = useMemo(() => {
-    if (filteredLog && filteredLog.length >= 2) return filteredLog;
-    const camCount = cameras.reduce((sum, c) => sum + (c.count || 0), 0) || 184;
+    if (filteredLog && filteredLog.length >= 1) return filteredLog;
+    const camCount = cameras.reduce((sum, c) => sum + (c.count || 0), 0) || (latestDetection?.count || 0);
+    if (camCount === 0) return [];
     const now = Date.now();
     const primaryZone = zones.find(z => z.id === selectedZoneFilter) || zones[0] || { id: 'zone-arena-01', name: 'Arena Main Concourse', maxCapacity: 350 };
     return [
-      { time: new Date(now - 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 15 * 60000, count: Math.round(camCount * 0.88), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.2, modelName: 'CSRNet', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now - 10 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 10 * 60000, count: Math.round(camCount * 0.93), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 37.5, modelName: 'CSRNet', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 5 * 60000, count: Math.round(camCount * 0.97), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.0, modelName: 'CSRNet', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now, count: camCount, zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.4, modelName: 'CSRNet', capacity: primaryZone.maxCapacity || 350 }
+      { time: new Date(now - 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 15 * 60000, count: Math.round(camCount * 0.88), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.2, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
+      { time: new Date(now - 10 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 10 * 60000, count: Math.round(camCount * 0.93), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 37.5, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
+      { time: new Date(now - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 5 * 60000, count: Math.round(camCount * 0.97), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.0, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
+      { time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now, count: camCount, zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.4, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 }
     ];
-  }, [filteredLog, cameras, zones, selectedZoneFilter]);
+  }, [filteredLog, cameras, zones, selectedZoneFilter, latestDetection]);
 
   // Get unique zones that have been scanned or configured
   const scannedZones = useMemo(() => {
@@ -184,7 +185,7 @@ export default function ForecastView() {
     : 0;
   const peakForecast = forecastPoints.find(p => p.isPeak);
   const ceiling = latestEntry?.capacity || (zones.find(z => z.id === selectedZoneFilter)?.maxCapacity) || zones[0]?.maxCapacity || 350;
-  const peakPct = peakForecast ? Math.round((peakForecast.forecast / ceiling) * 100) : 0;
+  const peakPct = peakForecast && ceiling > 0 ? Math.round((peakForecast.forecast / ceiling) * 100) : 0;
   const isCritical = peakPct >= 85;
   const isWarning = peakPct >= 70 && !isCritical;
 
@@ -204,7 +205,7 @@ export default function ForecastView() {
               forecast peak at <b>{peakForecast.forecast} people / {ceiling} limit</b> ({peakPct}% capacity).
               {latestDetection && (
                 <span style={{ display: 'block', marginTop: '4px', fontSize: '11.5px', color: '#ffdd88' }}>
-                  Last scan: {latestDetection.count} people via {latestDetection.modelName?.toUpperCase() || 'YOLOv8'} · {latestDetection.zoneName}
+                  Last scan: {latestDetection.count} people via {latestDetection.modelName?.toUpperCase() || 'CSRNET'} · {latestDetection.zoneName}
                 </span>
               )}
             </p>
@@ -234,7 +235,7 @@ export default function ForecastView() {
           </span>
           <span style={{ fontSize: '13px', color: 'var(--text)' }}>
             Powered by <b>{filteredLog.length}</b> real Crowd Search scan{filteredLog.length !== 1 ? 's' : ''} ·
-            Latest: <b>{latestEntry?.count} people in {latestEntry?.zoneName}</b> at {latestEntry?.time}
+            Latest: <b>{latestEntry ? `${latestEntry.count} people in ${latestEntry.zoneName || 'Zone'}` : '0 people (Ready for live scan)'}</b> {latestEntry?.time ? `at ${latestEntry.time}` : ''}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

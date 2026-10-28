@@ -170,6 +170,13 @@ class WebcamManager {
       }
 
       if (blob && this.storeDispatch) {
+        // Read blob as Data URL to store real capture frame in MongoDB & UI components
+        const frameDataUrl = await new Promise((res) => {
+          const reader = new FileReader();
+          reader.onloadend = () => res(reader.result);
+          reader.readAsDataURL(blob);
+        });
+
         const result = await apiClient.predictImage(blob, this.modelType, this.targetCapacity);
         if (result) {
           const count = result.count !== undefined ? result.count : (result.detected_boxes?.length || 1);
@@ -182,6 +189,7 @@ class WebcamManager {
             resolution: { width, height },
             zoneId: this.targetZoneId,
             modelName: this.modelType,
+            imageSrc: frameDataUrl,
             isWebcam: true
           });
         }

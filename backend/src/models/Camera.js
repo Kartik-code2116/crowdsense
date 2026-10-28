@@ -21,6 +21,9 @@ const cameraSchema = new mongoose.Schema({
   lastCount: { type: Number, default: 0 },
   lastLatencyMs: { type: Number, default: 38 },
   lastActive: { type: Date, default: Date.now },
+  lastSnapshot: { type: String },
+  snapshotUrl: { type: String },
+  heatmapUrl: { type: String },
   coordinates: {
     lat: { type: Number, default: 19.0760 },
     lng: { type: Number, default: 72.8777 }

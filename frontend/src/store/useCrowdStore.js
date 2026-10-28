@@ -43,7 +43,7 @@ const defaultUsers = {
 };
 
 const initialCameras = [
-  { id: 'CAM-01', name: 'Arena Concourse Gate A', zone: 'ARENA-CONCOURSE-01', zoneId: 'zone-arena-01', count: 184, capacity: 52, maxCapacity: 350, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
+  { id: 'CAM-01', name: 'Arena Concourse Gate A', zone: 'ARENA-CONCOURSE-01', zoneId: 'zone-arena-01', count: 0, capacity: 0, maxCapacity: 350, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
 ];
 
 const initialZones = [
@@ -52,11 +52,11 @@ const initialZones = [
     name: 'Arena Main Concourse',
     code: 'ARENA-CONCOURSE-01',
     floor: 'Level 1 Ingress',
-    currentCount: 184,
+    currentCount: 0,
     maxCapacity: 350,
     warningPct: 70,
     criticalPct: 85,
-    occupancyPct: 52,
+    occupancyPct: 0,
     status: 'normal',
     egressCount: 4,
     streamUrl: '/samples/mall_concourse.jpg',
@@ -65,47 +65,14 @@ const initialZones = [
   }
 ];
 
-const initialIncidents = [
-  {
-    id: 'INC-2026-001',
-    time: '14:32:08',
-    title: 'Peak Ingress Surge Monitored (> 50% capacity)',
-    location: 'Arena Main Concourse · ARENA-CONCOURSE-01',
-    level: 'Warning',
-    color: 'amber',
-    count: 184,
-    capacity: 350,
-    status: 'Open',
-    notes: 'Real-time deep learning detection on CAM-01 recorded 184 individuals during peak venue ingress. Egress corridors 1-4 operating at normal flow (1.42 m/s).',
-    snapshotUrl: '/samples/mall_concourse.jpg',
-    heatmapUrl: '/samples/mall_concourse_heatmap.png'
-  }
-];
+const initialIncidents = [];
 
 const initialNotifications = [
-  { id: 'notif_init', title: 'System Online: All safety zones operating with real-time deep learning telemetry', time: new Date().toLocaleTimeString(), unread: false, level: 'Info' },
-  { id: 'notif_surge', title: '⚠️ Arena Main Concourse: 52% capacity (184 people detected on CAM-01)', time: '14:32:08', unread: true, level: 'Warning' }
+  { id: 'notif_init', title: 'System Online: All safety zones active and monitoring edge streams', time: new Date().toLocaleTimeString(), unread: false, level: 'Info' }
 ];
 
-const nowMs = Date.now();
-const initialDetectionLog = [
-  { time: new Date(nowMs - 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 15 * 60000, count: 162, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.2, modelName: 'CSRNet', occupancyPct: 46, capacity: 350 },
-  { time: new Date(nowMs - 10 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 10 * 60000, count: 171, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 37.5, modelName: 'CSRNet', occupancyPct: 48, capacity: 350 },
-  { time: new Date(nowMs - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs - 5 * 60000, count: 179, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.0, modelName: 'CSRNet', occupancyPct: 51, capacity: 350 },
-  { time: new Date(nowMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: nowMs, count: 184, zoneId: 'zone-arena-01', zoneName: 'Arena Main Concourse', latencyMs: 38.4, modelName: 'CSRNet', occupancyPct: 52, capacity: 350 }
-];
-
-const initialLatestDetection = {
-  count: 184,
-  zoneName: 'Arena Main Concourse',
-  zoneId: 'zone-arena-01',
-  cameraId: 'CAM-01',
-  latencyMs: 38.4,
-  modelName: 'CSRNet',
-  timestamp: new Date().toLocaleTimeString(),
-  imageSrc: '/samples/mall_concourse.jpg',
-  heatmapUrl: '/samples/mall_concourse_heatmap.png'
-};
+const initialDetectionLog = [];
+const initialLatestDetection = null;
 
 const initialModels = [
   {
@@ -184,12 +151,7 @@ export const useCrowdStore = create((set, get) => ({
   latestDetection: initialLatestDetection,
   detectionLog: initialDetectionLog,  // Accumulated real scan results from Crowd Search & Cameras → feeds Forecast
   scannerTargetZoneId: 'zone-arena-01',
-  analyticsHistory: [
-    { hour: '08:00', influx: 35, outflux: 12, total: 85 },
-    { hour: '10:00', influx: 72, outflux: 28, total: 128 },
-    { hour: '12:00', influx: 110, outflux: 54, total: 165 },
-    { hour: '14:00', influx: 145, outflux: 82, total: 184 }
-  ],
+  analyticsHistory: [],
 
   fetchLiveData: async () => {
     try {
@@ -213,7 +175,11 @@ export const useCrowdStore = create((set, get) => ({
             scene: c.sceneType || 'concourse',
             fps: c.sampleFps || 2.0,
             latencyMs: c.lastLatencyMs || 38,
-            resolution: c.resolution || '1920x1080'
+            resolution: c.resolution || '1920x1080',
+            streamUrl: c.streamUrl || '',
+            lastSnapshot: c.lastSnapshot || c.snapshotUrl || null,
+            snapshotUrl: c.snapshotUrl || c.lastSnapshot || null,
+            heatmapUrl: c.heatmapUrl || null
           };
         });
         set({ cameras: mapped, dbConnected: true, dbSource: 'MongoDB Local (27017)' });
@@ -239,7 +205,9 @@ export const useCrowdStore = create((set, get) => ({
           egressCount: z.evacuationRoutes ? z.evacuationRoutes.length : 2,
           streamUrl: z.streamUrl || '',
           streamType: z.streamType || 'url',
-          description: z.description || ''
+          description: z.description || '',
+          lastSnapshot: z.lastSnapshot || null,
+          heatmapUrl: z.heatmapUrl || null
         }));
         set({ zones: mappedZones });
       }
@@ -254,10 +222,13 @@ export const useCrowdStore = create((set, get) => ({
           location: i.location,
           level: i.level || 'Warning',
           color: i.color || (i.level === 'Critical' ? 'red' : 'amber'),
-          count: i.peakCount || 140,
+          count: i.peakCount || 0,
           capacity: i.capacity || 200,
           status: i.status || 'Open',
-          notes: i.description || ''
+          notes: i.description || '',
+          snapshotUrl: i.snapshotBase64 || i.snapshotUrl || null,
+          snapshotBase64: i.snapshotBase64 || i.snapshotUrl || null,
+          heatmapUrl: i.heatmapUrl || null
         }));
         set({ incidents: mappedInc });
       }
@@ -275,7 +246,45 @@ export const useCrowdStore = create((set, get) => ({
         set({ notifications: mappedAlerts });
       }
 
-      // 5. Check Health of Deep Learning Model
+      // 5. Fetch Real Detections from Local MongoDB
+      const auditRes = await apiClient.getAuditLogs(30);
+      if (auditRes && auditRes.data && Array.isArray(auditRes.data) && auditRes.data.length > 0) {
+        const mappedLog = auditRes.data.map((d) => ({
+          time: d.timeStr,
+          timestamp: new Date(d.timestamp).getTime(),
+          count: Number(d.count) || 0,
+          zoneId: d.zoneId,
+          zoneName: d.zoneName,
+          latencyMs: d.latencyMs || 38,
+          modelName: d.modelUsed || 'CSRNet',
+          occupancyPct: d.occupancyPct || 0,
+          capacity: d.capacity || 350,
+          snapshotUrl: d.snapshotUrl || null,
+          heatmapUrl: d.heatmapUrl || null
+        }));
+
+        const latest = mappedLog[0];
+        set((prev) => {
+          // If cameras exist and don't yet have lastSnapshot, hydrate with latest detection frame
+          const updatedCams = prev.cameras.map((c, idx) => {
+            if (idx === 0 && !c.lastSnapshot && latest.snapshotUrl) {
+              return { ...c, lastSnapshot: latest.snapshotUrl, snapshotUrl: latest.snapshotUrl, heatmapUrl: latest.heatmapUrl };
+            }
+            return c;
+          });
+
+          return {
+            cameras: updatedCams,
+            detectionLog: [...mappedLog].reverse(),
+            latestDetection: {
+              ...latest,
+              imageSrc: latest.snapshotUrl || null
+            }
+          };
+        });
+      }
+
+      // 6. Check Health of Deep Learning Model
       const aiHealth = await apiClient.getAiHealth();
       if (aiHealth && aiHealth.status === 'online') {
         set({
@@ -375,15 +384,8 @@ export const useCrowdStore = create((set, get) => ({
 
   // Camera Management
   addCamera: (newCam) => set((state) => {
-    const scene = newCam.scene || 'entrance';
-    const sceneCounts = {
-      entrance: 48,
-      concourse: 184,
-      walkway: 638,
-      stadium: 287,
-      webcam: 1
-    };
-    const realCount = newCam.count !== undefined ? newCam.count : (sceneCounts[scene] || 48);
+    const scene = newCam.scene || 'concourse';
+    const realCount = newCam.count !== undefined ? Number(newCam.count) : 0;
     const targetZone = state.zones.find((z) => z.id === newCam.zoneId) || state.zones[0] || { maxCapacity: 200, code: 'ZONE-01' };
     const maxCap = targetZone.maxCapacity || 200;
     const capPct = Math.min(100, Math.round((realCount / maxCap) * 100));
@@ -465,10 +467,12 @@ export const useCrowdStore = create((set, get) => ({
     const targetZoneId = payload.zoneId || state.scannerTargetZoneId || defaultZone.id;
     const targetZone = state.zones.find((z) => z.id === targetZoneId) || defaultZone;
     const targetCameraId = payload.cameraId || (state.cameras.some((c) => c.id === 'CAM-WEBCAM') ? 'CAM-WEBCAM' : state.cameras[0]?.id || 'CAM-01');
+    const realFrame = payload.imageSrc || payload.snapshotUrl || null;
+    const heatmapFrame = payload.heatmapUrl || null;
 
-    // 1. Update Camera in State
+    // 1. Update Camera in State with real capture frame
     const updatedCameras = state.cameras.map((c) => {
-      if (c.id === targetCameraId || (payload.isWebcam && c.id === 'CAM-WEBCAM')) {
+      if (c.id === targetCameraId || (payload.isWebcam && c.id === 'CAM-WEBCAM') || state.cameras.length === 1) {
         const cap = Math.min(100, Math.round((count / (targetZone.maxCapacity || 200)) * 100));
         return {
           ...c,
@@ -478,7 +482,11 @@ export const useCrowdStore = create((set, get) => ({
           latencyMs,
           status: 'Live',
           resolution: payload.resolution ? `${payload.resolution.width}x${payload.resolution.height}` : c.resolution,
-          lastDetection: payload
+          lastDetection: payload,
+          lastSnapshot: realFrame || c.lastSnapshot,
+          snapshotUrl: realFrame || c.snapshotUrl,
+          streamUrl: realFrame || c.streamUrl,
+          heatmapUrl: heatmapFrame || c.heatmapUrl
         };
       }
       return c;
@@ -493,7 +501,9 @@ export const useCrowdStore = create((set, get) => ({
           ...z,
           currentCount: count,
           occupancyPct: occPct,
-          status
+          status,
+          lastSnapshot: realFrame || z.lastSnapshot,
+          heatmapUrl: heatmapFrame || z.heatmapUrl
         };
       }
       return z;
@@ -525,8 +535,10 @@ export const useCrowdStore = create((set, get) => ({
         count,
         capacity: targetZone.maxCapacity,
         status: 'Open',
-        notes: `Automated detection trigger via ${payload.modelName || 'YOLOv8'}. Detected ${count} persons with ${latencyMs}ms inference latency.`,
-        snapshotUrl: payload.imageSrc || payload.heatmapUrl,
+        notes: `Automated detection trigger via ${payload.modelName || 'CSRNet'}. Detected ${count} persons with ${latencyMs}ms inference latency.`,
+        snapshotUrl: realFrame,
+        snapshotBase64: realFrame,
+        heatmapUrl: heatmapFrame,
         realDetection: payload
       };
 
@@ -575,9 +587,11 @@ export const useCrowdStore = create((set, get) => ({
       zoneId: targetZoneId,
       zoneName: targetZone.name,
       latencyMs,
-      modelName: payload.modelName || 'YOLOv8',
+      modelName: payload.modelName || 'CSRNet',
       occupancyPct: occPct,
-      capacity: targetZone.maxCapacity
+      capacity: targetZone.maxCapacity,
+      snapshotUrl: realFrame,
+      heatmapUrl: heatmapFrame
     };
     const prevLog = get().detectionLog || [];
     const updatedLog = [...prevLog, detectionEntry].slice(-50); // keep last 50 scans
@@ -592,12 +606,14 @@ export const useCrowdStore = create((set, get) => ({
       latestDetection: {
         ...payload,
         zoneName: targetZone.name,
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString(),
+        imageSrc: realFrame,
+        heatmapUrl: heatmapFrame
       },
       lastSyncTimestamp: new Date().toLocaleTimeString()
     });
 
-    // 6. Asynchronously persist detection to local MongoDB (27017)
+    // 6. Asynchronously persist real detection and frame snapshot to local MongoDB (27017)
     apiClient.saveDetection({
       cameraId: targetCameraId,
       zoneId: targetZoneId,
@@ -607,7 +623,9 @@ export const useCrowdStore = create((set, get) => ({
       latencyMs,
       modelUsed: payload.modelName || 'CSRNet',
       peakDensity: payload.peakDensity || Number((count / targetZone.maxCapacity).toFixed(4)),
-      snapshotUrl: payload.imageSrc || payload.heatmapUrl,
+      snapshotUrl: realFrame,
+      snapshotBase64: realFrame,
+      heatmapUrl: heatmapFrame,
       source: payload.isWebcam ? 'webcam' : payload.source || 'scanner'
     }).catch((e) => console.warn('Persist to Mongo deferred:', e.message));
   },

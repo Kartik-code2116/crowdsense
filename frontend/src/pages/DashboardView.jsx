@@ -2,31 +2,27 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
-function TrendLineChart({ totalCount = 184, range = 'Today', detectionLog = [] }) {
-  const base = Math.max(10, totalCount);
-  const maxVal = Math.max(50, Math.round(base * 1.35));
-  const getY = (val) => Math.round(102 - (val / maxVal) * 82);
+function TrendLineChart({ totalCount = 0, range = 'Today', detectionLog = [] }) {
+  // Use real counts directly from detectionLog
+  const realCounts = detectionLog.length > 0
+    ? detectionLog.map((d) => d.count)
+    : (totalCount > 0 ? [totalCount] : [0]);
 
-  // Derive actual trend from real detectionLog history if available
-  let counts = detectionLog.slice(-5).map(d => d.count);
-  if (counts.length < 5) {
-    counts = [
-      Math.round(base * 0.75),
-      Math.round(base * 0.84),
-      Math.round(base * 0.91),
-      Math.round(base * 0.96),
-      base
-    ];
-  } else {
-    counts[counts.length - 1] = base;
+  const maxVal = Math.max(10, Math.round(Math.max(...realCounts, totalCount) * 1.3));
+  const getY = (val) => Math.round(102 - (Math.max(0, val) / maxVal) * 82);
+
+  // Take the most recent 5 points, padded with 0 if fewer exist
+  const padded = [...realCounts];
+  while (padded.length < 5) {
+    padded.unshift(0);
   }
-
-  const p0 = counts[0] || Math.round(base * 0.75);
-  const p1 = counts[1] || Math.round(base * 0.84);
-  const p2 = counts[2] || Math.round(base * 0.91);
-  const p3 = counts[3] || Math.round(base * 0.96);
-  const p4 = base;
-  const p5 = Math.round(base * 1.08);
+  const slice = padded.slice(-5);
+  const p0 = slice[0];
+  const p1 = slice[1];
+  const p2 = slice[2];
+  const p3 = slice[3];
+  const p4 = totalCount > 0 ? totalCount : slice[4];
+  const p5 = p4 > 0 ? Math.round(p4 * 1.08) : 0;
 
   const actualPoints = `0,${getY(p0)} 70,${getY(p1)} 140,${getY(p2)} 210,${getY(p3)} 280,${getY(p4)} 330,${getY(p4)}`;
   const forecastPoints = `330,${getY(p4)} 370,${getY(p5)} 410,${getY(p5)} 450,${getY(p4)}`;
@@ -208,14 +204,20 @@ export default function DashboardView() {
 
           <div className="chart-summary">
             <strong>{totalPeople.toLocaleString()} people</strong>
-            <span className="trend positive">● Live Stream</span>
-            <small>Active venue occupancy</small>
+            <span className={`trend ${totalPeople > 0 ? 'positive' : 'stable'}`}>
+              {totalPeople > 0 ? (latestDetection ? '● Live AI Detection' : '● Live Stream') : '○ Ready for Live Stream'}
+            </span>
+            <small>
+              {totalPeople > 0
+                ? (latestDetection ? `Active scan: ${latestDetection.modelName?.toUpperCase() || 'CSRNET'} in ${latestDetection.zoneName || 'Venue Zone'}` : 'Active detected venue occupancy')
+                : 'No individuals currently detected across monitored camera zones'}
+            </small>
           </div>
 
           <div className="chart-wrap">
             <div className="y-labels">
-              <span>{Math.max(6, Math.round(totalPeople * 1.5))}</span>
-              <span>{Math.max(4, Math.round(totalPeople * 1.0))}</span>
+              <span>{Math.max(10, Math.round(totalPeople * 1.5))}</span>
+              <span>{Math.max(6, Math.round(totalPeople * 1.0))}</span>
               <span>{Math.max(2, Math.round(totalPeople * 0.5))}</span>
               <span>0</span>
             </div>
@@ -234,7 +236,11 @@ export default function DashboardView() {
           <div className="chart-legend">
             <span><i className="legend-blue" /> Actual Occupancy (YOLOv8 / CSRNet)</span>
             <span><i className="legend-dash" /> LSTM Forecast (+15m)</span>
-            <span className="forecast-note">◷ Predicted peak: {Math.max(2, Math.round(totalPeople * 1.2))} people · Safe Operations</span>
+            <span className="forecast-note">
+              {totalPeople > 0
+                ? `◷ Predicted peak: ${Math.round(totalPeople * 1.15)} people · Safe Operations`
+                : '◷ Awaiting camera ingress data to project LSTM forecast'}
+            </span>
           </div>
         </section>
 
@@ -338,6 +344,10 @@ export default function DashboardView() {
                   flowVectors={flowVectors}
                   sceneType={cam.scene}
                   height={170}
+                  streamUrl={cam.streamUrl}
+                  snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
+                  lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
+                  heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || (cam.id === 'CAM-01' ? latestDetection?.heatmapUrl : null)}
                   onSnapshot={handleCameraSnapshot}
                 />
               </div>

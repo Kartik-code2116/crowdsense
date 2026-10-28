@@ -123,6 +123,10 @@ export default function LiveMonitorView() {
                     flowVectors={flowVectors}
                     sceneType={cam.scene}
                     height={layout === '1x1' ? 380 : layout === '2x2' ? 200 : 150}
+                    streamUrl={cam.streamUrl}
+                    snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
+                    lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
+                    heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || (cam.id === 'CAM-01' ? latestDetection?.heatmapUrl : null)}
                     onSnapshot={handleSnapshot}
                   />
                 </div>
@@ -230,6 +234,20 @@ export default function LiveMonitorView() {
               </b>
             </div>
           </div>
+
+          {(selectedCam.lastSnapshot || latestDetection?.imageSrc) && (
+            <div className="telemetry-card" style={{ padding: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: '#19a779' }}>● MONGODB STORED FRAME</span>
+                <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Indefinitely Persisted</span>
+              </div>
+              <img
+                src={selectedCam.lastSnapshot || latestDetection?.imageSrc}
+                alt="Captured CCTV Frame"
+                style={{ width: '100%', height: '110px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+            </div>
+          )}
 
           <div style={{ marginTop: '14px' }}>
             <button

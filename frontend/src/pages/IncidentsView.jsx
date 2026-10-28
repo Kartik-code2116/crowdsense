@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function IncidentsView() {
-  const { incidents, resolveIncident, inspectInCrowdSearch } = useCrowdStore();
+  const { incidents, resolveIncident, inspectInCrowdSearch, cameras, latestDetection } = useCrowdStore();
   const [filter, setFilter] = useState('All');
   const [selectedIncident, setSelectedIncident] = useState(incidents[0]);
   const [replayOffsetMinutes, setReplayOffsetMinutes] = useState(0); // -15, -10, -5, 0 (trigger), +5
@@ -20,18 +20,23 @@ export default function IncidentsView() {
     : incidents.filter((i) => i.level === filter || (filter === 'Resolved' && i.status === 'Resolved'));
 
   // Calculate real reconstructed count based on scrub offset
-  const baseCount = selectedIncident ? selectedIncident.count : 184;
-  const scrubbedCount = Math.max(20, Math.round(baseCount + (replayOffsetMinutes * 4.5)));
+  const baseCount = selectedIncident ? (selectedIncident.count || 0) : 0;
+  const scrubbedCount = baseCount > 0 ? Math.max(0, Math.round(baseCount + (replayOffsetMinutes * 4.5))) : 0;
 
-  const realImageSrc = selectedIncident?.snapshotUrl || '/samples/mall_concourse.jpg';
-  const realHeatmapSrc = selectedIncident?.heatmapUrl || '/samples/mall_concourse_heatmap.png';
+  const realImageSrc = selectedIncident?.snapshotUrl || selectedIncident?.snapshotBase64 || latestDetection?.imageSrc || cameras[0]?.lastSnapshot || cameras[0]?.streamUrl || '/samples/mall_concourse.jpg';
+  const realHeatmapSrc = selectedIncident?.heatmapUrl || latestDetection?.heatmapUrl || cameras[0]?.heatmapUrl || '/samples/mall_concourse_heatmap.png';
 
   return (
     <div className="incidents-container">
       <div className="page-action-row">
         <div>
-          <h2>Incident Center & Forensic Incident Replay</h2>
-          <p>Real-time deep learning detection threshold logs & high-resolution CCTV visual reconstruction</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2>Incident Center & Forensic Incident Replay</h2>
+            <span className="badge-pill" style={{ background: 'rgba(25,167,121,0.12)', color: '#19a779', border: '1px solid rgba(25,167,121,0.3)', fontSize: '11px', padding: '3px 8px' }}>
+              ● MongoDB Permanent Frame Storage
+            </span>
+          </div>
+          <p>Real-time deep learning detection threshold logs & high-resolution CCTV visual reconstruction stored permanently</p>
         </div>
         <div className="range-pills">
           {['All', 'Critical', 'Warning', 'Resolved'].map((lvl) => (
@@ -73,6 +78,11 @@ export default function IncidentsView() {
                     <b>{item.title}</b>
                     <em className={`incident-status ${item.color}`}>{item.level}</em>
                   </div>
+                  {(item.snapshotUrl || item.snapshotBase64) && (
+                    <div style={{ marginTop: '6px', marginBottom: '6px', borderRadius: '4px', overflow: 'hidden', height: '48px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <img src={item.snapshotUrl || item.snapshotBase64} alt="Incident Frame" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
                   <div className="incident-card-meta">
                     <span>📍 {item.location}</span>
                     <span>⏱ {item.time}</span>

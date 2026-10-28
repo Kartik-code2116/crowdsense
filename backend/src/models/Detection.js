@@ -14,7 +14,10 @@ const detectionSchema = new mongoose.Schema({
     headingDeg: { type: Number, default: 0 },
     direction: { type: String, default: 'East' }
   },
-  alertTriggered: { type: Boolean, default: false }
+  alertTriggered: { type: Boolean, default: false },
+  snapshotUrl: { type: String },
+  snapshotBase64: { type: String },
+  heatmapUrl: { type: String }
 });
 
 // Compound Index on (cameraId, timestamp) for rapid time-series range slicing
@@ -23,7 +26,7 @@ detectionSchema.index({ cameraId: 1, timestamp: -1 });
 // Compound Index on (zoneId, timestamp) for zone trend aggregation
 detectionSchema.index({ zoneId: 1, timestamp: -1 });
 
-// TTL Index: expire short-lived raw detections after 7 days (604,800 seconds)
-detectionSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 });
+// Permanent Time-Series Index (No TTL expiration - preserved indefinitely in MongoDB)
+detectionSchema.index({ timestamp: 1 });
 
 module.exports = mongoose.model('Detection', detectionSchema);

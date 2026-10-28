@@ -17,8 +17,8 @@ const initialZonesData = [
     maxCapacity: 350,
     warningThresholdPct: 70,
     criticalThresholdPct: 85,
-    currentCount: 184,
-    currentOccupancyPct: 52,
+    currentCount: 0,
+    currentOccupancyPct: 0,
     evacuationRoutes: ['Main Egress Gate A', 'Emergency Stairwell North'],
     description: 'Primary spectator concourse and ingress corridor. Continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.',
     streamUrl: '/samples/mall_concourse.jpg',
@@ -37,7 +37,7 @@ const initialCamerasData = [
     sampleFps: 2.0,
     status: 'Live',
     sceneType: 'concourse',
-    lastCount: 184,
+    lastCount: 0,
     lastLatencyMs: 38
   }
 ];
@@ -77,23 +77,7 @@ const initialUsersData = [
   }
 ];
 
-const initialIncidentsData = [
-  {
-    incidentNumber: 'INC-2026-001',
-    title: 'Peak Ingress Surge Monitored (> 50% capacity)',
-    description: 'Real-time deep learning detection on CAM-01 recorded 184 individuals during peak venue ingress. Egress corridors 1-4 operating at normal flow (1.42 m/s).',
-    level: 'Warning',
-    location: 'Arena Main Concourse · ARENA-CONCOURSE-01',
-    zoneId: 'zone-arena-01',
-    cameraId: 'CAM-01',
-    peakCount: 184,
-    capacity: 350,
-    time: '14:32:08',
-    color: 'amber',
-    status: 'Open',
-    createdAt: new Date()
-  }
-];
+const initialIncidentsData = [];
 
 const initialAlertsData = [
   {
@@ -103,9 +87,9 @@ const initialAlertsData = [
     zoneId: 'zone-arena-01',
     zoneName: 'Arena Main Concourse',
     cameraId: 'CAM-01',
-    count: 184,
+    count: 0,
     capacity: 350,
-    occupancyPct: 52,
+    occupancyPct: 0,
     status: 'Resolved',
     createdAt: new Date()
   }
@@ -116,7 +100,7 @@ function generateTimeSeriesDetections() {
   const detections = [];
   const now = Date.now();
   const cameras = [
-    { id: 'CAM-01', zoneId: 'zone-arena-01', base: 184, variance: 22 }
+    { id: 'CAM-01', zoneId: 'zone-arena-01', base: 0, variance: 0 }
   ];
 
   // 1 record every 15 minutes for past 24 hours = 96 points per camera

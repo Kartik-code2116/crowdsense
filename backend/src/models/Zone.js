@@ -14,6 +14,8 @@ const zoneSchema = new mongoose.Schema({
   description: { type: String },
   streamUrl: { type: String, default: '' },
   streamType: { type: String, default: 'url' }, // 'url', 'webcam', 'demo'
+  lastSnapshot: { type: String },
+  heatmapUrl: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 
