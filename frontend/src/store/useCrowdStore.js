@@ -238,22 +238,22 @@ export const useCrowdStore = create((set, get) => ({
         set({ notifications: mappedAlerts });
       }
 
-      // 5. Check Health of FastAPI PyTorch AI Service
+      // 5. Check Health of Deep Learning Model
       const aiHealth = await apiClient.getAiHealth();
       if (aiHealth && aiHealth.status === 'online') {
         set({
           aiConnected: true,
-          aiModelInfo: `PyTorch CSRNet (${aiHealth.device.toUpperCase()})`
+          aiModelInfo: `CSRNet Dilated Conv (${aiHealth.device.toUpperCase()})`
         });
       } else {
-        // AI service is not reachable — mark as offline
-        set({ aiConnected: false, aiModelInfo: 'AI Service Offline' });
+        // Deep Learning model is not reachable — mark as offline
+        set({ aiConnected: false, aiModelInfo: 'Model Offline' });
       }
 
       set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
     } catch (e) {
       console.warn('Real live data fetch fallback:', e.message);
-      set({ aiConnected: false, aiModelInfo: 'AI Service Offline', dbConnected: false });
+      set({ aiConnected: false, aiModelInfo: 'Model Offline', dbConnected: false });
     }
   },
 

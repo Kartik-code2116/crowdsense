@@ -36,9 +36,9 @@ export default function SettingsView() {
         </div>
 
         <div className="stat-card">
-          <div className="stat-top"><span>FASTAPI AI SERVICE</span><span className="stat-icon blue">⚡</span></div>
+          <div className="stat-top"><span>CSRNET DEEP LEARNING MODEL</span><span className="stat-icon blue">⚡</span></div>
           <div className="stat-value text-blue">38.4 <small>ms</small></div>
-          <div className="stat-foot">Port 8000 · PyTorch/ONNX</div>
+          <div className="stat-foot">PyTorch Dilated Conv · ShanghaiTech</div>
         </div>
 
         <div className="stat-card">

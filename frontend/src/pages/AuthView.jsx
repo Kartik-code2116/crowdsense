@@ -172,7 +172,7 @@ export default function AuthView({ initialMode = 'login' }) {
           <div className="context-footer">
             <span>ShanghaiTech Calibrated</span>
             <span>•</span>
-            <span>FastAPI Microservice</span>
+            <span>CSRNet Deep Learning Model</span>
             <span>•</span>
             <span>MongoDB TTL</span>
           </div>

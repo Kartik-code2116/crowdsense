@@ -1,4 +1,4 @@
-// CrowdSense API Client connecting to Python FastAPI AI microservice & Node.js Gateway
+// CrowdSense API Client connecting to CSRNet Deep Learning Model & Node.js Gateway
 const AI_SERVICE_URL = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:5000/api/v1';
 
@@ -13,7 +13,7 @@ export const apiClient = {
       formData.append('model', model);
       formData.append('zone_capacity', String(capacity));
 
-      // Attempt direct FastAPI microservice
+      // Attempt direct deep learning model inference
       const res = await fetch(`${AI_SERVICE_URL}/predict`, {
         method: 'POST',
         body: formData
@@ -22,7 +22,7 @@ export const apiClient = {
         return await res.json();
       }
     } catch (e) {
-      console.warn('FastAPI direct call deferred, trying Node gateway proxy:', e.message);
+      console.warn('Model direct call deferred, trying Node gateway proxy:', e.message);
     }
 
     try {

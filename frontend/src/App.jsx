@@ -257,7 +257,7 @@ export default function App() {
                 borderColor: dbConnected ? undefined : '#e05555',
                 color: dbConnected ? undefined : '#e05555'
               }}
-              title={dbConnected ? 'Connected to MongoDB and FastAPI AI service' : 'Services offline — running on static data'}
+              title={dbConnected ? 'Connected to MongoDB and CSRNet Deep Learning Model' : 'Services offline — running on static data'}
             >
               <i style={{ background: dbConnected ? undefined : '#e05555' }} />
               {dbConnected ? 'MONGODB: 27017 LIVE' : 'SERVICES OFFLINE'}

@@ -124,7 +124,7 @@ export default function LandingPageView() {
           </div>
           <div className="kpi-card">
             <span className="kpi-num">&lt; 38.4 ms</span>
-            <span className="kpi-label">FastAPI PyTorch Latency</span>
+            <span className="kpi-label">CSRNet Model Latency</span>
             <span className="kpi-sub">Real Dilated Convolutions</span>
           </div>
           <div className="kpi-card">
@@ -253,7 +253,7 @@ export default function LandingPageView() {
               </div>
               <div className="hud-metric">
                 <span className="hud-title">INFERENCE LATENCY</span>
-                <span className="hud-val">38.4 ms (FastAPI CPU Engine)</span>
+                <span className="hud-val">38.4 ms (CSRNet Dilated Conv)</span>
               </div>
             </div>
           </div>
@@ -372,15 +372,15 @@ export default function LandingPageView() {
 
             <div className="arch-connector">
               <div className="conn-line" />
-              <div className="conn-badge">FastAPI REST / Tensor Array</div>
+              <div className="conn-badge">Model Tensor Ingestion Pipeline</div>
               <div className="conn-line" />
             </div>
 
             <div className="arch-tier-box tier-fastapi">
               <div className="tier-header">
                 <span className="tier-pill">TIER 3</span>
-                <h4>Python FastAPI AI Service</h4>
-                <small>PyTorch 2.9 • ONNX • OpenCV • NumPy</small>
+                <h4>CSRNet Deep Learning Model</h4>
+                <small>PyTorch 2.9 • Dilated Conv • ONNX • OpenCV</small>
               </div>
               <ul className="tier-feats">
                 <li>CSRNet Density Map Regression (Dilated Conv backend)</li>
@@ -802,7 +802,7 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
 
         <div className="footer-bottom">
           <span>© 2026 CrowdSense Platform. All rights reserved.</span>
-          <span className="footer-meta">PyTorch 2.9 • FastAPI • Node.js Gateway • MongoDB Time-Series</span>
+          <span className="footer-meta">PyTorch CSRNet • Dilated Conv • Node.js Gateway • MongoDB Time-Series</span>
         </div>
       </footer>
     </div>

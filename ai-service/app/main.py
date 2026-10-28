@@ -42,7 +42,7 @@ app.include_router(stream.router, prefix=settings.API_PREFIX)
 async def health_check():
     return {
         "status": "online",
-        "service": "CrowdSense AI Microservice",
+        "service": "CSRNet Deep Learning Model",
         "version": settings.VERSION,
         "active_model": model_loader.active_model_name,
         "device": settings.DEVICE,

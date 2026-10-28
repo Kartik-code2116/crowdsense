@@ -26,7 +26,7 @@ export default function TelemetryDock() {
         <span className="telemetry-pill-sep">•</span>
         <Cpu size={13} className="telemetry-pill-icon" />
         <span className="telemetry-pill-label">
-          {aiConnected ? 'CSRNet AI' : 'AI Offline'}
+          {aiConnected ? 'CSRNet Model' : 'Model Offline'}
         </span>
         <span className="telemetry-pill-sep">•</span>
         <Video size={13} className="telemetry-pill-icon" />
@@ -76,13 +76,13 @@ export default function TelemetryDock() {
         <div className="telemetry-metric-row">
           <div className="telemetry-metric-label">
             <Cpu size={13} />
-            <span>FastAPI AI Service</span>
+            <span>CSRNet Deep Learning Model</span>
           </div>
           <span
             className="telemetry-metric-value"
             style={{ color: aiConnected ? '#159b6f' : '#cf4b54' }}
           >
-            {aiConnected ? (aiModelInfo || 'PyTorch CSRNet (CPU)') : '⚠ Offline'}
+            {aiConnected ? (aiModelInfo || 'CSRNet Dilated Conv (PyTorch)') : '⚠ Offline'}
           </span>
         </div>
 

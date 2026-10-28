@@ -32,7 +32,7 @@ export default function CamerasView() {
       <div className="page-action-row">
         <div>
           <h2>Connected Venue Edge Cameras ({cameras.length})</h2>
-          <p>RTSP edge streams & local hardware webcams regressed via Python FastAPI microservice</p>
+          <p>RTSP edge streams & local hardware webcams regressed via CSRNet Deep Learning Model</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button

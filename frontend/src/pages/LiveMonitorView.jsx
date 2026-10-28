@@ -137,7 +137,7 @@ export default function LiveMonitorView() {
                     <b>{cam.resolution}</b>
                   </div>
                   <div className="footer-metric">
-                    <small>FastAPI Latency</small>
+                    <small>Model Latency</small>
                     <b>{cam.latencyMs} ms</b>
                   </div>
                   <div className="footer-metric">

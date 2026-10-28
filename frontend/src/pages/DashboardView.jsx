@@ -280,7 +280,7 @@ export default function DashboardView() {
         <div className="panel-heading">
           <div>
             <h2>Live CCTV Edge Feeds <span className="feed-count">{cameras.length} Active Streams</span></h2>
-            <p>1-2 FPS sampled frames regressed via Python FastAPI microservice</p>
+            <p>1-2 FPS sampled frames regressed via CSRNet Deep Learning Model</p>
           </div>
           <div className="camera-actions">
             <button
