@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 import { apiClient } from '../api/client';
+import { webcamManager } from '../services/webcamManager';
 
 /**
  * Intelligent Stream URL Parser
@@ -125,7 +126,7 @@ export default function ZonesView() {
       liveIntervalRef.current = null;
     }
     if (streamTrackRef.current) {
-      streamTrackRef.current.getTracks().forEach(t => t.stop());
+      // Do not kill shared webcam tracks
       streamTrackRef.current = null;
     }
     setIsLiveScanning(false);
@@ -151,16 +152,14 @@ export default function ZonesView() {
     // If stream is webcam, start local camera stream immediately
     if (meta.type === 'webcam') {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        streamTrackRef.current = stream;
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          const stream = await webcamManager.attachToVideo(videoRef.current);
+          streamTrackRef.current = stream;
         }
       } catch (err) {
-        setScannerError(`Camera access error: ${err.message}. Please check browser camera permissions.`);
+        if (err.name !== 'AbortError' && !err.message?.includes('interrupted')) {
+          setScannerError(`Camera access error: ${err.message}. Please check browser camera permissions.`);
+        }
       }
     }
   };

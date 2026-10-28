@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { webcamManager } from '../services/webcamManager';
 
 /**
  * Enterprise CCTV Camera Player with Real Scene Video/Image Base & AI Density Overlays
@@ -55,18 +56,19 @@ export default function CCTVCanvasStream({
       vid.playsInline = true;
       videoRef.current = vid;
 
-      navigator.mediaDevices.getUserMedia({ video: true })
+      webcamManager.attachToVideo(vid)
         .then((stream) => {
           mediaStreamRef.current = stream;
-          vid.srcObject = stream;
-          vid.play().catch(() => {});
         })
-        .catch((e) => console.warn('CCTV Webcam stream error:', e.message));
+        .catch((e) => {
+          if (e.name !== 'AbortError' && !e.message?.includes('interrupted')) {
+            console.warn('CCTV Webcam stream notice:', e.message);
+          }
+        });
 
       return () => {
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-        }
+        // Keep hardware stream persistent across page navigation
+        mediaStreamRef.current = null;
       };
     } else {
       const img = new Image();

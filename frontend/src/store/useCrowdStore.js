@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { apiClient } from '../api/client';
+import { webcamManager } from '../services/webcamManager';
 
 const defaultUsers = {
   admin: {
@@ -786,3 +787,10 @@ try {
 } catch (e) {
   console.warn('Socket.io listener init:', e.message);
 }
+
+// Register global webcam background detection dispatcher
+try {
+  webcamManager.setStoreDispatch((payload) => {
+    useCrowdStore.getState().recordRealDetection(payload);
+  });
+} catch (e) {}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { useCrowdStore } from '../store/useCrowdStore';
+import { webcamManager } from '../services/webcamManager';
 
 export default function PhotoScannerView() {
   const {
@@ -92,13 +93,14 @@ export default function PhotoScannerView() {
         return;
       }
 
-      // Request initial permission to get camera device labels
-      try {
-        const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Close immediately after gaining permission
-        initialStream.getTracks().forEach((t) => t.stop());
-      } catch (e) {
-        console.warn('Initial camera prompt dismissed or unavailable:', e.message);
+      // Only request initial prompt if camera is not already running
+      if (!webcamManager.isLive()) {
+        try {
+          const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          initialStream.getTracks().forEach((t) => t.stop());
+        } catch (e) {
+          console.warn('Initial camera prompt dismissed or unavailable:', e.message);
+        }
       }
 
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -129,8 +131,7 @@ export default function PhotoScannerView() {
         setSelectedDeviceId(combined[0].deviceId);
       }
     } catch (err) {
-      console.warn('Camera enumeration error:', err.message);
-      setCameraError(err.message);
+      console.warn('Camera enumeration notice:', err.message);
     }
   };
 
@@ -141,23 +142,18 @@ export default function PhotoScannerView() {
   // 2. Start webcam stream for the selected device
   const startCamera = async (devId) => {
     setCameraError(null);
-    stopCamera();
 
     try {
-      const constraints = {
-        video: devId ? { deviceId: { exact: devId }, width: { ideal: 1280 }, height: { ideal: 720 } } : true
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      webcamStreamRef.current = stream;
-
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        const stream = await webcamManager.attachToVideo(videoRef.current, devId);
+        webcamStreamRef.current = stream;
+        setIsCameraActive(true);
       }
-
-      setIsCameraActive(true);
     } catch (err) {
+      if (err.name === 'AbortError' || err.message?.includes('interrupted')) {
+        // Harmless browser interruption during view transition
+        return;
+      }
       console.error('Failed to start webcam:', err);
       setCameraError(`Camera Error: ${err.message}. Please check browser camera permissions.`);
       setIsCameraActive(false);
@@ -165,17 +161,17 @@ export default function PhotoScannerView() {
   };
 
   // 3. Stop webcam stream
-  const stopCamera = () => {
-    if (webcamStreamRef.current) {
-      webcamStreamRef.current.getTracks().forEach((track) => track.stop());
-      webcamStreamRef.current = null;
-    }
+  const stopCamera = (force = false) => {
     if (liveIntervalRef.current) {
       clearInterval(liveIntervalRef.current);
       liveIntervalRef.current = null;
     }
     setIsLiveAiRunning(false);
-    setIsCameraActive(false);
+    if (force) {
+      webcamManager.stop(true);
+      webcamStreamRef.current = null;
+      setIsCameraActive(false);
+    }
   };
 
   // Switch tabs
@@ -184,7 +180,7 @@ export default function PhotoScannerView() {
     if (tab === 'camera') {
       startCamera(selectedDeviceId);
     } else {
-      stopCamera();
+      stopCamera(false);
       if (tab === 'benchmark') {
         setActiveImage(sampleLibrary[0].src);
         setSelectedSampleId(sampleLibrary[0].id);
@@ -201,15 +197,20 @@ export default function PhotoScannerView() {
     }
   };
 
-  // Cleanup on unmount
+  // Safe camera lifecycle without abrupt unmount teardowns
   useEffect(() => {
     if (activeTab === 'camera') {
       startCamera(selectedDeviceId);
     }
     return () => {
-      stopCamera();
+      // Keep persistent hardware stream alive across other pages
+      if (liveIntervalRef.current) {
+        clearInterval(liveIntervalRef.current);
+        liveIntervalRef.current = null;
+      }
+      setIsLiveAiRunning(false);
     };
-  }, []);
+  }, [activeTab]);
 
   // 4. Capture a frame from video element
   const captureVideoFrameBlob = () => {
@@ -234,7 +235,7 @@ export default function PhotoScannerView() {
     setActiveImage(frameData.dataUrl);
     setImgNaturalSize({ width: frameData.width, height: frameData.height });
     setActiveTab('upload');
-    stopCamera();
+    stopCamera(false);
     executeDeepScanBlob(frameData.blob);
   };
 
@@ -245,12 +246,14 @@ export default function PhotoScannerView() {
         clearInterval(liveIntervalRef.current);
         liveIntervalRef.current = null;
       }
+      webcamManager.stopBackgroundAiScanning();
       setIsLiveAiRunning(false);
     } else {
       setIsLiveAiRunning(true);
-      // Run immediately then every 1400ms
+      // Run immediately then keep running in background across pages
       runSingleLiveAiTick();
       liveIntervalRef.current = setInterval(runSingleLiveAiTick, 1400);
+      webcamManager.startBackgroundAiScanning(selectedZoneId, zoneCapacity, modelType);
     }
   };
 
