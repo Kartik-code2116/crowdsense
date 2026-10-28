@@ -596,6 +596,20 @@ export const useCrowdStore = create((set, get) => ({
       },
       lastSyncTimestamp: new Date().toLocaleTimeString()
     });
+
+    // 6. Asynchronously persist detection to local MongoDB (27017)
+    apiClient.saveDetection({
+      cameraId: targetCameraId,
+      zoneId: targetZoneId,
+      zoneName: targetZone.name,
+      count,
+      occupancyPct: occPct,
+      latencyMs,
+      modelUsed: payload.modelName || 'CSRNet',
+      peakDensity: payload.peakDensity || Number((count / targetZone.maxCapacity).toFixed(4)),
+      snapshotUrl: payload.imageSrc || payload.heatmapUrl,
+      source: payload.isWebcam ? 'webcam' : payload.source || 'scanner'
+    }).catch((e) => console.warn('Persist to Mongo deferred:', e.message));
   },
 
   // Zone Management Actions

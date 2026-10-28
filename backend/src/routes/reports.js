@@ -5,5 +5,6 @@ const authMiddleware = require('../middleware/auth');
 
 router.get('/summary', authMiddleware, reportController.getReportSummary);
 router.get('/export-csv', authMiddleware, reportController.exportCSV);
+router.get('/audit-logs', authMiddleware, reportController.getAuditLogs);
 
 module.exports = router;

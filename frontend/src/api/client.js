@@ -157,6 +157,33 @@ export const apiClient = {
     return null;
   },
 
+  // Persist real detection telemetry directly to local MongoDB
+  async saveDetection(payload) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/analyze/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Persist detection to MongoDB notice:', e.message);
+    }
+    return null;
+  },
+
+  // Fetch real audit logs directly from MongoDB
+  async getAuditLogs(limit = 50, zoneId = '') {
+    try {
+      const url = `${API_BASE_URL}/reports/audit-logs?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`;
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Fetch audit logs from MongoDB notice:', e.message);
+    }
+    return null;
+  },
+
   async getIncidents() {
     try {
       const res = await fetch(`${API_BASE_URL}/alerts/incidents`);

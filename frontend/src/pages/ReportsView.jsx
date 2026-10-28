@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
+import { apiClient } from '../api/client';
 import {
   Download,
   Printer,
@@ -18,18 +19,106 @@ import {
 } from 'lucide-react';
 
 export default function ReportsView() {
-  const { zones, cameras, incidents, latestDetection, user } = useCrowdStore();
+  const { zones, cameras, incidents, latestDetection, detectionLog, user } = useCrowdStore();
 
   const [activeTab, setActiveTab] = useState('density_audit'); // 'density_audit' | 'incidents_audit' | 'certificate'
   const [selectedRange, setSelectedRange] = useState('shift'); // 'shift' | '24h' | '7d' | '30d'
   const [selectedZone, setSelectedZone] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all'); // 'all' | 'safe' | 'warning' | 'critical'
   const [lastRefreshed, setLastRefreshed] = useState(new Date().toLocaleTimeString());
+  const [dbAuditLogs, setDbAuditLogs] = useState([]);
+
+  // Fetch real audit logs directly from local MongoDB (27017)
+  useEffect(() => {
+    let isMounted = true;
+    apiClient.getAuditLogs(50, selectedZone).then((res) => {
+      if (isMounted && res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        setDbAuditLogs(res.data);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [selectedZone, lastRefreshed]);
 
   // Generate dynamic, connected audit records based on real active venue zones & cameras
   const auditRecords = useMemo(() => {
     const records = [];
     const now = new Date();
+    const seenIds = new Set();
+
+    // 1. Prepend authentic detection records stored in local MongoDB
+    if (dbAuditLogs && dbAuditLogs.length > 0) {
+      dbAuditLogs.forEach((dbLog) => {
+        seenIds.add(dbLog.id);
+        const occPct = dbLog.occupancyPct || 0;
+        const status = occPct >= 85 ? 'critical' : occPct >= 70 ? 'warning' : 'safe';
+        records.push({
+          id: dbLog.id,
+          timestamp: dbLog.timestamp ? new Date(dbLog.timestamp).toISOString() : new Date().toISOString(),
+          timeOnly: dbLog.timeStr || new Date().toLocaleTimeString(),
+          dateOnly: dbLog.dateStr || new Date().toLocaleDateString(),
+          intervalLabel: 'MongoDB Time-Series',
+          zoneId: dbLog.zoneId,
+          zoneName: dbLog.zoneName,
+          zoneCode: 'ZONE',
+          floor: 'Level 1',
+          cameraId: dbLog.cameraId,
+          cameraName: dbLog.cameraName || 'Arena Concourse Gate A',
+          count: dbLog.count,
+          maxCapacity: dbLog.capacity || 350,
+          occupancyPct: occPct,
+          status,
+          statusLabel: status === 'critical' ? 'Critical Threshold Breach' : status === 'warning' ? 'Ingress Surge Warning' : 'NFPA Compliant (Safe)',
+          statusBadgeClass: status,
+          modelUsed: dbLog.modelUsed ? `${dbLog.modelUsed.toUpperCase()} Deep Learning` : 'CSRNet Dilated Conv',
+          egressStatus: occPct > 80 ? 'Egress Restricted (0.34 m/s)' : 'Egress Free Flow (1.48 m/s)',
+          isLiveScan: true
+        });
+      });
+    }
+
+    // 2. Prepend live scans from active session (Crowd Scanner, Live Streams, Webcam)
+    if (detectionLog && detectionLog.length > 0) {
+      detectionLog.slice().reverse().forEach((d, idx) => {
+        const zone = zones.find(z => z.id === d.zoneId) || { name: d.zoneName || 'Arena Main Concourse', maxCapacity: d.capacity || 350, code: 'ARENA-CONCOURSE-01', floor: 'Level 1 Ingress' };
+        const matchingCam = cameras.find(c => c.zoneId === d.zoneId) || cameras[0] || { id: 'CAM-01', name: 'Arena Concourse Gate A' };
+        const maxCap = d.capacity || zone.maxCapacity || 350;
+        const occPct = d.occupancyPct !== undefined ? d.occupancyPct : Math.round((d.count / maxCap) * 100);
+        const isCritical = occPct >= (zone.criticalPct || 85);
+        const isWarning = occPct >= (zone.warningPct || 70);
+        const status = isCritical ? 'critical' : isWarning ? 'warning' : 'safe';
+        const statusLabel = isCritical ? 'Critical Threshold Breach' : isWarning ? 'Ingress Surge Warning' : 'NFPA Compliant (Safe)';
+        const dateObj = new Date(d.timestamp || (Date.now() - idx * 60000));
+        const dateStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = d.time || dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const auditId = `AUD-SCAN-${d.timestamp || Date.now()}-${idx}`;
+
+        if (!seenIds.has(auditId)) {
+          seenIds.add(auditId);
+          records.push({
+            id: auditId,
+            timestamp: `${dateStr} ${timeStr}`,
+            timeOnly: timeStr,
+            dateOnly: dateStr,
+            intervalLabel: 'Live AI Scan',
+            zoneId: d.zoneId,
+            zoneName: d.zoneName || zone.name,
+            zoneCode: zone.code || 'ZONE-01',
+            floor: zone.floor || 'Level 1',
+            cameraId: d.cameraId || matchingCam.id,
+            cameraName: matchingCam.name,
+            count: d.count,
+            maxCapacity: maxCap,
+            occupancyPct: occPct,
+            status,
+            statusLabel,
+            statusBadgeClass: status,
+            modelUsed: d.modelName ? `${d.modelName.toUpperCase()} Deep Learning` : 'CSRNet Dilated Conv',
+            egressStatus: occPct > 80 ? 'Egress Restricted (0.34 m/s)' : 'Egress Free Flow (1.48 m/s)',
+            isLiveScan: true
+          });
+        }
+      });
+    }
 
     // Map time intervals based on selected range
     const intervalConfigs = {
@@ -141,7 +230,7 @@ export default function ReportsView() {
     });
 
     return records;
-  }, [zones, cameras, selectedRange, lastRefreshed]);
+  }, [zones, cameras, detectionLog, dbAuditLogs, selectedRange, lastRefreshed]);
 
   // Filter records based on UI selections
   const filteredRecords = useMemo(() => {
