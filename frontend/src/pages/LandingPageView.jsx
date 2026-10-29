@@ -41,6 +41,7 @@ export default function LandingPageView() {
             <a href="#architecture">Architecture</a>
             <a href="#features">Features</a>
             <a href="#benchmarks">Benchmarks</a>
+            <a href="#admin-portal">Admin Portal</a>
             <a href="#viva">Viva Defense</a>
           </nav>
 
@@ -56,18 +57,23 @@ export default function LandingPageView() {
 
             {isAuthenticated ? (
               <div className="landing-auth-pill">
-                <span className="user-indicator">● {user?.name || 'Operator'}</span>
+                <span className="user-indicator" style={{ color: '#ff3344', fontWeight: 600 }}>
+                  ● Admin: {user?.name || 'Alex Kumar'}
+                </span>
                 <button className="landing-btn-secondary" onClick={() => setPage('Dashboard')}>
                   Open Console →
+                </button>
+                <button className="landing-btn-ghost" onClick={logout} style={{ marginLeft: '4px', padding: '6px 10px', fontSize: '12px' }}>
+                  Sign Out
                 </button>
               </div>
             ) : (
               <div className="landing-auth-actions">
                 <button className="landing-btn-ghost" onClick={() => setPage('Login')}>
-                  Sign In
+                  Admin Sign In
                 </button>
                 <button className="landing-btn-primary" onClick={() => setPage('Register')}>
-                  Register Account
+                  Register Admin
                 </button>
                 <button className="landing-btn-accent" onClick={() => setPage('Dashboard')}>
                   Live Demo →
@@ -84,8 +90,8 @@ export default function LandingPageView() {
         <div className="hero-glow-sphere bottom-glow" />
 
         <div className="hero-badge">
-          <span className="badge-pulse" />
-          <span className="badge-text">5th Semester DL Project • ShanghaiTech Trained CSRNet Engine</span>
+          <span className="badge-pulse" style={{ background: '#ff3344' }} />
+          <span className="badge-text">Single-Role Administrator Architecture • ShanghaiTech Trained CSRNet</span>
         </div>
 
         <h1 className="hero-headline">
@@ -101,17 +107,17 @@ export default function LandingPageView() {
 
         <div className="hero-cta-group">
           <button className="hero-btn-primary" onClick={() => setPage('Dashboard')}>
-            <span>Launch Live Console</span>
+            <span>Launch Admin Console</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
 
-          <button className="hero-btn-secondary" onClick={() => setPage('Crowd search')}>
-            <span>Photo Crowd Scanner</span>
-            <span className="btn-tag">AI Peak Pinning</span>
+          <button className="hero-btn-secondary" onClick={() => setPage('Login')}>
+            <span>Administrator Portal</span>
+            <span className="btn-tag" style={{ background: '#ff3344', color: '#fff' }}>Role: Admin</span>
           </button>
 
-          <button className="hero-btn-outline" onClick={() => setPage('Model lab')}>
-            <span>Explore Model Lab</span>
+          <button className="hero-btn-outline" onClick={() => setPage('Crowd search')}>
+            <span>Photo Crowd Scanner</span>
           </button>
         </div>
 
@@ -730,7 +736,118 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
         </div>
       </section>
 
-      {/* 9. READY TO LAUNCH CALL TO ACTION */}
+      {/* 9. ADMINISTRATOR COMMAND & ACCESS PORTAL */}
+      <section className="landing-section alt-bg" id="admin-portal">
+        <div className="section-header">
+          <span className="section-eyebrow" style={{ color: '#ff3344' }}>
+            ENTERPRISE ACCESS GOVERNANCE
+          </span>
+          <h2 className="section-title">Single-Role Administrator Safety Command</h2>
+          <p className="section-subtitle">
+            Engineered exclusively for venue safety directors and operations administrators.
+            Every administrator operates inside a secured, isolated MongoDB tenant partition with dedicated camera streams,
+            safety thresholds, and forensic incident workflows.
+          </p>
+        </div>
+
+        <div className="admin-showcase-grid">
+          {/* Card 1: Edge Feed Supervision */}
+          <div className="admin-feature-card">
+            <div className="admin-card-icon" style={{ background: 'rgba(255, 51, 68, 0.12)', color: '#ff3344' }}>
+              📹
+            </div>
+            <h3>Edge Camera Orchestration</h3>
+            <p>
+              Direct administrative supervision over RTSP feeds, USB webcams, and pre-recorded high-resolution video streams.
+              Live FPS tuning, resolution matrix, and geographic spatial coordinates.
+            </p>
+            <div className="admin-card-pill">Level 1 Clearance</div>
+          </div>
+
+          {/* Card 2: Dynamic Capacity Ceilings */}
+          <div className="admin-feature-card">
+            <div className="admin-card-icon" style={{ background: 'rgba(255, 170, 0, 0.12)', color: '#ffaa00' }}>
+              ⚠️
+            </div>
+            <h3>Dynamic Zone Ceilings & Alerts</h3>
+            <p>
+              Configure real-time capacity ceilings with automatic 70% crowd influx warning and 85% critical bottleneck alarms.
+              Triggers instant automated turnstile throttling to avert crushes.
+            </p>
+            <div className="admin-card-pill">Full Policy Control</div>
+          </div>
+
+          {/* Card 3: Forensic Scrubber & Incidents */}
+          <div className="admin-feature-card">
+            <div className="admin-card-icon" style={{ background: 'rgba(0, 204, 255, 0.12)', color: '#00ccff' }}>
+              🛡️
+            </div>
+            <h3>Forensic Review & Incident Center</h3>
+            <p>
+              Inspect frozen incident frames with overlay density gradients, replay chronological event timelines,
+              resolve active alerts, and export one-click regulatory safety CSV audits.
+            </p>
+            <div className="admin-card-pill">Audit Dispatch</div>
+          </div>
+
+          {/* Card 4: Neural Engine Switching */}
+          <div className="admin-feature-card">
+            <div className="admin-card-icon" style={{ background: 'rgba(0, 255, 136, 0.12)', color: '#00ff88' }}>
+              ⚡
+            </div>
+            <h3>Deep Learning Backbone Dispatch</h3>
+            <p>
+              Hot-switch inference backends between CSRNet dilated convolutions, MCNN multi-scale columns, and YOLOv8.
+              Live Grad-CAM neural attention interpretability directly from PyTorch.
+            </p>
+            <div className="admin-card-pill">Model Lab Admin</div>
+          </div>
+        </div>
+
+        {/* Interactive Admin Credentials & Workspace Access Card */}
+        <div className="admin-portal-box">
+          <div className="admin-portal-info">
+            <div className="admin-badge-row">
+              <span className="live-status-pill" style={{ borderColor: '#ff3344', color: '#ff3344', background: 'rgba(255,51,68,0.1)' }}>
+                <span className="pulse-dot" style={{ background: '#ff3344' }} />
+                ACTIVE MONGODB USER-SCOPED TENANCY
+              </span>
+            </div>
+            <h3>Administrator Console Access</h3>
+            <p>
+              Sign in with your verified Administrator credentials to manage your dedicated venue streams, or register a new Administrator workspace. All data between different users is strictly isolated in MongoDB.
+            </p>
+            <div className="admin-credentials-preview">
+              <div className="cred-chip">
+                <span className="cred-label">PRIMARY ADMIN EMAIL:</span>
+                <strong>admin@crowdsense.io</strong>
+              </div>
+              <div className="cred-chip">
+                <span className="cred-label">MASTER PASSWORD:</span>
+                <strong>password123</strong>
+              </div>
+              <div className="cred-chip">
+                <span className="cred-label">ROLE CLEARANCE:</span>
+                <strong style={{ color: '#ff3344' }}>admin (Single-Role Enforced)</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-portal-actions">
+            <button className="landing-btn-primary large" onClick={() => setPage('Login')} style={{ background: '#ff3344', borderColor: '#ff3344' }}>
+              Sign In as Administrator →
+            </button>
+            <button className="landing-btn-secondary large" onClick={() => setPage('Register')}>
+              Register New Administrator
+            </button>
+            <button className="landing-btn-ghost" onClick={() => setPage('Dashboard')} style={{ textAlign: 'center' }}>
+              Launch Live Console Demo
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 10. READY TO LAUNCH CALL TO ACTION */}
       <section className="landing-cta-banner">
         <div className="cta-content">
           <h2>Deploy Enterprise Crowd Safety Today</h2>
@@ -739,16 +856,16 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
           </p>
           <div className="cta-buttons">
             <button className="landing-btn-primary large" onClick={() => setPage('Dashboard')}>
-              Launch Live Console
+              Launch Administrator Console
             </button>
             <button className="landing-btn-secondary large" onClick={() => setPage('Register')}>
-              Create Enterprise Account
+              Register Administrator Account
             </button>
           </div>
         </div>
       </section>
 
-      {/* 10. FOOTER */}
+      {/* 11. FOOTER */}
       <footer className="landing-footer">
         <div className="footer-inner">
           <div className="footer-col">
@@ -786,13 +903,14 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
             <a href="#methodology">Density Integral vs YOLO</a>
             <a href="#architecture">4-Tier Microservices</a>
             <a href="#benchmarks">ShanghaiTech Benchmark</a>
+            <a href="#admin-portal">Single-Role RBAC Model</a>
             <a href="#viva">Viva Q&A Defense</a>
           </div>
 
           <div className="footer-col">
-            <h5>Access Control</h5>
-            <button onClick={() => setPage('Login')}>Sign In</button>
-            <button onClick={() => setPage('Register')}>Register Account</button>
+            <h5>Administrator Access</h5>
+            <button onClick={() => setPage('Login')}>Administrator Sign In</button>
+            <button onClick={() => setPage('Register')}>Register Administrator</button>
             <button onClick={() => setPage('Settings')}>System Settings</button>
             <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
               {theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
@@ -802,7 +920,7 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
 
         <div className="footer-bottom">
           <span>© 2026 CrowdSense Platform. All rights reserved.</span>
-          <span className="footer-meta">PyTorch CSRNet • Dilated Conv • Node.js Gateway • MongoDB Time-Series</span>
+          <span className="footer-meta">PyTorch CSRNet • Dilated Conv • Node.js Gateway • MongoDB User-Scoped Time-Series</span>
         </div>
       </footer>
     </div>

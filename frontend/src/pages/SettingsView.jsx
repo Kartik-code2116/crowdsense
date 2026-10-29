@@ -1,21 +1,36 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function SettingsView() {
-  const { theme, setTheme } = useCrowdStore();
+  const { theme, setTheme, user } = useCrowdStore();
 
   const teamMembers = [
-    { name: 'Alex Kumar', email: 'alex.kumar@crowdsense.io', role: 'admin', department: 'Venue Operations Lead', avatar: 'AK' },
-    { name: 'Sarah Jenkins', email: 's.jenkins@crowdsense.io', role: 'operator', department: 'Control Room Shift 02', avatar: 'SJ' },
-    { name: 'David Chen', email: 'd.chen@crowdsense.io', role: 'analyst', department: 'Safety Compliance Analyst', avatar: 'DC' },
-    { name: 'Elena Rostova', email: 'e.rostova@crowdsense.io', role: 'viewer', department: 'Executive Director', avatar: 'ER' }
+    {
+      name: 'Alex Kumar',
+      email: 'admin@crowdsense.io',
+      role: 'admin',
+      department: 'Venue Operations Lead',
+      avatar: 'AK',
+      status: 'Primary Administrator'
+    }
   ];
 
+  if (user && user.email !== 'admin@crowdsense.io') {
+    teamMembers.push({
+      name: user.name,
+      email: user.email,
+      role: 'admin',
+      department: user.department || 'Venue Safety Operations',
+      avatar: user.avatar || 'AD',
+      status: 'Active Administrator (Current Session)'
+    });
+  }
+
   const auditLogs = [
-    { action: 'Threshold Modified', user: 'Alex Kumar', role: 'admin', details: 'Zone 02 critical limit set to 90%', time: '14:10:15', ip: '192.168.1.12' },
-    { action: 'Model Switched', user: 'Alex Kumar', role: 'admin', details: 'Switched primary backbone to CSRNet v1.2.0', time: '13:45:00', ip: '192.168.1.12' },
-    { action: 'Incident Resolved', user: 'Sarah Jenkins', role: 'operator', details: 'Marked INC-2026-087 as resolved', time: '13:56:12', ip: '192.168.1.18' },
-    { action: 'Camera Reconnected', user: 'System Worker', role: 'system', details: 'CAM-03 stream re-initialized at 2.0 FPS', time: '13:02:18', ip: '127.0.0.1' }
+    { action: 'Threshold Modified', user: user?.name || 'Alex Kumar', role: 'admin', details: 'Arena Concourse critical limit set to 85%', time: '14:10:15', ip: '127.0.0.1' },
+    { action: 'Model Switched', user: user?.name || 'Alex Kumar', role: 'admin', details: 'Switched primary backbone to CSRNet (Dilated Conv)', time: '13:45:00', ip: '127.0.0.1' },
+    { action: 'Incident Resolved', user: user?.name || 'Alex Kumar', role: 'admin', details: 'Marked safety warning as resolved', time: '13:56:12', ip: '127.0.0.1' },
+    { action: 'Camera Reconnected', user: 'System Worker', role: 'system', details: 'Edge RTSP stream synchronized at 2.0 FPS', time: '13:02:18', ip: '127.0.0.1' }
   ];
 
   return (
@@ -23,7 +38,7 @@ export default function SettingsView() {
       <div className="page-action-row">
         <div>
           <h2>System Health, RBAC & Workspace Configuration</h2>
-          <p>Microservice status, team role-based permissions, and operator audit trail</p>
+          <p>Microservice status, administrator role-based governance, and immutable audit logs</p>
         </div>
       </div>
 
@@ -32,7 +47,7 @@ export default function SettingsView() {
         <div className="stat-card">
           <div className="stat-top"><span>NODE.JS API GATEWAY</span><span className="stat-icon green">✓</span></div>
           <div className="stat-value text-green">Online</div>
-          <div className="stat-foot">Port 5000 · Uptime: 3,420s</div>
+          <div className="stat-foot">Port 5000 · JWT RS256 Auth Active</div>
         </div>
 
         <div className="stat-card">
@@ -42,15 +57,15 @@ export default function SettingsView() {
         </div>
 
         <div className="stat-card">
-          <div className="stat-top"><span>TIME-SERIES DATABASE</span><span className="stat-icon amber">⛁</span></div>
-          <div className="stat-value">Active</div>
-          <div className="stat-foot">TTL Index: 7-day auto-purge</div>
+          <div className="stat-top"><span>MONGODB TIME-SERIES</span><span className="stat-icon amber">⛁</span></div>
+          <div className="stat-value text-amber">Connected</div>
+          <div className="stat-foot">Port 27017 · User-Scoped Telemetry</div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-top"><span>SOCKET.IO REAL-TIME</span><span className="stat-icon green">●</span></div>
-          <div className="stat-value text-green">Synced</div>
-          <div className="stat-foot">Broadcasting live telemetry</div>
+          <div className="stat-top"><span>ACCESS CONTROL MODEL</span><span className="stat-icon red">🛡️</span></div>
+          <div className="stat-value" style={{ color: '#ff3344' }}>Admin Only</div>
+          <div className="stat-foot">Single-Role RBAC Enforced</div>
         </div>
       </div>
 
@@ -87,23 +102,23 @@ export default function SettingsView() {
         </div>
       </div>
 
-      {/* RBAC Team Management */}
+      {/* Administrator Governance */}
       <div className="panel" style={{ marginTop: '16px' }}>
         <div className="panel-heading">
           <div>
-            <h2>Role-Based Access Control (RBAC) Team Members</h2>
-            <p>Access hierarchy: Admin &gt; Operator &gt; Analyst &gt; Viewer</p>
+            <h2>Administrator Directory & Operations Governance</h2>
+            <p>Single-Role Access Model: Administrator (Full Operational Clearance, Threshold Governance & Model Switching)</p>
           </div>
         </div>
 
         <table className="custom-table">
           <thead>
             <tr>
-              <th>USER</th>
-              <th>EMAIL</th>
-              <th>ROLE</th>
-              <th>DEPARTMENT</th>
-              <th>PERMISSIONS</th>
+              <th>ADMINISTRATOR</th>
+              <th>CORPORATE EMAIL</th>
+              <th>CLEARANCE ROLE</th>
+              <th>OPERATIONAL SECTOR</th>
+              <th>DATA PARTITION</th>
             </tr>
           </thead>
           <tbody>
@@ -111,19 +126,24 @@ export default function SettingsView() {
               <tr key={m.email}>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div className="avatar" style={{ width: '26px', height: '26px', fontSize: '9px' }}>{m.avatar}</div>
-                    <b>{m.name}</b>
+                    <div className="avatar" style={{ width: '26px', height: '26px', fontSize: '9px', background: '#ff3344', color: '#fff', fontWeight: 700 }}>
+                      {m.avatar}
+                    </div>
+                    <div>
+                      <b>{m.name}</b>
+                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>{m.status}</small>
+                    </div>
                   </div>
                 </td>
                 <td>{m.email}</td>
                 <td>
-                  <span className={`incident-status ${m.role === 'admin' ? 'red' : m.role === 'operator' ? 'amber' : 'green'}`}>
-                    {m.role.toUpperCase()}
+                  <span className="incident-status red" style={{ fontWeight: 700 }}>
+                    ADMINISTRATOR
                   </span>
                 </td>
                 <td>{m.department}</td>
-                <td style={{ fontSize: '10px' }}>
-                  {m.role === 'admin' ? 'Full Control + Model Switch' : m.role === 'operator' ? 'Live Feeds + Incident Resolution' : 'Read-only Analytics'}
+                <td style={{ fontSize: '11px', color: 'var(--accent-teal)' }}>
+                  MongoDB User Scoped ({m.email === 'admin@crowdsense.io' ? 'Primary' : 'Dedicated'})
                 </td>
               </tr>
             ))}
@@ -135,7 +155,7 @@ export default function SettingsView() {
       <div className="panel" style={{ marginTop: '16px' }}>
         <div className="panel-heading">
           <div>
-            <h2>Operator Security & Audit Log</h2>
+            <h2>Administrator Security & Audit Log</h2>
             <p>Immutable record of safety limit modifications and operational actions</p>
           </div>
         </div>
@@ -145,21 +165,21 @@ export default function SettingsView() {
             <tr>
               <th>TIMESTAMP</th>
               <th>ACTION</th>
-              <th>USER</th>
+              <th>ADMINISTRATOR</th>
               <th>ROLE</th>
-              <th>EVENT DETAILS</th>
+              <th>DETAILS</th>
               <th>IP ADDRESS</th>
             </tr>
           </thead>
           <tbody>
             {auditLogs.map((log, idx) => (
               <tr key={idx}>
-                <td>{log.time}</td>
-                <td><b>{log.action}</b></td>
+                <td style={{ fontFamily: 'monospace' }}>{log.time}</td>
+                <td><strong>{log.action}</strong></td>
                 <td>{log.user}</td>
-                <td><span className="badge-pill">{log.role}</span></td>
+                <td><span className="incident-status red">ADMIN</span></td>
                 <td>{log.details}</td>
-                <td><code style={{ fontSize: '10px' }}>{log.ip}</code></td>
+                <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{log.ip}</td>
               </tr>
             ))}
           </tbody>

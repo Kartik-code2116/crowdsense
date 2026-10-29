@@ -5,12 +5,14 @@ const User = require('../models/User');
 const Alert = require('../models/Alert');
 const Incident = require('../models/Incident');
 const Detection = require('../models/Detection');
-const ModelVersion = require('../models/ModelVersion');
 const { getIsConnected, getMemoryStore } = require('../config/db');
+
+const ADMIN_ID = '6ade4cd5c5d2c1c0ec4762e5';
 
 const initialZonesData = [
   {
     _id: 'zone-arena-01',
+    userId: ADMIN_ID,
     name: 'Arena Main Concourse',
     code: 'ARENA-CONCOURSE-01',
     floor: 'Level 1 Ingress',
@@ -29,6 +31,7 @@ const initialZonesData = [
 const initialCamerasData = [
   {
     _id: 'CAM-01',
+    userId: ADMIN_ID,
     name: 'Arena Concourse Gate A',
     zoneId: 'zone-arena-01',
     zoneName: 'ARENA-CONCOURSE-01',
@@ -42,45 +45,22 @@ const initialCamerasData = [
   }
 ];
 
+// Single Admin Role Seed User
 const initialUsersData = [
   {
+    _id: new mongoose.Types.ObjectId(ADMIN_ID),
     name: 'Alex Kumar',
     email: 'admin@crowdsense.io',
     password: 'password123',
     role: 'admin',
     department: 'Venue Operations Lead',
     avatar: 'AK'
-  },
-  {
-    name: 'Sarah Jenkins',
-    email: 'operator@crowdsense.io',
-    password: 'password123',
-    role: 'operator',
-    department: 'Control Room Shift 02',
-    avatar: 'SJ'
-  },
-  {
-    name: 'David Chen',
-    email: 'analyst@crowdsense.io',
-    password: 'password123',
-    role: 'analyst',
-    department: 'Safety Compliance Analyst',
-    avatar: 'DC'
-  },
-  {
-    name: 'Elena Rostova',
-    email: 'viewer@crowdsense.io',
-    password: 'password123',
-    role: 'viewer',
-    department: 'Executive Board',
-    avatar: 'ER'
   }
 ];
 
-const initialIncidentsData = [];
-
 const initialAlertsData = [
   {
+    userId: ADMIN_ID,
     title: 'Safety System Online',
     message: 'Arena Main Concourse continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.',
     level: 'Info',
@@ -95,60 +75,57 @@ const initialAlertsData = [
   }
 ];
 
-// Generates 24 hours of real time-series detections for each camera
 function generateTimeSeriesDetections() {
   const detections = [];
   const now = Date.now();
-  const cameras = [
-    { id: 'CAM-01', zoneId: 'zone-arena-01', base: 0, variance: 0 }
-  ];
+  const sampleSteps = 288; // 24 hours at 5-minute intervals
 
-  // 1 record every 15 minutes for past 24 hours = 96 points per camera
-  for (let i = 96; i >= 0; i--) {
-    const timestamp = new Date(now - i * 15 * 60 * 1000);
-    // Diurnal curve factor (busier mid-day, quieter early morning)
+  for (let i = 0; i < sampleSteps; i++) {
+    const timestamp = new Date(now - (sampleSteps - i) * 5 * 60 * 1000);
     const hour = timestamp.getHours();
-    const timeFactor = Math.sin(((hour - 6) / 18) * Math.PI);
-    const diurnalMultiplier = Math.max(0.4, 0.4 + (timeFactor > 0 ? timeFactor * 0.7 : 0));
+    let baseCrowd = 20;
 
-    for (const cam of cameras) {
-      const count = Math.max(5, Math.round(cam.base * diurnalMultiplier + (Math.random() * cam.variance * 2 - cam.variance)));
-      detections.push({
-        cameraId: cam.id,
-        zoneId: cam.zoneId,
-        timestamp,
-        count,
-        uncertainty: Number((Math.sqrt(count) * 0.35 + 1.2).toFixed(2)),
-        peakDensity: Number((count / 1200 + 0.05).toFixed(4)),
-        latencyMs: Math.round(34 + Math.random() * 8),
-        modelUsed: 'CSRNet-Dilated',
-        flowVector: {
-          speed: Number((0.8 + Math.random() * 0.9).toFixed(2)),
-          headingDeg: Math.round(Math.random() * 360),
-          direction: ['East', 'West', 'North', 'South'][Math.floor(Math.random() * 4)]
-        },
-        alertTriggered: count > (cam.base * 1.05)
-      });
+    if (hour >= 17 && hour <= 21) {
+      baseCrowd = 210 + Math.sin(i * 0.15) * 60;
+    } else if (hour >= 11 && hour <= 14) {
+      baseCrowd = 120 + Math.sin(i * 0.1) * 35;
     }
+
+    const count = Math.max(0, Math.round(baseCrowd + (Math.random() * 16 - 8)));
+    detections.push({
+      userId: ADMIN_ID,
+      cameraId: 'CAM-01',
+      zoneId: 'zone-arena-01',
+      timestamp,
+      count,
+      peakDensity: Number((count / 350).toFixed(4)),
+      latencyMs: Math.round(36 + Math.random() * 4),
+      modelUsed: 'CSRNET',
+      flowVector: {
+        speed: Number((0.6 + Math.random() * 0.8).toFixed(2)),
+        headingDeg: 90,
+        direction: 'East'
+      },
+      alertTriggered: count > 245
+    });
   }
+
   return detections;
 }
 
 async function populateSeedData() {
-  const store = getMemoryStore();
-
-  // Always keep memoryStore in sync
-  store.zones = initialZonesData.map(z => ({ ...z }));
-  store.cameras = initialCamerasData.map(c => ({ ...c }));
-  store.incidents = initialIncidentsData.map(i => ({ ...i }));
-  store.alerts = initialAlertsData.map(a => ({ ...a }));
-
-  // Populate MongoDB if connected
-  if (mongoose.connection && mongoose.connection.readyState === 1) {
+  if (getIsConnected()) {
     try {
-      console.log('🔄 Checking and populating local MongoDB collections with authentic data...');
+      // 1. Users (Only Admin)
+      const userCount = await User.countDocuments();
+      if (userCount === 0) {
+        for (const u of initialUsersData) {
+          await User.create(u);
+        }
+        console.log(`✓ Inserted Admin User into MongoDB`);
+      }
 
-      // 1. Zones
+      // 2. Zones
       const zoneCount = await Zone.countDocuments();
       if (zoneCount === 0) {
         for (const z of initialZonesData) {
@@ -157,46 +134,16 @@ async function populateSeedData() {
         console.log(`✓ Inserted ${initialZonesData.length} Zones into MongoDB`);
       }
 
-      // 2. Cameras
+      // 3. Cameras
       const cameraCount = await Camera.countDocuments();
       if (cameraCount === 0) {
         for (const c of initialCamerasData) {
-          await Camera.create({
-            _id: c._id,
-            name: c.name,
-            zoneId: c.zoneId,
-            zoneName: c.zoneName,
-            streamUrl: c.streamUrl,
-            resolution: c.resolution,
-            sampleFps: c.sampleFps,
-            status: c.status,
-            sceneType: c.sceneType,
-            lastCount: c.lastCount,
-            lastLatencyMs: c.lastLatencyMs
-          });
+          await Camera.create(c);
         }
         console.log(`✓ Inserted ${initialCamerasData.length} Cameras into MongoDB`);
       }
 
-      // 3. Users
-      const userCount = await User.countDocuments();
-      if (userCount === 0) {
-        for (const u of initialUsersData) {
-          await User.create(u);
-        }
-        console.log(`✓ Inserted ${initialUsersData.length} RBAC Users into MongoDB`);
-      }
-
-      // 4. Incidents
-      const incidentCount = await Incident.countDocuments();
-      if (incidentCount === 0) {
-        for (const inc of initialIncidentsData) {
-          await Incident.create(inc);
-        }
-        console.log(`✓ Inserted ${initialIncidentsData.length} Incidents into MongoDB`);
-      }
-
-      // 5. Alerts
+      // 4. Alerts
       const alertCount = await Alert.countDocuments();
       if (alertCount === 0) {
         for (const alt of initialAlertsData) {
@@ -205,12 +152,12 @@ async function populateSeedData() {
         console.log(`✓ Inserted ${initialAlertsData.length} Alerts into MongoDB`);
       }
 
-      // 6. Real Time-Series Detections
+      // 5. Real Time-Series Detections
       const detectionCount = await Detection.countDocuments();
       if (detectionCount === 0) {
         const timeSeriesRecords = generateTimeSeriesDetections();
         await Detection.insertMany(timeSeriesRecords);
-        console.log(`✓ Inserted ${timeSeriesRecords.length} Time-Series Detections into MongoDB (Compound indexed on cameraId+timestamp with 7-day TTL)`);
+        console.log(`✓ Inserted ${timeSeriesRecords.length} Time-Series Detections into MongoDB`);
       }
 
       console.log('✅ Local MongoDB Database populated with authentic CrowdSense data.');
@@ -220,7 +167,6 @@ async function populateSeedData() {
   }
 }
 
-// Support direct CLI execution: node backend/src/scripts/seed.js
 if (require.main === module) {
   const { MONGODB_URI } = require('../config/env');
   mongoose.connect(MONGODB_URI)

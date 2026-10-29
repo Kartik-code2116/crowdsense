@@ -2,7 +2,61 @@
 const AI_SERVICE_URL = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:5000/api/v1';
 
+// Helper to construct request headers with JWT token authentication
+const getAuthHeaders = (isJson = true) => {
+  const token = localStorage.getItem('crowdsense_token');
+  const headers = {};
+  if (isJson) headers['Content-Type'] = 'application/json';
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 export const apiClient = {
+  // Authentication: Login Administrator
+  async login(email, password) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      return data;
+    } catch (e) {
+      console.error('API login failed:', e.message);
+      return { success: false, message: e.message };
+    }
+  },
+
+  // Authentication: Register Administrator
+  async register(userData) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+      const data = await res.json();
+      return data;
+    } catch (e) {
+      console.error('API registration failed:', e.message);
+      return { success: false, message: e.message };
+    }
+  },
+
+  // Authentication: Fetch Current Administrator Profile
+  async getMe() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: getAuthHeaders(false)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('API getMe deferred:', e.message);
+    }
+    return null;
+  },
+
   // Real PyTorch Deep Learning Inference
   async predictImage(fileBlob, model = 'yolov8', capacity = 250) {
     try {
@@ -26,14 +80,19 @@ export const apiClient = {
     }
 
     try {
-      // Fallback via Node.js API Gateway
+      // Fallback via Node.js API Gateway with Auth
       const formData = new FormData();
       if (fileBlob) formData.append('frame', fileBlob);
       formData.append('model', model);
       formData.append('zoneCapacity', String(capacity));
 
+      const token = localStorage.getItem('crowdsense_token');
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE_URL}/analyze/frame`, {
         method: 'POST',
+        headers,
         body: formData
       });
       if (res.ok) {
@@ -89,7 +148,9 @@ export const apiClient = {
 
   async getCameras() {
     try {
-      const res = await fetch(`${API_BASE_URL}/cameras`);
+      const res = await fetch(`${API_BASE_URL}/cameras`, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
@@ -97,7 +158,9 @@ export const apiClient = {
 
   async getZones() {
     try {
-      const res = await fetch(`${API_BASE_URL}/zones`);
+      const res = await fetch(`${API_BASE_URL}/zones`, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
@@ -107,7 +170,7 @@ export const apiClient = {
     try {
       const res = await fetch(`${API_BASE_URL}/zones`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify(zoneData)
       });
       if (res.ok) return await res.json();
@@ -121,7 +184,7 @@ export const apiClient = {
     try {
       const res = await fetch(`${API_BASE_URL}/zones/${zoneId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify(updates)
       });
       if (res.ok) return await res.json();
@@ -134,7 +197,8 @@ export const apiClient = {
   async deleteZone(zoneId) {
     try {
       const res = await fetch(`${API_BASE_URL}/zones/${zoneId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders(false)
       });
       if (res.ok) return await res.json();
     } catch (e) {
@@ -157,12 +221,12 @@ export const apiClient = {
     return null;
   },
 
-  // Persist real detection telemetry directly to local MongoDB
+  // Persist real detection telemetry directly to local MongoDB (scoped to authenticated admin)
   async saveDetection(payload) {
     try {
       const res = await fetch(`${API_BASE_URL}/analyze/record`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify(payload)
       });
       if (res.ok) return await res.json();
@@ -172,11 +236,13 @@ export const apiClient = {
     return null;
   },
 
-  // Fetch real audit logs directly from MongoDB
+  // Fetch real audit logs directly from MongoDB (scoped to authenticated admin)
   async getAuditLogs(limit = 50, zoneId = '') {
     try {
       const url = `${API_BASE_URL}/reports/audit-logs?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`;
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {
       console.warn('Fetch audit logs from MongoDB notice:', e.message);
@@ -186,7 +252,9 @@ export const apiClient = {
 
   async getIncidents() {
     try {
-      const res = await fetch(`${API_BASE_URL}/alerts/incidents`);
+      const res = await fetch(`${API_BASE_URL}/alerts/incidents`, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
@@ -194,7 +262,9 @@ export const apiClient = {
 
   async getAlerts() {
     try {
-      const res = await fetch(`${API_BASE_URL}/alerts`);
+      const res = await fetch(`${API_BASE_URL}/alerts`, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
@@ -203,7 +273,9 @@ export const apiClient = {
   async getTrendAnalytics(range = 'Today', zoneId = '') {
     try {
       const url = `${API_BASE_URL}/analytics/trends?range=${encodeURIComponent(range)}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`;
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: getAuthHeaders(false)
+      });
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;

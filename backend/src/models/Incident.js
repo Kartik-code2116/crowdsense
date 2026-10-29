@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const incidentSchema = new mongoose.Schema({
-  incidentNumber: { type: String, required: true, unique: true },
+  userId: { type: String, required: true, index: true },
+  incidentNumber: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String },
   level: { type: String, enum: ['Critical', 'Warning', 'Resolved'], default: 'Warning' },
@@ -23,5 +24,7 @@ const incidentSchema = new mongoose.Schema({
   status: { type: String, enum: ['Open', 'Under Review', 'Resolved'], default: 'Open' },
   createdAt: { type: Date, default: Date.now }
 });
+
+incidentSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Incident', incidentSchema);

@@ -2,8 +2,9 @@ const mongoose = require('mongoose');
 
 const zoneSchema = new mongoose.Schema({
   _id: { type: String },
+  userId: { type: String, required: true, index: true },
   name: { type: String, required: true },
-  code: { type: String, required: true, unique: true },
+  code: { type: String, required: true },
   floor: { type: String, default: 'Ground Level' },
   maxCapacity: { type: Number, required: true, default: 200 },
   warningThresholdPct: { type: Number, default: 75 },
@@ -18,5 +19,7 @@ const zoneSchema = new mongoose.Schema({
   heatmapUrl: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
+
+zoneSchema.index({ userId: 1, code: 1 });
 
 module.exports = mongoose.model('Zone', zoneSchema);

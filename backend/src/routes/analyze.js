@@ -14,6 +14,7 @@ const { getIsConnected } = require('../config/db');
 // Ingest and analyze uploaded frame directly
 router.post('/frame', authMiddleware, upload.single('frame'), async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const { model = 'yolov8', zoneCapacity = 200, zoneName = 'Central Concourse Atrium', cameraId = 'CAM-02', zoneId = 'z2' } = req.body;
     const buffer = req.file ? req.file.buffer : null;
 
@@ -28,18 +29,25 @@ router.post('/frame', authMiddleware, upload.single('frame'), async (req, res, n
     // Sync to MongoDB if connected
     if (getIsConnected()) {
       try {
-        await Camera.findByIdAndUpdate(cameraId, {
-          lastCount: count,
-          lastActive: new Date(),
-          lastLatencyMs: aiResult.latency_ms || 38
-        });
+        await Camera.findOneAndUpdate(
+          { _id: cameraId, userId },
+          {
+            lastCount: count,
+            lastActive: new Date(),
+            lastLatencyMs: aiResult.latency_ms || 38
+          }
+        );
 
-        await Zone.findByIdAndUpdate(zoneId, {
-          currentCount: count,
-          currentOccupancyPct: occupancyPct
-        });
+        await Zone.findOneAndUpdate(
+          { _id: zoneId, userId },
+          {
+            currentCount: count,
+            currentOccupancyPct: occupancyPct
+          }
+        );
 
         await Detection.create({
+          userId,
           cameraId: String(cameraId),
           zoneId: String(zoneId),
           count,
@@ -68,10 +76,11 @@ router.post('/frame', authMiddleware, upload.single('frame'), async (req, res, n
 
 /**
  * Record real detection telemetry into local MongoDB
- * Triggered by Crowd Scanner, Live Streams in Zones & Ceilings, or Hardware Webcams.
+ * Scoped to individual user ID to guarantee complete data isolation between admins.
  */
-router.post('/record', async (req, res, next) => {
+router.post('/record', authMiddleware, async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const {
       cameraId = 'CAM-01',
       zoneId = 'zone-arena-01',
@@ -97,8 +106,9 @@ router.post('/record', async (req, res, next) => {
     let createdIncident = null;
 
     if (getIsConnected()) {
-      // 1. Create Detection document in MongoDB time-series collection (preserved permanently)
+      // 1. Create Detection document in MongoDB time-series collection scoped to userId
       savedDetection = await Detection.create({
+        userId,
         cameraId: String(cameraId),
         zoneId: String(zoneId),
         count: numCount,
@@ -112,7 +122,7 @@ router.post('/record', async (req, res, next) => {
         timestamp: new Date()
       });
 
-      // 2. Update Camera in MongoDB with real capture frame
+      // 2. Update Camera in MongoDB
       const camUpdate = {
         lastCount: numCount,
         lastActive: new Date(),
@@ -128,7 +138,7 @@ router.post('/record', async (req, res, next) => {
       }
 
       await Camera.findOneAndUpdate(
-        { $or: [{ _id: cameraId }, { id: cameraId }] },
+        { $or: [{ _id: cameraId }, { id: cameraId }], userId },
         { $set: camUpdate },
         { upsert: false }
       );
@@ -142,7 +152,7 @@ router.post('/record', async (req, res, next) => {
       if (heatmapUrl) zoneUpdate.heatmapUrl = heatmapUrl;
 
       const zoneDoc = await Zone.findOneAndUpdate(
-        { $or: [{ _id: zoneId }, { id: zoneId }] },
+        { $or: [{ _id: zoneId }, { id: zoneId }], userId },
         { $set: zoneUpdate },
         { new: true }
       );
@@ -160,6 +170,7 @@ router.post('/record', async (req, res, next) => {
         const incNum = `INC-${Date.now().toString().slice(-6)}`;
 
         createdIncident = await Incident.create({
+          userId,
           incidentNumber: incNum,
           title: isCrit
             ? `Critical capacity breach (> ${critPct}%) in ${zoneName}`
@@ -180,6 +191,7 @@ router.post('/record', async (req, res, next) => {
         });
 
         await Alert.create({
+          userId,
           title: `${level === 'Critical' ? '🚨' : '⚠️'} ${zoneName}: ${calcOcc}% capacity`,
           message: `Recorded ${numCount} individuals via ${modelUsed} stream on ${cameraId}`,
           level,

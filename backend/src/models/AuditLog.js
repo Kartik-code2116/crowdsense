@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 
 const auditLogSchema = new mongoose.Schema({
+  userId: { type: String, index: true },
   action: { type: String, required: true },
   user: { type: String, default: 'Alex Kumar' },
-  role: { type: String, default: 'operator' },
+  role: { type: String, default: 'admin' },
   details: { type: String, required: true },
   ip: { type: String, default: '127.0.0.1' },
   timestamp: { type: Date, default: Date.now, index: true }

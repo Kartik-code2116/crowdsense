@@ -2,42 +2,49 @@ import React from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function ProfilePopover() {
-  const { user, showProfileMenu, setShowProfileMenu, logout, switchRole, token, setPage } = useCrowdStore();
+  const { user, showProfileMenu, setShowProfileMenu, logout, token, setPage } = useCrowdStore();
 
   if (!showProfileMenu || !user) return null;
 
   const copyToken = () => {
-    navigator.clipboard.writeText(token);
-    alert('✓ Session JWT copied to clipboard!');
+    if (token) {
+      navigator.clipboard.writeText(token);
+      alert('✓ Session JWT copied to clipboard!');
+    }
   };
 
   return (
     <div className="profile-popover-menu">
       <div className="popover-user-card">
-        <div className="avatar" style={{ width: '38px', height: '38px', fontSize: '12px' }}>
-          {user.avatar}
+        <div className="avatar" style={{ width: '38px', height: '38px', fontSize: '12px', background: '#ff3344', color: '#fff', fontWeight: 700 }}>
+          {user.avatar || 'AD'}
         </div>
         <div>
           <b>{user.name}</b>
           <small>{user.email}</small>
-          <span className={`incident-status ${user.role === 'admin' ? 'red' : user.role === 'operator' ? 'amber' : 'green'}`} style={{ marginTop: '4px', display: 'inline-block' }}>
-            {user.role.toUpperCase()} ROLE
+          <span className="incident-status red" style={{ marginTop: '4px', display: 'inline-block', fontSize: '10px', letterSpacing: '0.04em' }}>
+            VENUE ADMINISTRATOR
           </span>
         </div>
       </div>
 
       <div className="popover-section">
-        <div className="popover-label">SWITCH RBAC ROLE</div>
-        <div className="popover-role-switch">
-          {['admin', 'operator', 'analyst', 'viewer'].map((r) => (
-            <button
-              key={r}
-              className={`role-chip ${user.role === r ? 'active' : ''}`}
-              onClick={() => switchRole(r)}
-            >
-              {r}
-            </button>
-          ))}
+        <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Operational Clearance
+        </div>
+        <div style={{ background: 'var(--surface-sunken)', borderRadius: '8px', padding: '10px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--muted)' }}>Role:</span>
+            <strong style={{ color: '#ff3344' }}>Administrator</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--muted)' }}>Department:</span>
+            <span>{user.department || 'Operations Command'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--muted)' }}>Data Isolation:</span>
+            <span style={{ color: 'var(--accent-teal)' }}>MongoDB User-Scoped</span>
+          </div>
         </div>
       </div>
 
@@ -57,8 +64,8 @@ export default function ProfilePopover() {
       </div>
 
       <div className="popover-footer">
-        <button className="button secondary" style={{ width: '100%', color: '#d9565e' }} onClick={logout}>
-          Sign Out of Venue Console
+        <button className="button secondary" style={{ width: '100%', color: '#ff3344' }} onClick={logout}>
+          Sign Out of Administrator Console
         </button>
       </div>
     </div>

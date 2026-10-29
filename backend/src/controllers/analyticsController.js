@@ -1,17 +1,19 @@
 const aiClient = require('../services/aiClient');
 const Detection = require('../models/Detection');
 const Zone = require('../models/Zone');
+const Camera = require('../models/Camera');
 const { getIsConnected } = require('../config/db');
 
 exports.getTrendAnalytics = async (req, res) => {
   const { range = 'Today', zoneId } = req.query;
+  const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
 
   try {
     if (getIsConnected()) {
-      const matchQuery = {};
+      const matchQuery = { userId };
       if (zoneId) matchQuery.zoneId = zoneId;
 
-      // Slices past 12 hours from real MongoDB time-series collection
+      // Slices past 12 hours from real MongoDB time-series collection for this user
       const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000);
       matchQuery.timestamp = { $gte: twelveHoursAgo };
 
@@ -54,7 +56,7 @@ exports.getTrendAnalytics = async (req, res) => {
         const lastTime = points[points.length - 1]?.time || '11:00';
         points[points.length - 1].forecast = latestCount;
 
-        const nextHour = (parseInt(lastTime.split(':')[0]) + 1) % 24;
+        const nextHour = (parseInt(lastTime.split(':')[0], 10) + 1) % 24;
         points.push({ time: `${String(nextHour).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.05)) });
         points.push({ time: `${String(nextHour).padStart(2, '0')}:30`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.10)) });
         points.push({ time: `${String((nextHour + 1) % 24).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.02)) });
@@ -76,11 +78,10 @@ exports.getTrendAnalytics = async (req, res) => {
     console.warn('Analytics MongoDB query fallback:', err.message);
   }
 
-  // Authentic baseline derived from active camera streams
-  const Camera = require('../models/Camera');
+  // Authentic baseline derived from active camera streams scoped to this user
   let baseCount = 0;
   try {
-    const liveCams = await Camera.find({ status: 'Live' }).lean();
+    const liveCams = await Camera.find({ userId, status: 'Live' }).lean();
     if (liveCams && liveCams.length > 0) {
       baseCount = liveCams.reduce((sum, c) => sum + (c.lastCount || 0), 0);
     }

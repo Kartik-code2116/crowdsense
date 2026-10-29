@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const alertSchema = new mongoose.Schema({
+  userId: { type: String, required: true, index: true },
   title: { type: String, required: true },
   message: { type: String, required: true },
   level: {
@@ -24,5 +25,7 @@ const alertSchema = new mongoose.Schema({
   resolvedAt: { type: Date },
   createdAt: { type: Date, default: Date.now, index: true }
 });
+
+alertSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Alert', alertSchema);

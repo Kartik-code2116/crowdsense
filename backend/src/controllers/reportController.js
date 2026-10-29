@@ -7,16 +7,17 @@ const Incident = require('../models/Incident');
 
 exports.exportCSV = async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     let detections = [];
     let zones = [];
 
     if (getIsConnected()) {
-      detections = await Detection.find().sort({ timestamp: -1 }).limit(1000).lean();
-      zones = await Zone.find().lean();
+      detections = await Detection.find({ userId }).sort({ timestamp: -1 }).limit(1000).lean();
+      zones = await Zone.find({ userId }).lean();
     } else {
       const store = getMemoryStore();
-      detections = store.detections || [];
-      zones = store.zones || [];
+      detections = (store.detections || []).filter(d => !d.userId || d.userId === userId);
+      zones = (store.zones || []).filter(z => !z.userId || z.userId === userId);
     }
 
     const csv = reportService.generateCSV(detections, zones);
@@ -30,14 +31,17 @@ exports.exportCSV = async (req, res, next) => {
 
 exports.getReportSummary = async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+
     if (getIsConnected()) {
-      const totalDetections = await Detection.countDocuments();
-      const peakDoc = await Detection.findOne().sort({ count: -1 }).lean();
+      const totalDetections = await Detection.countDocuments({ userId });
+      const peakDoc = await Detection.findOne({ userId }).sort({ count: -1 }).lean();
       const avgResult = await Detection.aggregate([
+        { $match: { userId } },
         { $group: { _id: null, avgCount: { $avg: '$count' } } }
       ]);
       const avgCrowd = avgResult.length > 0 ? Math.round(avgResult[0].avgCount) : 0;
-      const totalIncidents = await Incident.countDocuments();
+      const totalIncidents = await Incident.countDocuments({ userId });
 
       return res.json({
         success: true,
@@ -53,7 +57,8 @@ exports.getReportSummary = async (req, res, next) => {
     }
 
     const store = getMemoryStore();
-    const summary = reportService.generateSummaryMetrics(store.detections);
+    const userDets = (store.detections || []).filter(d => !d.userId || d.userId === userId);
+    const summary = reportService.generateSummaryMetrics(userDets);
     res.json({ success: true, source: 'Memory-Fallback', data: summary });
   } catch (err) {
     next(err);
@@ -62,21 +67,22 @@ exports.getReportSummary = async (req, res, next) => {
 
 exports.getAuditLogs = async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const { limit = 50, zoneId } = req.query;
-    const query = {};
+    const query = { userId };
     if (zoneId && zoneId !== 'all') query.zoneId = zoneId;
 
     if (getIsConnected()) {
       const detections = await Detection.find(query).sort({ timestamp: -1 }).limit(Number(limit)).lean();
-      const zones = await Zone.find().lean();
-      const cameras = await Camera.find().lean();
+      const zones = await Zone.find({ userId }).lean();
+      const cameras = await Camera.find({ userId }).lean();
 
       const zoneMap = new Map(zones.map(z => [String(z._id || z.id), z]));
       const camMap = new Map(cameras.map(c => [String(c._id || c.id), c]));
 
       const enriched = detections.map(d => {
-        const zone = zoneMap.get(String(d.zoneId)) || { name: 'Arena Main Concourse', maxCapacity: 350 };
-        const cam = camMap.get(String(d.cameraId)) || { name: 'Arena Concourse Gate A' };
+        const zone = zoneMap.get(String(d.zoneId)) || { name: 'Main Concourse Sector', maxCapacity: 350 };
+        const cam = camMap.get(String(d.cameraId)) || { name: 'Sector Sensor Cam A' };
         const cap = zone.maxCapacity || 350;
         const occPct = Math.round((d.count / cap) * 100);
         return {

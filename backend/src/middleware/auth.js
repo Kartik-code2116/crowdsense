@@ -2,15 +2,14 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/env');
 
 const authMiddleware = (req, res, next) => {
-  // Support both Bearer tokens and dev bypass header
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // In development or local preview, attach default operator session if none provided
+    // In development or local preview, attach default admin session if none provided
     req.user = {
-      id: 'usr_default_admin',
+      id: '6ade4cd5c5d2c1c0ec4762e5',
       name: 'Alex Kumar',
-      email: 'alex.kumar@crowdsense.io',
+      email: 'admin@crowdsense.io',
       role: 'admin'
     };
     return next();

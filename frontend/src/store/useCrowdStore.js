@@ -3,43 +3,14 @@ import { io } from 'socket.io-client';
 import { apiClient } from '../api/client';
 import { webcamManager } from '../services/webcamManager';
 
-const defaultUsers = {
-  admin: {
-    id: 'usr_admin',
-    name: 'Alex Kumar',
-    email: 'admin@crowdsense.io',
-    role: 'admin',
-    avatar: 'AK',
-    department: 'Venue Operations Lead',
-    permissions: ['all', 'manage_cameras', 'manage_zones', 'switch_models', 'resolve_incidents']
-  },
-  operator: {
-    id: 'usr_operator',
-    name: 'Sarah Jenkins',
-    email: 'operator@crowdsense.io',
-    role: 'operator',
-    avatar: 'SJ',
-    department: 'Control Room Shift 02',
-    permissions: ['monitor', 'acknowledge_alerts', 'resolve_incidents']
-  },
-  analyst: {
-    id: 'usr_analyst',
-    name: 'David Chen',
-    email: 'analyst@crowdsense.io',
-    role: 'analyst',
-    avatar: 'DC',
-    department: 'Safety Compliance Analyst',
-    permissions: ['view_analytics', 'export_reports']
-  },
-  viewer: {
-    id: 'usr_viewer',
-    name: 'Elena Rostova',
-    email: 'viewer@crowdsense.io',
-    role: 'viewer',
-    avatar: 'ER',
-    department: 'Executive Board',
-    permissions: ['view_only']
-  }
+const defaultAdminUser = {
+  id: '6ade4cd5c5d2c1c0ec4762e5',
+  name: 'Alex Kumar',
+  email: 'admin@crowdsense.io',
+  role: 'admin',
+  avatar: 'AK',
+  department: 'Venue Operations Lead',
+  permissions: ['all', 'manage_cameras', 'manage_zones', 'switch_models', 'resolve_incidents']
 };
 
 const initialCameras = [
@@ -116,15 +87,26 @@ const initialModels = [
   }
 ];
 
-export const useCrowdStore = create((set, get) => ({
-  // Authentication & Session
-  user: defaultUsers.admin,
-  isAuthenticated: true,
-  token: 'crowdsense-jwt-session-token-admin',
-  showAuthModal: false,
-  showAddCameraModal: false,
-  showNotificationsDrawer: false,
-  showProfileMenu: false,
+export const useCrowdStore = create((set, get) => {
+  // Read persisted user session from localStorage if available
+  let initialUser = defaultAdminUser;
+  const rawStoredUser = localStorage.getItem('crowdsense_user');
+  if (rawStoredUser) {
+    try {
+      initialUser = JSON.parse(rawStoredUser);
+    } catch (e) {}
+  }
+  const initialToken = localStorage.getItem('crowdsense_token') || 'crowdsense-jwt-session-token-admin';
+
+  return {
+    // Authentication & Session (Single Administrator Role)
+    user: initialUser,
+    isAuthenticated: true,
+    token: initialToken,
+    showAuthModal: false,
+    showAddCameraModal: false,
+    showNotificationsDrawer: false,
+    showProfileMenu: false,
 
   // Theme & Navigation
   theme: localStorage.getItem('crowdsense-theme') || 'light',
@@ -303,64 +285,78 @@ export const useCrowdStore = create((set, get) => ({
     }
   },
 
-  // Authentication Actions
-  login: (email, password, role = 'admin') => {
-    const selected = defaultUsers[role] || {
-      id: `usr_${Date.now()}`,
-      name: email ? email.split('@')[0] : 'Operator',
-      email: email || 'operator@crowdsense.io',
-      role,
-      avatar: (email ? email.substring(0, 2) : 'OP').toUpperCase(),
-      department: 'Operations',
-      permissions: ['monitor']
-    };
-    set({
-      user: selected,
-      isAuthenticated: true,
-      token: `jwt-token-${selected.role}-${Date.now()}`,
-      showAuthModal: false,
-      page: 'Dashboard'
-    });
+  // Authentication Actions (Connecting directly to MongoDB & Node.js Gateway)
+  login: async (email, password) => {
+    try {
+      const res = await apiClient.login(email, password);
+      if (res && res.success && res.token) {
+        localStorage.setItem('crowdsense_token', res.token);
+        localStorage.setItem('crowdsense_user', JSON.stringify(res.user));
+        set({
+          user: res.user,
+          isAuthenticated: true,
+          token: res.token,
+          showAuthModal: false,
+          page: 'Dashboard'
+        });
+        // Immediately fetch THIS administrator's scoped data
+        get().fetchLiveData();
+        return { success: true };
+      }
+      return {
+        success: false,
+        message: res?.message || 'Invalid administrator credentials. Please check your email and password.'
+      };
+    } catch (e) {
+      return { success: false, message: e.message || 'Authentication error.' };
+    }
   },
 
-  register: (userData) => {
-    const roleKey = userData.role?.toLowerCase() || 'operator';
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name: userData.name || 'New Member',
-      email: userData.email,
-      role: roleKey,
-      avatar: (userData.name ? userData.name.substring(0, 2) : 'NM').toUpperCase(),
-      department: userData.organization || 'Safety Operations',
-      permissions: roleKey === 'admin' ? ['all'] : ['monitor', 'view_analytics']
-    };
-    set({
-      user: newUser,
-      isAuthenticated: true,
-      token: `jwt-token-${newUser.role}-${Date.now()}`,
-      showAuthModal: false,
-      page: 'Dashboard'
-    });
+  register: async (userData) => {
+    try {
+      const res = await apiClient.register({
+        name: userData.name,
+        email: userData.email,
+        password: userData.password,
+        organization: userData.organization || userData.department || 'Venue Operations Directorate'
+      });
+      if (res && res.success && res.token) {
+        localStorage.setItem('crowdsense_token', res.token);
+        localStorage.setItem('crowdsense_user', JSON.stringify(res.user));
+        set({
+          user: res.user,
+          isAuthenticated: true,
+          token: res.token,
+          showAuthModal: false,
+          page: 'Dashboard'
+        });
+        // Immediately fetch THIS new administrator's scoped starter data
+        get().fetchLiveData();
+        return { success: true };
+      }
+      return {
+        success: false,
+        message: res?.message || 'Administrator registration failed.'
+      };
+    } catch (e) {
+      return { success: false, message: e.message || 'Registration error.' };
+    }
   },
 
   logout: () => {
+    localStorage.removeItem('crowdsense_token');
+    localStorage.removeItem('crowdsense_user');
     set({
       user: null,
       isAuthenticated: false,
       token: null,
       showProfileMenu: false,
-      page: 'Dashboard'
+      page: 'Landing'
     });
   },
 
-  switchRole: (role) => {
-    if (defaultUsers[role]) {
-      set({
-        user: defaultUsers[role],
-        token: `jwt-token-${role}-${Date.now()}`,
-        showProfileMenu: false
-      });
-    }
+  switchRole: () => {
+    // Only Administrator role exists in the platform
   },
 
   setShowAuthModal: (showAuthModal) => set({ showAuthModal }),
@@ -751,7 +747,8 @@ export const useCrowdStore = create((set, get) => ({
       isActive: m.name === modelName
     }))
   }))
-}));
+  };
+});
 
 // Real-Time Socket.io Live Telemetry Listener
 try {

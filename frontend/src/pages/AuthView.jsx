@@ -7,15 +7,14 @@ export default function AuthView({ initialMode = 'login' }) {
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('admin@crowdsense.io');
-  const [loginPassword, setLoginPassword] = useState('••••••••••••');
-  const [loginRole, setLoginRole] = useState('admin');
+  const [loginPassword, setLoginPassword] = useState('password123');
   const [rememberMe, setRememberMe] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Register form state
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regOrg, setRegOrg] = useState('');
-  const [regRole, setRegRole] = useState('operator');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -25,23 +24,31 @@ export default function AuthView({ initialMode = 'login' }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     if (!loginEmail) {
-      setErrorMsg('Please enter your organizational email address.');
+      setErrorMsg('Please enter your administrator email address.');
       return;
     }
-    login(loginEmail, loginPassword, loginRole);
-    setPage('Dashboard');
+    setIsSubmitting(true);
+    const res = await login(loginEmail, loginPassword);
+    setIsSubmitting(false);
+
+    if (res && res.success) {
+      setPage('Dashboard');
+    } else {
+      setErrorMsg(res?.message || 'Invalid administrator credentials. Please check your email and password.');
+    }
   };
 
-  const handleRegisterSubmit = (e) => {
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
     if (!regName.trim()) {
-      setErrorMsg('Full name is required.');
+      setErrorMsg('Administrator full name is required.');
       return;
     }
     if (!regEmail.trim() || !regEmail.includes('@')) {
@@ -65,26 +72,25 @@ export default function AuthView({ initialMode = 'login' }) {
       return;
     }
 
-    register({
+    setIsSubmitting(true);
+    const res = await register({
       name: regName,
       email: regEmail,
       organization: regOrg,
-      role: regRole,
+      role: 'admin',
       password: regPassword
     });
+    setIsSubmitting(false);
 
-    setSuccessMsg('Account provisioned successfully! Accessing control room...');
-    setTimeout(() => {
-      setPage('Dashboard');
-    }, 600);
+    if (res && res.success) {
+      setSuccessMsg('Administrator account provisioned in MongoDB! Initializing dedicated command workspace...');
+      setTimeout(() => {
+        setPage('Dashboard');
+      }, 700);
+    } else {
+      setErrorMsg(res?.message || 'Registration failed. An administrator with this email may already exist.');
+    }
   };
-
-  const demoAccounts = [
-    { role: 'admin', label: 'Venue Admin', name: 'Alex Kumar', email: 'admin@crowdsense.io', color: '#ff3344', desc: 'Full permissions & threshold management' },
-    { role: 'operator', label: 'Shift Operator', name: 'Sarah Jenkins', email: 'operator@crowdsense.io', color: '#00ffcc', desc: 'Live monitoring & incident escalation' },
-    { role: 'analyst', label: 'Safety Analyst', name: 'David Chen', email: 'analyst@crowdsense.io', color: '#ffaa00', desc: 'Compliance reports & model benchmarking' },
-    { role: 'viewer', label: 'Executive Viewer', name: 'Elena Rostova', email: 'viewer@crowdsense.io', color: '#4488ff', desc: 'Read-only venue capacity overview' }
-  ];
 
   return (
     <div className="auth-portal-wrapper">
@@ -124,11 +130,11 @@ export default function AuthView({ initialMode = 'login' }) {
         {/* Left Side: Enterprise Safety Context */}
         <div className="auth-context-sidebar">
           <div className="context-header">
-            <span className="live-status-pill">
-              <span className="pulse-dot" />
-              EDGE NETWORK SECURE
+            <span className="live-status-pill" style={{ borderColor: '#ff3344', color: '#ff3344', background: 'rgba(255,51,68,0.1)' }}>
+              <span className="pulse-dot" style={{ background: '#ff3344' }} />
+              ADMINISTRATOR CLEARANCE LEVEL 1
             </span>
-            <h2>Operations Access & Safety Dispatch</h2>
+            <h2>Administrator Operations & Security Command</h2>
             <p>
               Autonomous real-time crowd density estimation, early warning alerts, and live CCTV telemetry
               powered by PyTorch CSRNet continuous density regression.
@@ -144,17 +150,17 @@ export default function AuthView({ initialMode = 'login' }) {
               </div>
             </div>
             <div className="ctx-feature-item">
-              <span className="ctx-icon">🔒</span>
+              <span className="ctx-icon">🛡️</span>
               <div>
-                <strong>Role-Based Access Control</strong>
-                <p>Granular operational clearance for operators, analysts & commanders.</p>
+                <strong>Single-Role Administrator RBAC</strong>
+                <p>Full operational governance over camera streams, safety zones, and incident resolution.</p>
               </div>
             </div>
             <div className="ctx-feature-item">
-              <span className="ctx-icon">📈</span>
+              <span className="ctx-icon">🔒</span>
               <div>
-                <strong>CrowdFlowLSTM Predictive Warning</strong>
-                <p>8-to-15 minute advance notice before capacity bottlenecks occur.</p>
+                <strong>MongoDB Isolated Workspaces</strong>
+                <p>Every administrator manages a dedicated, isolated data partition with zero cross-contamination.</p>
               </div>
             </div>
           </div>
@@ -165,16 +171,16 @@ export default function AuthView({ initialMode = 'login' }) {
             </div>
             <div className="testimonial-author">
               <strong>National Stadium Operations Directorate</strong>
-              <small>Shift 02 Safety Command</small>
+              <small>Lead Administrator Security Command</small>
             </div>
           </div>
 
           <div className="context-footer">
             <span>ShanghaiTech Calibrated</span>
             <span>•</span>
-            <span>CSRNet Deep Learning Model</span>
+            <span>CSRNet Deep Learning</span>
             <span>•</span>
-            <span>MongoDB TTL</span>
+            <span>MongoDB Data-Scoped</span>
           </div>
         </div>
 
@@ -184,15 +190,15 @@ export default function AuthView({ initialMode = 'login' }) {
           <div className="auth-mode-tabs">
             <button
               className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
-              onClick={() => { setMode('login'); setErrorMsg(''); }}
+              onClick={() => { setMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
             >
-              Sign In to Console
+              Administrator Sign In
             </button>
             <button
               className={`auth-tab-btn ${mode === 'register' ? 'active' : ''}`}
-              onClick={() => { setMode('register'); setErrorMsg(''); }}
+              onClick={() => { setMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
             >
-              Register Account
+              Register Administrator
             </button>
           </div>
 
@@ -214,14 +220,14 @@ export default function AuthView({ initialMode = 'login' }) {
           {mode === 'login' && (
             <form className="auth-form" onSubmit={handleLoginSubmit}>
               <div className="form-group">
-                <label>Institutional / Work Email</label>
+                <label>Administrator Corporate / Work Email</label>
                 <div className="input-wrap">
                   <span className="input-icon">✉</span>
                   <input
                     type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="operator@crowdsense.io"
+                    placeholder="admin@crowdsense.io"
                     required
                   />
                 </div>
@@ -256,45 +262,48 @@ export default function AuthView({ initialMode = 'login' }) {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />
-                  <span>Remember this workstation session</span>
+                  <span>Remember this administrator terminal session</span>
                 </label>
-                <a href="#forgot" className="forgot-link" onClick={(e) => { e.preventDefault(); alert('For local demo, select any of the 1-Click test credentials below.'); }}>
+                <a href="#forgot" className="forgot-link" onClick={(e) => { e.preventDefault(); alert('Default credentials: admin@crowdsense.io / password123'); }}>
                   Forgot password?
                 </a>
               </div>
 
-              <button type="submit" className="auth-submit-btn">
-                <span>Sign In to Operations Console</span>
+              <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
+                <span>{isSubmitting ? 'Authenticating Administrator...' : 'Sign In to Administrator Console'}</span>
                 <span className="btn-arrow">→</span>
               </button>
 
-              {/* 1-Click Role Login Quick Selectors */}
+              {/* 1-Click Administrator Credentials Quick Selector */}
               <div className="quick-roles-divider">
-                <span>OR 1-CLICK TEST CREDENTIALS</span>
+                <span>OR 1-CLICK VERIFIED ADMINISTRATOR TEST ACCESS</span>
               </div>
 
-              <div className="quick-roles-grid">
-                {demoAccounts.map((acc) => (
-                  <button
-                    key={acc.role}
-                    type="button"
-                    className={`quick-role-card ${loginRole === acc.role ? 'selected' : ''}`}
-                    onClick={() => {
-                      setLoginRole(acc.role);
-                      setLoginEmail(acc.email);
-                      login(acc.email, 'password', acc.role);
+              <div className="quick-roles-grid" style={{ gridTemplateColumns: '1fr' }}>
+                <button
+                  type="button"
+                  className="quick-role-card selected"
+                  onClick={async () => {
+                    setLoginEmail('admin@crowdsense.io');
+                    setLoginPassword('password123');
+                    setIsSubmitting(true);
+                    const res = await login('admin@crowdsense.io', 'password123');
+                    setIsSubmitting(false);
+                    if (res && res.success) {
                       setPage('Dashboard');
-                    }}
-                  >
-                    <div className="role-top">
-                      <span className="role-chip" style={{ color: acc.color, borderColor: `${acc.color}44` }}>
-                        {acc.label}
-                      </span>
-                    </div>
-                    <strong>{acc.name}</strong>
-                    <small>{acc.desc}</small>
-                  </button>
-                ))}
+                    }
+                  }}
+                  style={{ textAlign: 'left', borderColor: 'rgba(255,51,68,0.3)', background: 'rgba(255,51,68,0.05)' }}
+                >
+                  <div className="role-top">
+                    <span className="role-chip" style={{ color: '#ff3344', borderColor: '#ff334444' }}>
+                      VENUE ADMINISTRATOR
+                    </span>
+                    <small style={{ color: '#ff3344', fontWeight: 600 }}>1-Click Instant Sign In →</small>
+                  </div>
+                  <strong>Alex Kumar (Primary Admin)</strong>
+                  <small>admin@crowdsense.io · Full Platform &amp; Model Controls</small>
+                </button>
               </div>
             </form>
           )}
@@ -348,19 +357,13 @@ export default function AuthView({ initialMode = 'login' }) {
                 </div>
 
                 <div className="form-group">
-                  <label>Operational Role</label>
-                  <div className="input-wrap">
-                    <span className="input-icon">🛡️</span>
-                    <select
-                      value={regRole}
-                      onChange={(e) => setRegRole(e.target.value)}
-                      className="auth-select"
-                    >
-                      <option value="operator">Safety Operator (Live Monitoring)</option>
-                      <option value="admin">Venue Administrator (Full Management)</option>
-                      <option value="analyst">Safety Analyst (Reports & Benchmarks)</option>
-                      <option value="viewer">Executive Observer (Read-Only)</option>
-                    </select>
+                  <label>Assigned Clearance Role</label>
+                  <div className="input-wrap" style={{ background: 'var(--surface-sunken)', display: 'flex', alignItems: 'center', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                    <span className="input-icon" style={{ marginRight: '8px' }}>🛡️</span>
+                    <strong style={{ color: '#ff3344', fontSize: '13px' }}>Venue Administrator</strong>
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--muted)', background: 'rgba(255,51,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                      Full Access
+                    </span>
                   </div>
                 </div>
               </div>
@@ -374,7 +377,7 @@ export default function AuthView({ initialMode = 'login' }) {
                       type={showPassword ? 'text' : 'password'}
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Create password"
+                      placeholder="Create master password"
                       required
                     />
                   </div>
@@ -388,7 +391,7 @@ export default function AuthView({ initialMode = 'login' }) {
                       type={showPassword ? 'text' : 'password'}
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      placeholder="Confirm password"
+                      placeholder="Confirm master password"
                       required
                     />
                   </div>
@@ -403,18 +406,18 @@ export default function AuthView({ initialMode = 'login' }) {
                     onChange={(e) => setAgreeTerms(e.target.checked)}
                   />
                   <span>
-                    I acknowledge venue crowd safety monitoring protocols, GDPR/privacy camera ingestion policies, and internal audit procedures.
+                    I acknowledge administrator crowd safety protocols, GDPR camera ingestion policies, and dedicated MongoDB tenant partitioning.
                   </span>
                 </label>
               </div>
 
-              <button type="submit" className="auth-submit-btn">
-                <span>Create Enterprise Account</span>
+              <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
+                <span>{isSubmitting ? 'Provisioning Administrator...' : 'Create Administrator Account'}</span>
                 <span className="btn-arrow">→</span>
               </button>
 
               <div className="auth-switch-prompt">
-                Already registered?{' '}
+                Already registered as an Administrator?{' '}
                 <button
                   type="button"
                   className="inline-switch-btn"

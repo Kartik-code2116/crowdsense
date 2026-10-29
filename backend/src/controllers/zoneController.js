@@ -3,12 +3,15 @@ const { getIsConnected, getMemoryStore } = require('../config/db');
 
 exports.getZones = async (req, res) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+
     if (getIsConnected()) {
-      const zones = await Zone.find().sort({ createdAt: 1 });
+      const zones = await Zone.find({ userId }).sort({ createdAt: 1 });
       return res.json({ success: true, count: zones.length, data: zones });
     }
     const store = getMemoryStore();
-    return res.json({ success: true, count: store.zones.length, data: store.zones });
+    const filtered = (store.zones || []).filter(z => !z.userId || z.userId === userId);
+    return res.json({ success: true, count: filtered.length, data: filtered });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -16,6 +19,7 @@ exports.getZones = async (req, res) => {
 
 exports.createZone = async (req, res) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const {
       id,
       name,
@@ -33,6 +37,7 @@ exports.createZone = async (req, res) => {
     const zoneId = id || `zone_${Date.now()}`;
     const newZoneData = {
       _id: zoneId,
+      userId,
       name: name || 'New Safety Zone',
       code: code || `ZONE-${String(Date.now()).slice(-4)}`,
       floor: floor || 'Ground Level',
@@ -54,6 +59,7 @@ exports.createZone = async (req, res) => {
     }
 
     const store = getMemoryStore();
+    if (!store.zones) store.zones = [];
     store.zones.push(newZoneData);
     return res.status(201).json({ success: true, data: newZoneData });
   } catch (err) {
@@ -63,22 +69,29 @@ exports.createZone = async (req, res) => {
 
 exports.updateZone = async (req, res) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const { id } = req.params;
     const updates = req.body;
 
     if (getIsConnected()) {
-      const updated = await Zone.findByIdAndUpdate(id, updates, { new: true });
+      const updated = await Zone.findOneAndUpdate(
+        { $or: [{ _id: id }, { id }], userId },
+        { $set: updates },
+        { new: true }
+      );
+      if (!updated) {
+        return res.status(404).json({ success: false, message: 'Zone not found or access denied.' });
+      }
       return res.json({ success: true, data: updated });
     }
 
     const store = getMemoryStore();
-    const zoneIndex = store.zones.findIndex(z => String(z._id) === String(id));
+    const zoneIndex = (store.zones || []).findIndex(z => (String(z._id) === String(id) || String(z.id) === String(id)) && (!z.userId || z.userId === userId));
     if (zoneIndex !== -1) {
       store.zones[zoneIndex] = { ...store.zones[zoneIndex], ...updates };
       return res.json({ success: true, data: store.zones[zoneIndex] });
     }
-
-    return res.status(404).json({ success: false, message: 'Zone not found' });
+    return res.status(404).json({ success: false, message: 'Zone not found.' });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -86,16 +99,20 @@ exports.updateZone = async (req, res) => {
 
 exports.deleteZone = async (req, res) => {
   try {
+    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
     const { id } = req.params;
 
     if (getIsConnected()) {
-      await Zone.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'Zone successfully removed.' });
+      const deleted = await Zone.findOneAndDelete({ $or: [{ _id: id }, { id }], userId });
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: 'Zone not found or access denied.' });
+      }
+      return res.json({ success: true, message: 'Zone removed successfully.' });
     }
 
     const store = getMemoryStore();
-    store.zones = store.zones.filter(z => String(z._id) !== String(id));
-    return res.json({ success: true, message: 'Zone successfully removed.' });
+    store.zones = (store.zones || []).filter(z => (String(z._id) !== String(id) && String(z.id) !== String(id)) || (z.userId && z.userId !== userId));
+    return res.json({ success: true, message: 'Zone removed successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

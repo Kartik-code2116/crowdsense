@@ -6,6 +6,6 @@ const authorize = require('../middleware/rbac');
 
 router.get('/', authMiddleware, alertController.getAlerts);
 router.get('/incidents', authMiddleware, alertController.getIncidents);
-router.put('/incidents/:id/resolve', authMiddleware, authorize(['admin', 'operator']), alertController.resolveIncident);
+router.put('/incidents/:id/resolve', authMiddleware, authorize(['admin']), alertController.resolveIncident);
 
 module.exports = router;
