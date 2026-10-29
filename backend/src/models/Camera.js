@@ -5,6 +5,7 @@ const cameraSchema = new mongoose.Schema({
   userId: { type: String, required: true, index: true },
   name: { type: String, required: true },
   streamUrl: { type: String, default: 'mock://camera_feed_01' },
+  streamType: { type: String, default: 'demo' }, // 'youtube', 'webcam', 'url', 'rtsp', 'demo'
   zoneId: { type: String, required: true },
   zoneName: { type: String, default: 'Zone 01' },
   resolution: { type: String, default: '1920x1080' },
@@ -16,7 +17,6 @@ const cameraSchema = new mongoose.Schema({
   },
   sceneType: {
     type: String,
-    enum: ['entrance', 'concourse', 'walkway', 'gate', 'foodcourt'],
     default: 'concourse'
   },
   lastCount: { type: Number, default: 0 },

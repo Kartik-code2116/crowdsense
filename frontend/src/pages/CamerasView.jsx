@@ -1,30 +1,25 @@
 import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
+import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
 export default function CamerasView() {
-  const { cameras, addCamera, deleteCamera, zones, toggleWebcamFeed } = useCrowdStore();
-  const [showModal, setShowModal] = useState(false);
-  const isWebcamAdded = cameras.some((c) => c.id === 'CAM-WEBCAM');
-  const [formData, setFormData] = useState({
-    name: '',
-    zoneId: zones[0]?.id || 'zone-demo-01',
-    streamUrl: 'rtsp://edge.venue.lan/cam_feed',
-    resolution: '1920x1080',
-    fps: 2.0
-  });
+  const {
+    cameras,
+    deleteCamera,
+    toggleWebcamFeed,
+    setShowAddCameraModal,
+    setActiveCameraId,
+    setPage,
+    heatmap,
+    flowVectors
+  } = useCrowdStore();
 
-  const handleAdd = (e) => {
-    e.preventDefault();
-    const targetZone = zones.find((z) => z.id === formData.zoneId) || zones[0];
-    addCamera({
-      name: formData.name || 'New Camera Stream',
-      zone: `${targetZone.code}`,
-      zoneId: targetZone.id,
-      resolution: formData.resolution,
-      fps: Number(formData.fps)
-    });
-    setShowModal(false);
-    setFormData({ name: '', zoneId: 'z1', streamUrl: 'rtsp://edge.venue.lan/cam_feed', resolution: '1920x1080', fps: 2.0 });
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'grid'
+  const isWebcamAdded = cameras.some((c) => c.id === 'CAM-WEBCAM');
+
+  const handleViewLive = (camId) => {
+    setActiveCameraId(camId);
+    setPage('Live monitor');
   };
 
   return (
@@ -32,145 +27,189 @@ export default function CamerasView() {
       <div className="page-action-row">
         <div>
           <h2>Connected Venue Edge Cameras ({cameras.length})</h2>
-          <p>RTSP edge streams & local hardware webcams regressed via CSRNet Deep Learning Model</p>
+          <p>YouTube live streams, hardware webcams & RTSP edge feeds with continuous CSRNet density regression</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="layout-picker" style={{ display: 'flex' }}>
+            <button
+              type="button"
+              className={`layout-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+            >
+              ☰ Table View
+            </button>
+            <button
+              type="button"
+              className={`layout-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+            >
+              ▦ Live Video Grid
+            </button>
+          </div>
           <button
             className={`button ${isWebcamAdded ? 'secondary' : 'primary'}`}
             onClick={toggleWebcamFeed}
           >
             {isWebcamAdded ? '✓ Laptop Webcam Active' : '📹 Add Laptop Webcam'}
           </button>
-          <button className="button primary" onClick={() => setShowModal(true)}>
+          <button className="button primary" onClick={() => setShowAddCameraModal(true)}>
             + Register New Camera
           </button>
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: '16px' }}>
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th>CAMERA NAME</th>
-              <th>ASSIGNED ZONE</th>
-              <th>STREAM / RTSP</th>
-              <th>RESOLUTION</th>
-              <th>SAMPLE RATE</th>
-              <th>AI LATENCY</th>
-              <th>STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cameras.map((cam) => (
-              <tr key={cam.id}>
-                <td>
-                  <b>{cam.name}</b>
-                  <small style={{ display: 'block', color: 'var(--muted)' }}>{cam.id}</small>
-                </td>
-                <td>{cam.zone}</td>
-                <td><code style={{ fontSize: '12.5px' }}>rtsp://edge.venue.lan/{cam.id}</code></td>
-                <td>{cam.resolution}</td>
-                <td>{cam.fps} FPS</td>
-                <td><b>{cam.latencyMs} ms</b></td>
-                <td>
-                  <span className="live-pill" style={{ display: 'inline-flex' }}>
-                    <i /> {cam.status}
+      {/* Grid Mode: Live Footage Preview for all cameras */}
+      {viewMode === 'grid' && (
+        <div className="monitor-grid grid-2x2" style={{ marginTop: '16px' }}>
+          {cameras.map((cam) => {
+            const isCritical = cam.capacity >= 85;
+            const isWarning = cam.capacity >= 70 && !isCritical;
+
+            return (
+              <div key={cam.id} className="monitor-tile">
+                <div className="tile-header">
+                  <span className="tile-id">{cam.id}</span>
+                  <span className="tile-name">{cam.name}</span>
+                  <span className={`tile-status ${isCritical ? 'critical' : isWarning ? 'warning' : 'normal'}`}>
+                    {cam.capacity || 0}% Cap
                   </span>
-                </td>
-                <td>
+                </div>
+
+                <div className="tile-visual">
+                  <CCTVCanvasStream
+                    cameraId={cam.id}
+                    cameraName={cam.name}
+                    count={cam.count}
+                    resolution={cam.resolution}
+                    fps={cam.fps}
+                    latencyMs={cam.latencyMs}
+                    heatmap={heatmap}
+                    flowVectors={flowVectors}
+                    sceneType={cam.scene}
+                    streamType={cam.streamType}
+                    streamUrl={cam.streamUrl}
+                    height={220}
+                    isWebcam={cam.isWebcam || cam.id === 'CAM-WEBCAM'}
+                    snapshotUrl={cam.lastSnapshot || cam.snapshotUrl}
+                    heatmapUrl={cam.heatmapUrl}
+                    zoneId={cam.zoneId}
+                  />
+                </div>
+
+                <div className="tile-footer" style={{ justifyContent: 'space-between' }}>
+                  <div className="footer-metric">
+                    <small>Live Detections</small>
+                    <b style={{ color: '#00ffcc' }}>{cam.count} people</b>
+                  </div>
+                  <div className="footer-metric">
+                    <small>Source Type</small>
+                    <b>{(cam.streamType || 'demo').toUpperCase()}</b>
+                  </div>
                   <button
-                    className="button secondary"
-                    style={{ height: '32px', fontSize: '12px', padding: '0 12px' }}
-                    onClick={() => deleteCamera(cam.id)}
+                    className="button primary"
+                    style={{ height: '30px', fontSize: '11px', padding: '0 10px' }}
+                    onClick={() => handleViewLive(cam.id)}
                   >
-                    Remove
+                    Focus Live Monitor →
                   </button>
-                </td>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Table Mode */}
+      {viewMode === 'table' && (
+        <div className="panel" style={{ marginTop: '16px' }}>
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>CAMERA NAME</th>
+                <th>ASSIGNED ZONE</th>
+                <th>STREAM SOURCE &amp; TYPE</th>
+                <th>LIVE DETECTION</th>
+                <th>RESOLUTION</th>
+                <th>FPS</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {cameras.map((cam) => {
+                const isYt = cam.streamType === 'youtube' || (cam.streamUrl && cam.streamUrl.includes('youtu'));
+                const isWb = cam.streamType === 'webcam' || cam.id === 'CAM-WEBCAM' || (cam.streamUrl && cam.streamUrl.includes('webcam'));
+                const isCritical = (cam.capacity || 0) >= 85;
+                const isWarning = (cam.capacity || 0) >= 70 && !isCritical;
 
-      {/* Modal for adding camera */}
-      {showModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Register New Camera Stream</h3>
-              <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleAdd}>
-              <div className="form-group">
-                <label>Camera Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. West Turnstiles Gate C"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>RTSP / Video Feed URL</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.streamUrl}
-                  onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Safety Zone Assignment</label>
-                <select
-                  value={formData.zoneId}
-                  onChange={(e) => setFormData({ ...formData, zoneId: e.target.value })}
-                >
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>{z.name} ({z.code})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Resolution</label>
-                  <select
-                    value={formData.resolution}
-                    onChange={(e) => setFormData({ ...formData, resolution: e.target.value })}
-                  >
-                    <option>1920x1080 (1080p FHD)</option>
-                    <option>2560x1440 (2K QHD)</option>
-                    <option>3840x2160 (4K UHD)</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Sample FPS (to AI)</label>
-                  <select
-                    value={formData.fps}
-                    onChange={(e) => setFormData({ ...formData, fps: e.target.value })}
-                  >
-                    <option value="1.0">1.0 FPS (Standard)</option>
-                    <option value="2.0">2.0 FPS (Recommended)</option>
-                    <option value="5.0">5.0 FPS (High Density)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <button type="button" className="button secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="button primary">
-                  Initialize Feed
-                </button>
-              </div>
-            </form>
-          </div>
+                return (
+                  <tr key={cam.id}>
+                    <td>
+                      <b>{cam.name}</b>
+                      <small style={{ display: 'block', color: 'var(--muted)', fontFamily: 'monospace' }}>{cam.id}</small>
+                    </td>
+                    <td>{cam.zone}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: isYt ? '#ff3344' : isWb ? '#00ffcc' : 'var(--accent-teal)'
+                          }}
+                        >
+                          {isYt ? '🌐 YOUTUBE LIVE' : isWb ? '📹 LAPTOP WEBCAM' : '🔗 RTSP / VIDEO FEED'}
+                        </span>
+                        <code style={{ fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cam.streamUrl}>
+                          {cam.streamUrl || 'demo://sample'}
+                        </code>
+                      </div>
+                    </td>
+                    <td>
+                      <div>
+                        <strong style={{ fontSize: '14px', color: '#00ffcc' }}>{cam.count || 0}</strong>
+                        <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '4px' }}>people</span>
+                        <span
+                          className={`incident-status ${isCritical ? 'red' : isWarning ? 'amber' : 'green'}`}
+                          style={{ display: 'inline-block', marginLeft: '6px', fontSize: '9.5px', padding: '1px 6px' }}
+                        >
+                          {cam.capacity || 0}%
+                        </span>
+                      </div>
+                    </td>
+                    <td>{cam.resolution}</td>
+                    <td>{cam.fps} FPS</td>
+                    <td>
+                      <span className="live-pill" style={{ display: 'inline-flex' }}>
+                        <i /> {cam.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="button primary"
+                          style={{ height: '30px', fontSize: '11.5px', padding: '0 10px' }}
+                          onClick={() => handleViewLive(cam.id)}
+                        >
+                          🎥 View Live
+                        </button>
+                        <button
+                          className="button secondary"
+                          style={{ height: '30px', fontSize: '11.5px', padding: '0 10px', color: '#ff3344' }}
+                          onClick={() => deleteCamera(cam.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

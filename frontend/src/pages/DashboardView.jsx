@@ -342,9 +342,12 @@ export default function DashboardView() {
                   latencyMs={cam.latencyMs}
                   heatmap={heatmap}
                   flowVectors={flowVectors}
-                  sceneType={cam.scene}
+                  sceneType={cam.scene || cam.sceneType}
                   height={170}
+                  streamType={cam.streamType}
                   streamUrl={cam.streamUrl}
+                  isWebcam={cam.isWebcam || cam.id === 'CAM-WEBCAM' || cam.streamType === 'webcam'}
+                  zoneId={cam.zoneId}
                   snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
                   lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
                   heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || (cam.id === 'CAM-01' ? latestDetection?.heatmapUrl : null)}

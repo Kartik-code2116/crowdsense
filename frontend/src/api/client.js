@@ -156,6 +156,33 @@ export const apiClient = {
     return null;
   },
 
+  async createCamera(cameraData) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/cameras`, {
+        method: 'POST',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify(cameraData)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('createCamera error:', e.message);
+    }
+    return null;
+  },
+
+  async deleteCamera(cameraId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/cameras/${cameraId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(false)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('deleteCamera error:', e.message);
+    }
+    return null;
+  },
+
   async getZones() {
     try {
       const res = await fetch(`${API_BASE_URL}/zones`, {

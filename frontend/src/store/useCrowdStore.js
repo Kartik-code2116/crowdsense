@@ -145,6 +145,12 @@ export const useCrowdStore = create((set, get) => {
           const zoneObj = currentZones.find(z => z.id === c.zoneId) || { maxCapacity: 200 };
           const maxCap = zoneObj.maxCapacity || 200;
           const count = c.lastCount || 0;
+          const sUrl = c.streamUrl || '';
+          const sUrlLower = sUrl.toLowerCase();
+          const isYt = sUrlLower.includes('youtube.com') || sUrlLower.includes('youtu.be') || c.streamType === 'youtube';
+          const isWb = sUrlLower.includes('webcam') || c.streamType === 'webcam' || c.sceneType === 'webcam' || c._id === 'CAM-WEBCAM';
+          const sType = c.streamType || (isYt ? 'youtube' : isWb ? 'webcam' : sUrlLower.startsWith('http') ? 'url' : 'demo');
+
           return {
             id: c._id || c.id,
             name: c.name,
@@ -154,14 +160,16 @@ export const useCrowdStore = create((set, get) => {
             capacity: Math.min(100, Math.round((count / maxCap) * 100)),
             maxCapacity: maxCap,
             status: c.status || 'Live',
-            scene: c.sceneType || 'concourse',
+            scene: c.sceneType || (isWb ? 'webcam' : isYt ? 'youtube' : 'concourse'),
+            streamType: sType,
+            streamUrl: sUrl,
             fps: c.sampleFps || 2.0,
             latencyMs: c.lastLatencyMs || 38,
             resolution: c.resolution || '1920x1080',
-            streamUrl: c.streamUrl || '',
             lastSnapshot: c.lastSnapshot || c.snapshotUrl || null,
             snapshotUrl: c.snapshotUrl || c.lastSnapshot || null,
-            heatmapUrl: c.heatmapUrl || null
+            heatmapUrl: c.heatmapUrl || null,
+            isWebcam: isWb
           };
         });
         set({ cameras: mapped, dbConnected: true, dbSource: 'MongoDB Local (27017)' });
@@ -378,64 +386,133 @@ export const useCrowdStore = create((set, get) => {
   setActiveCameraId: (activeCameraId) => set({ activeCameraId }),
   setSandboxSnapshot: (sandboxSnapshot) => set({ sandboxSnapshot, page: 'Sandbox' }),
 
-  // Camera Management
-  addCamera: (newCam) => set((state) => {
-    const scene = newCam.scene || 'concourse';
-    const realCount = newCam.count !== undefined ? Number(newCam.count) : 0;
-    const targetZone = state.zones.find((z) => z.id === newCam.zoneId) || state.zones[0] || { maxCapacity: 200, code: 'ZONE-01' };
+  // Camera Management (Connected to MongoDB & Live Streaming)
+  addCamera: async (newCam) => {
+    const state = get();
+    const streamUrl = newCam.streamUrl || '/samples/mall_concourse.jpg';
+    const urlLower = streamUrl.toLowerCase();
+    const isYouTube = urlLower.includes('youtube.com') || urlLower.includes('youtu.be');
+    const isWebcam = newCam.streamType === 'webcam' || newCam.isWebcam || urlLower.includes('webcam') || newCam.scene === 'webcam';
+
+    const streamType = newCam.streamType || (isYouTube ? 'youtube' : isWebcam ? 'webcam' : urlLower.startsWith('http') ? 'url' : 'demo');
+    const scene = newCam.scene || (isWebcam ? 'webcam' : isYouTube ? 'youtube' : 'concourse');
+
+    const targetZone = state.zones.find((z) => z.id === newCam.zoneId) || state.zones[0] || { id: 'zone-demo-01', maxCapacity: 200, code: 'ZONE-01', name: 'Main Concourse' };
     const maxCap = targetZone.maxCapacity || 200;
+    const realCount = newCam.count !== undefined ? Number(newCam.count) : (isWebcam ? 1 : Math.floor(Math.random() * 45) + 35);
     const capPct = Math.min(100, Math.round((realCount / maxCap) * 100));
 
+    const camId = newCam.id || `CAM-0${state.cameras.length + 1}`;
+
     const newCamObj = {
-      id: `CAM-0${state.cameras.length + 1}`,
-      name: newCam.name || 'New Camera Stream',
-      zone: newCam.zone || targetZone.code || 'ZONE-01',
+      id: camId,
+      name: newCam.name || (isYouTube ? 'YouTube Live Stream' : isWebcam ? 'Laptop Webcam' : 'New Camera Stream'),
+      zone: newCam.zone || targetZone.code || targetZone.name || 'ZONE-01',
       zoneId: targetZone.id,
+      zoneName: targetZone.name,
       count: realCount,
       capacity: capPct,
       maxCapacity: maxCap,
       status: 'Live',
       scene: scene,
-      fps: Number(newCam.fps) || 2.0,
-      latencyMs: 38,
-      resolution: newCam.resolution || '1920x1080'
+      streamUrl: streamUrl,
+      streamType: streamType,
+      fps: Number(newCam.fps) || (isWebcam ? 15.0 : 2.0),
+      latencyMs: isWebcam ? 32 : 38,
+      resolution: newCam.resolution || (isWebcam ? '1280x720' : '1920x1080'),
+      isWebcam: isWebcam,
+      lastSnapshot: newCam.lastSnapshot || null,
+      snapshotUrl: newCam.snapshotUrl || null,
+      heatmapUrl: newCam.heatmapUrl || null
     };
 
-    return {
+    // Save directly to MongoDB
+    apiClient.createCamera({
+      id: camId,
+      name: newCamObj.name,
+      zoneId: targetZone.id,
+      zoneName: targetZone.name,
+      streamUrl: newCamObj.streamUrl,
+      streamType: newCamObj.streamType,
+      resolution: newCamObj.resolution,
+      sampleFps: newCamObj.fps,
+      sceneType: newCamObj.scene,
+      lastCount: newCamObj.count
+    }).catch((e) => console.warn('Camera persist to Mongo notice:', e.message));
+
+    set({
       cameras: [...state.cameras, newCamObj],
+      activeCameraId: camId,
       showAddCameraModal: false
-    };
-  }),
+    });
 
-  deleteCamera: (id) => set((state) => ({
-    cameras: state.cameras.filter((c) => c.id !== id)
-  })),
+    if (isWebcam) {
+      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, 'csrnet');
+    }
+  },
+
+  deleteCamera: async (id) => {
+    // Delete from MongoDB
+    apiClient.deleteCamera(id).catch((e) => console.warn('Camera remove from Mongo notice:', e.message));
+    if (id === 'CAM-WEBCAM') {
+      webcamManager.stop();
+    }
+    set((state) => {
+      const remaining = state.cameras.filter((c) => c.id !== id);
+      return {
+        cameras: remaining,
+        activeCameraId: remaining[0]?.id || 'CAM-01'
+      };
+    });
+  },
 
   toggleWebcamFeed: () => {
     const state = get();
     const existing = state.cameras.find((c) => c.id === 'CAM-WEBCAM');
     if (existing) {
+      webcamManager.stop();
+      apiClient.deleteCamera('CAM-WEBCAM').catch(() => {});
+      const remaining = state.cameras.filter((c) => c.id !== 'CAM-WEBCAM');
       set({
-        cameras: state.cameras.filter((c) => c.id !== 'CAM-WEBCAM'),
-        activeCameraId: state.cameras.find((c) => c.id !== 'CAM-WEBCAM')?.id || 'CAM-01'
+        cameras: remaining,
+        activeCameraId: remaining[0]?.id || 'CAM-01'
       });
     } else {
-      const targetZone = state.zones[0] || { maxCapacity: 350 };
+      const targetZone = state.zones[0] || { id: 'zone-arena-01', maxCapacity: 350, code: 'ZONE-01', name: 'Main Concourse' };
       const webcamCam = {
         id: 'CAM-WEBCAM',
         name: 'Laptop Camera Feed (Live)',
-        zone: 'OPERATOR · LOCAL 01',
+        zone: targetZone.code || 'ZONE-01',
         zoneId: targetZone.id,
+        zoneName: targetZone.name,
         count: 1,
         capacity: Math.min(100, Math.round((1 / (targetZone.maxCapacity || 350)) * 100)),
         maxCapacity: targetZone.maxCapacity || 350,
         status: 'Live',
         scene: 'webcam',
+        streamUrl: 'webcam',
+        streamType: 'webcam',
         fps: 15.0,
         latencyMs: 32,
         resolution: '1280x720',
         isWebcam: true
       };
+
+      apiClient.createCamera({
+        id: 'CAM-WEBCAM',
+        name: webcamCam.name,
+        zoneId: targetZone.id,
+        zoneName: targetZone.name,
+        streamUrl: 'webcam',
+        streamType: 'webcam',
+        resolution: '1280x720',
+        sampleFps: 15.0,
+        sceneType: 'webcam',
+        lastCount: 1
+      }).catch(() => {});
+
+      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, 'csrnet');
+
       set({
         cameras: [webcamCam, ...state.cameras],
         activeCameraId: 'CAM-WEBCAM'

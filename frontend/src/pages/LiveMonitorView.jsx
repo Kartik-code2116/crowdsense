@@ -19,10 +19,10 @@ export default function LiveMonitorView() {
     latestDetection
   } = useCrowdStore();
 
-  const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3'
+  const [layout, setLayout] = useState('2x2'); // '1x1', '2x2', '3x3', 'all'
   const isWebcamLive = cameras.some((c) => c.id === 'CAM-WEBCAM');
 
-  const selectedCam = cameras.find((c) => c.id === activeCameraId) || cameras[1] || cameras[0];
+  const selectedCam = cameras.find((c) => c.id === activeCameraId) || cameras[0] || {};
 
   const displayedCameras = layout === '1x1'
     ? [selectedCam]
@@ -54,7 +54,7 @@ export default function LiveMonitorView() {
               2×2 Quad
             </button>
             <button className={`layout-btn ${layout === '3x3' ? 'active' : ''}`} onClick={() => setLayout('3x3')}>
-              3×3 Matrix
+              All ({cameras.length})
             </button>
           </div>
 
@@ -122,7 +122,10 @@ export default function LiveMonitorView() {
                     heatmap={heatmap}
                     flowVectors={flowVectors}
                     sceneType={cam.scene}
-                    height={layout === '1x1' ? 380 : layout === '2x2' ? 200 : 150}
+                    streamType={cam.streamType}
+                    isWebcam={cam.isWebcam || cam.id === 'CAM-WEBCAM'}
+                    zoneId={cam.zoneId}
+                    height={layout === '1x1' ? 380 : layout === '2x2' ? 220 : 180}
                     streamUrl={cam.streamUrl}
                     snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
                     lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
