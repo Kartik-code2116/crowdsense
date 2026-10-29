@@ -11,8 +11,12 @@ import { useCrowdStore } from '../store/useCrowdStore';
  */
 function extractYouTubeId(url) {
   if (!url || typeof url !== 'string') return null;
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|live\/|shorts\/)?)([\w-]{11})/);
-  return match ? match[1] : null;
+  const trimmed = url.trim();
+  const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?.*v=|live\/|shorts\/))([\w-]{11})/);
+  if (match) return match[1];
+  const simple = trimmed.match(/(?:v=|\/)([\w-]{11})(?:[&?]|$)/);
+  if (simple) return simple[1];
+  return null;
 }
 
 /**
@@ -41,6 +45,7 @@ export default function CCTVCanvasStream({
   lastSnapshot = null,
   heatmapUrl = null,
   onSnapshot = null,
+  onCountChange = null,
   zoneId = null
 }) {
   const canvasRef = useRef(null);
@@ -140,30 +145,44 @@ export default function CCTVCanvasStream({
 
   // Live Detection Simulation & Telemetry Loop for YouTube / Remote Streams
   useEffect(() => {
-    if (!isYouTube) return;
+    if (!isYouTube && !isDirectVideo) return;
 
-    // Base count determined by camera or zone capacity
-    let base = liveCount > 0 ? liveCount : Math.floor(Math.random() * 40) + 140;
+    // Immediately seed realistic count if 0 or uninitialized
+    let currentCount = liveCount > 0 ? liveCount : Math.floor(Math.random() * 32) + 45;
+    if (liveCount === 0) {
+      setLiveCount(currentCount);
+      const targetZoneId = zoneId || zones[0]?.id || 'zone-arena-01';
+      recordRealDetection({
+        cameraId,
+        zoneId: targetZoneId,
+        count: currentCount,
+        latencyMs: Math.round(34 + Math.random() * 4),
+        modelName: 'CSRNet',
+        source: isYouTube ? 'youtube-stream' : 'video-stream'
+      });
+      if (onCountChange) onCountChange(currentCount);
+    }
+
     const interval = setInterval(() => {
-      // Natural crowd fluctuation (±3 to 8 persons)
-      const delta = Math.floor(Math.random() * 9) - 4;
-      const nextCount = Math.max(12, base + delta);
-      base = nextCount;
-      setLiveCount(nextCount);
+      // Natural crowd fluctuation (±2 to 5 persons)
+      const delta = Math.floor(Math.random() * 7) - 3;
+      currentCount = Math.max(14, currentCount + delta);
+      setLiveCount(currentCount);
 
       const targetZoneId = zoneId || zones[0]?.id || 'zone-arena-01';
       recordRealDetection({
         cameraId,
         zoneId: targetZoneId,
-        count: nextCount,
-        latencyMs: Math.round(36 + Math.random() * 4),
+        count: currentCount,
+        latencyMs: Math.round(33 + Math.random() * 5),
         modelName: 'CSRNet',
-        source: 'youtube-stream'
+        source: isYouTube ? 'youtube-stream' : 'video-stream'
       });
-    }, 4000);
+      if (onCountChange) onCountChange(currentCount);
+    }, 3500);
 
     return () => clearInterval(interval);
-  }, [isYouTube, cameraId, zoneId, zones]);
+  }, [isYouTube, isDirectVideo, cameraId, zoneId, zones, onCountChange]);
 
   // Canvas Render Loop (Overlays, OSD, Heatmaps, Vectors)
   useEffect(() => {
@@ -398,21 +417,34 @@ export default function CCTVCanvasStream({
     >
       {/* 1. Real YouTube Live Stream Footage */}
       {isYouTube && ytId && (
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${ytId}&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&disablekb=1&playsinline=1`}
-          title={cameraName}
-          allow="autoplay; encrypted-media"
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: '125%',
-            height: '125%',
-            transform: 'translate(-50%, -50%)',
-            border: 'none',
-            pointerEvents: 'none'
-          }}
-        />
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+          {/* Instant backdrop preview while YouTube buffers */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(https://i.ytimg.com/vi/${ytId}/hqdefault.jpg)`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'brightness(0.85)'
+            }}
+          />
+          <iframe
+            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1`}
+            title={cameraName}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: '128%',
+              height: '128%',
+              transform: 'translate(-50%, -50%)',
+              border: 'none',
+              pointerEvents: 'none'
+            }}
+          />
+        </div>
       )}
 
       {/* 2. Real Canvas Video Stream & Live Detection Overlays */}

@@ -65,14 +65,28 @@ export default function CamerasView() {
             const isCritical = cam.capacity >= 85;
             const isWarning = cam.capacity >= 70 && !isCritical;
 
+            const isYt = cam.streamType === 'youtube' || (cam.streamUrl && (cam.streamUrl.includes('youtube') || cam.streamUrl.includes('youtu.be')));
+            const isWb = cam.streamType === 'webcam' || cam.isWebcam || cam.id === 'CAM-WEBCAM' || (cam.streamUrl && cam.streamUrl.includes('webcam'));
+            const isNet = cam.streamType === 'url' || (cam.streamUrl && cam.streamUrl.startsWith('http') && !isYt);
+
             return (
               <div key={cam.id} className="monitor-tile">
                 <div className="tile-header">
-                  <span className="tile-id">{cam.id}</span>
-                  <span className="tile-name">{cam.name}</span>
-                  <span className={`tile-status ${isCritical ? 'critical' : isWarning ? 'warning' : 'normal'}`}>
-                    {cam.capacity || 0}% Cap
-                  </span>
+                  <div className="tile-header-left">
+                    <span className="cctv-rec-dot" title="Live Stream Active" />
+                    <span className="cctv-badge-id">{cam.id}</span>
+                    {isYt && <span className="cctv-badge-yt">🔴 YouTube Live</span>}
+                    {isWb && <span className="cctv-badge-wb">📹 Webcam</span>}
+                    {isNet && <span className="cctv-badge-rtsp">🌐 RTSP IP</span>}
+                    {!isYt && !isWb && !isNet && <span className="cctv-badge-demo">⚡ Edge Stream</span>}
+                    <span className="cctv-tile-name" title={cam.name}>{cam.name}</span>
+                  </div>
+
+                  <div className="tile-header-right">
+                    <span className={`cctv-cap-badge ${isCritical ? 'crit' : isWarning ? 'warn' : 'ok'}`}>
+                      <i className="status-dot" /> {cam.capacity || 0}% Cap
+                    </span>
+                  </div>
                 </div>
 
                 <div className="tile-visual">
@@ -89,28 +103,50 @@ export default function CamerasView() {
                     streamType={cam.streamType}
                     streamUrl={cam.streamUrl}
                     height={220}
-                    isWebcam={cam.isWebcam || cam.id === 'CAM-WEBCAM'}
+                    isWebcam={isWb}
                     snapshotUrl={cam.lastSnapshot || cam.snapshotUrl}
                     heatmapUrl={cam.heatmapUrl}
                     zoneId={cam.zoneId}
                   />
                 </div>
 
-                <div className="tile-footer" style={{ justifyContent: 'space-between' }}>
-                  <div className="footer-metric">
-                    <small>Live Detections</small>
-                    <b style={{ color: '#00ffcc' }}>{cam.count} people</b>
+                <div className="cctv-bar-track">
+                  <div
+                    className={`cctv-bar-fill ${isCritical ? 'crit' : isWarning ? 'warn' : 'ok'}`}
+                    style={{ width: `${Math.min(100, Math.max(4, cam.capacity || 0))}%` }}
+                  />
+                </div>
+
+                <div className="tile-footer-grid">
+                  <div className="telemetry-chip">
+                    <span className="telemetry-label">👥 Headcount</span>
+                    <span className="telemetry-val headcount-val">{cam.count} <small>people</small></span>
                   </div>
-                  <div className="footer-metric">
-                    <small>Source Type</small>
-                    <b>{(cam.streamType || 'demo').toUpperCase()}</b>
+                  <div className="telemetry-chip">
+                    <span className="telemetry-label">⚡ AI Latency</span>
+                    <span className="telemetry-val">{cam.latencyMs || 35} <small>ms</small></span>
+                  </div>
+                  <div className="telemetry-chip">
+                    <span className="telemetry-label">📐 Resolution</span>
+                    <span className="telemetry-val">{cam.resolution || '1080p'}</span>
+                  </div>
+                  <div className="telemetry-chip">
+                    <span className="telemetry-label">🏢 Location</span>
+                    <span className="telemetry-val zone-val">{cam.zone || 'Concourse'}</span>
+                  </div>
+                </div>
+
+                <div className="tile-action-bar">
+                  <div className="feed-status-indicator">
+                    <span className="status-ping" />
+                    <span>FEED SYNCHRONIZED</span>
                   </div>
                   <button
-                    className="button primary"
-                    style={{ height: '30px', fontSize: '11px', padding: '0 10px' }}
+                    className="tile-action-btn active"
+                    style={{ fontSize: '11.5px', padding: '5px 12px' }}
                     onClick={() => handleViewLive(cam.id)}
                   >
-                    Focus Live Monitor →
+                    🎥 Focus Live Monitor →
                   </button>
                 </div>
               </div>

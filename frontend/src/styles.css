@@ -527,31 +527,313 @@ h1 { font: 800 27px Manrope, sans-serif; letter-spacing: -0.8px; margin: 8px 0 6
 .monitor-main-split {
   display: grid; grid-template-columns: minmax(0, 2fr) 360px; gap: 18px;
 }
-.monitor-grid { display: grid; gap: 14px; }
+/* Sleek High-Tech Surveillance Camera Tiles */
+.monitor-grid { display: grid; gap: 16px; }
 .grid-1x1 { grid-template-columns: 1fr; }
-.grid-2x2 { grid-template-columns: repeat(2, 1fr); }
-.grid-3x3 { grid-template-columns: repeat(3, 1fr); }
+.grid-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-3x3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .monitor-tile {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
-  overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  background: #0f1621;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  position: relative;
 }
-.monitor-tile.active-tile { border-color: #276de0; box-shadow: 0 0 0 2px rgba(39, 109, 224, 0.25); }
-.tile-header {
-  padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; font-size: 13px;
+.monitor-tile:hover {
+  border-color: rgba(39, 109, 224, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
 }
-.tile-id { font-weight: 800; color: var(--muted); font-size: 12px; }
-.tile-name { font-weight: 700; margin-left: 8px; color: var(--text); }
-.tile-status { margin-left: auto; font-size: 11px; padding: 3px 8px; border-radius: 5px; font-weight: 700; }
-.tile-status.critical { background: #fff0ef; color: #cf4b54; }
-.tile-status.warning { background: #fff7e9; color: #cc841b; }
-.tile-status.normal { background: #ecf8f2; color: #159b6f; }
+.monitor-tile.active-tile {
+  border-color: #276de0;
+  box-shadow: 0 0 0 2px rgba(39, 109, 224, 0.35), 0 8px 30px rgba(39, 109, 224, 0.15);
+}
 
-.tile-visual { width: 100%; position: relative; overflow: hidden; }
-.tile-footer {
-  padding: 10px 14px; display: flex; justify-content: space-between; font-size: 12px; border-top: 1px solid var(--line);
+/* Tile Header */
+.tile-header {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(15, 22, 33, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.footer-metric small { display: block; color: var(--muted); font-size: 10px; font-weight: 600; margin-bottom: 2px; }
+.tile-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.cctv-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: recPulse 1.4s infinite ease-in-out;
+  flex-shrink: 0;
+}
+@keyframes recPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.cctv-badge-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8da2bb;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.cctv-badge-yt {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cctv-badge-wb {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cctv-badge-rtsp {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(6, 182, 212, 0.15);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.cctv-badge-demo {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.cctv-tile-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cctv-cap-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cctv-cap-badge.ok {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.cctv-cap-badge.warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.cctv-cap-badge.crit {
+  background: rgba(239, 68, 68, 0.14);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.cctv-cap-badge .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cctv-quick-focus {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cctv-quick-focus:hover {
+  background: #276de0;
+  color: white;
+  border-color: #276de0;
+}
+
+/* Visual Viewport */
+.tile-visual {
+  width: 100%;
+  position: relative;
+  background: #090e15;
+}
+
+/* Capacity Track */
+.cctv-bar-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  position: relative;
+}
+.cctv-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease-in-out;
+}
+.cctv-bar-fill.ok {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+.cctv-bar-fill.warn {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+.cctv-bar-fill.crit {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+/* Telemetry Micro-Cards (Footer Grid) */
+.tile-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(15, 22, 33, 0.65);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.telemetry-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.telemetry-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+.telemetry-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.telemetry-val small {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+}
+.telemetry-val.headcount-val {
+  color: #38bdf8;
+  font-size: 14px;
+  font-weight: 800;
+}
+.telemetry-val.zone-val {
+  font-family: inherit;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Tile Action Toolbar */
+.tile-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 10px;
+  background: rgba(15, 22, 33, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.feed-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #10b981;
+  letter-spacing: 0.4px;
+}
+.status-ping {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+.tile-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tile-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tile-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.tile-action-btn.active {
+  background: rgba(39, 109, 224, 0.2);
+  color: #60a5fa;
+  border-color: rgba(39, 109, 224, 0.4);
+}
 
 /* Telemetry Sidebar */
 .monitor-sidebar-panel {
