@@ -14,7 +14,60 @@ const defaultAdminUser = {
 };
 
 const initialCameras = [
-  { id: 'CAM-01', name: 'Arena Concourse Gate A', zone: 'ARENA-CONCOURSE-01', zoneId: 'zone-arena-01', count: 0, capacity: 0, maxCapacity: 350, status: 'Live', scene: 'concourse', fps: 2.0, latencyMs: 38, resolution: '1920x1080', streamUrl: '/samples/mall_concourse.jpg' }
+  {
+    id: 'CAM-01',
+    name: 'Arena Concourse Gate A',
+    zone: 'ARENA-CONCOURSE-01',
+    zoneId: 'zone-arena-01',
+    zoneName: 'Arena Main Concourse',
+    count: 0,
+    capacity: 0,
+    maxCapacity: 350,
+    status: 'Live',
+    scene: 'concourse',
+    fps: 2.0,
+    latencyMs: 38,
+    resolution: '1920x1080',
+    streamUrl: '/samples/mall_concourse.jpg',
+    streamType: 'demo',
+    mapPin: { x: 30, y: 35, bearing: 'South-East', angle: 135, fov: 75 }
+  },
+  {
+    id: 'CAM-02',
+    name: 'Shibuya Crossing Web Stream',
+    zone: 'ARENA-CONCOURSE-01',
+    zoneId: 'zone-arena-01',
+    zoneName: 'Arena Main Concourse',
+    count: 0,
+    capacity: 0,
+    maxCapacity: 350,
+    status: 'Live',
+    scene: 'entrance',
+    fps: 2.0,
+    latencyMs: 42,
+    resolution: '1920x1080',
+    streamUrl: 'https://www.youtube.com/watch?v=1-iS7LArMPA',
+    streamType: 'youtube',
+    mapPin: { x: 44, y: 45, bearing: 'South', angle: 0, fov: 80 }
+  },
+  {
+    id: 'CAM-03',
+    name: 'North Bleachers Dense Array',
+    zone: 'NORTH-BLEACHERS-02',
+    zoneId: 'zone-bleachers-02',
+    zoneName: 'North Grandstand & Bleachers',
+    count: 0,
+    capacity: 0,
+    maxCapacity: 500,
+    status: 'Live',
+    scene: 'stadium',
+    fps: 2.0,
+    latencyMs: 36,
+    resolution: '1920x1080',
+    streamUrl: '/samples/stadium_dense.jpg',
+    streamType: 'demo',
+    mapPin: { x: 74, y: 38, bearing: 'West', angle: 90, fov: 85 }
+  }
 ];
 
 const initialZones = [
@@ -32,7 +85,72 @@ const initialZones = [
     egressCount: 4,
     streamUrl: '/samples/mall_concourse.jpg',
     streamType: 'demo',
-    description: 'Primary spectator concourse and ingress corridor. Continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.'
+    description: 'Primary spectator concourse and ingress corridor. Continuously monitored with CSRNet density regression and YOLOv8 spatial tracking.',
+    mapLocation: {
+      lat: 35.6595,
+      lng: 139.7004,
+      areaSqM: 420,
+      boundary: [
+        { x: 12, y: 18 },
+        { x: 52, y: 18 },
+        { x: 52, y: 55 },
+        { x: 12, y: 55 }
+      ]
+    }
+  },
+  {
+    id: 'zone-bleachers-02',
+    name: 'North Grandstand & Bleachers',
+    code: 'NORTH-BLEACHERS-02',
+    floor: 'Level 2 Seating',
+    currentCount: 0,
+    maxCapacity: 500,
+    warningPct: 75,
+    criticalPct: 90,
+    occupancyPct: 0,
+    status: 'normal',
+    egressCount: 6,
+    streamUrl: '/samples/stadium_dense.jpg',
+    streamType: 'demo',
+    description: 'Tiered stadium seating section characterized by high crowd density and severe head occlusion.',
+    mapLocation: {
+      lat: 35.6601,
+      lng: 139.7010,
+      areaSqM: 680,
+      boundary: [
+        { x: 56, y: 18 },
+        { x: 92, y: 18 },
+        { x: 92, y: 65 },
+        { x: 56, y: 65 }
+      ]
+    }
+  },
+  {
+    id: 'zone-turnstiles-03',
+    name: 'South Gateway & Turnstiles',
+    code: 'SOUTH-TURNSTILES-03',
+    floor: 'Ground Level Ingress',
+    currentCount: 0,
+    maxCapacity: 250,
+    warningPct: 65,
+    criticalPct: 80,
+    occupancyPct: 0,
+    status: 'normal',
+    egressCount: 3,
+    streamUrl: '/samples/street_pedestrians.jpg',
+    streamType: 'demo',
+    description: 'Entry checkpoints and turnstile verification corridor for spectator ticket scanning.',
+    mapLocation: {
+      lat: 35.6590,
+      lng: 139.7000,
+      areaSqM: 310,
+      boundary: [
+        { x: 12, y: 60 },
+        { x: 52, y: 60 },
+        { x: 52, y: 88 },
+        { x: 12, y: 88 }
+      ]
+    }
   }
 ];
 
@@ -423,7 +541,14 @@ export const useCrowdStore = create((set, get) => {
       isWebcam: isWebcam,
       lastSnapshot: newCam.lastSnapshot || null,
       snapshotUrl: newCam.snapshotUrl || null,
-      heatmapUrl: newCam.heatmapUrl || null
+      heatmapUrl: newCam.heatmapUrl || null,
+      mapPin: newCam.mapPin || {
+        x: Math.floor(Math.random() * 30) + 30,
+        y: Math.floor(Math.random() * 30) + 30,
+        bearing: newCam.mapPin?.bearing || 'South',
+        angle: newCam.mapPin?.angle || 0,
+        fov: 75
+      }
     };
 
     // Save directly to MongoDB
@@ -720,7 +845,18 @@ export const useCrowdStore = create((set, get) => {
       egressCount: Number(newZone.egressCount) || 2,
       streamUrl: newZone.streamUrl || '',
       streamType: newZone.streamType || 'url',
-      description: newZone.description || 'Configured monitoring safety zone.'
+      description: newZone.description || 'Configured monitoring safety zone.',
+      mapLocation: newZone.mapLocation || {
+        lat: 35.6595,
+        lng: 139.7004,
+        areaSqM: newZone.areaSqM || 350,
+        boundary: newZone.boundary || [
+          { x: 20, y: 25 },
+          { x: 60, y: 25 },
+          { x: 60, y: 65 },
+          { x: 20, y: 65 }
+        ]
+      }
     };
 
     set((state) => ({

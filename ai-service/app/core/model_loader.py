@@ -9,10 +9,14 @@ import sys
 import torch
 import torchvision.transforms as transforms
 
-# Ensure project root in sys.path
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+# Ensure project roots in sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_DIR = os.path.abspath(os.path.join(CURRENT_DIR, '..', '..'))
+BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, '..', '..', '..'))
+
+for path in [APP_DIR, BASE_DIR]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from ml.src.models.csrnet import CSRNet
 from ml.src.gradcam import DensityGradCAM
@@ -41,10 +45,13 @@ class ModelLoader:
         
         # Paths to weights
         weights_paths = [
+            cfg.CSRNET_WEIGHTS_PATH,
             os.path.abspath(cfg.CSRNET_WEIGHTS_PATH),
+            os.path.abspath("weights/csrnet_shanghaitech.pth"),
             os.path.abspath("ai-service/weights/csrnet_shanghaitech.pth"),
             os.path.abspath("ml/weights/csrnet_shanghaitech.pth"),
-            os.path.abspath("../ml/weights/csrnet_shanghaitech.pth")
+            os.path.abspath("../ml/weights/csrnet_shanghaitech.pth"),
+            "/app/weights/csrnet_shanghaitech.pth"
         ]
         
         chosen_path = None

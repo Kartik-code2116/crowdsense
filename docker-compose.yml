@@ -1,5 +1,5 @@
 services:
-  # 1. MongoDB with persistent time-series volume
+  # 1. MongoDB with persistent time-series storage
   mongodb:
     image: mongo:7.0
     container_name: crowdsense-mongodb
@@ -12,8 +12,14 @@ services:
       - mongo-data:/data/db
     networks:
       - crowdsense-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # 2. Python FastAPI AI Service (PyTorch / ONNX / Density Inference / Grad-CAM / LSTM)
+  # 2. Python FastAPI AI Service (PyTorch CSRNet, YOLOv8, Grad-CAM & LSTM)
   ai-service:
     build:
       context: ./ai-service
@@ -26,12 +32,14 @@ services:
       - DEFAULT_MODEL=csrnet
       - DEVICE=cpu
       - SURGE_THRESHOLD_PERCENT=25.0
+      - CSRNET_WEIGHTS_PATH=/app/weights/csrnet_shanghaitech.pth
     volumes:
-      - ./ml/weights:/app/weights:ro
+      - ./ai-service/weights:/app/weights:ro
+      - ./ml/weights:/app/ml-weights:ro
     networks:
       - crowdsense-net
 
-  # 3. Node.js + Express API Gateway (Auth, Sockets, Alert Engine, Ingestion)
+  # 3. Node.js + Express API Gateway (Auth, Sockets, Ingestion & Alert Engine)
   backend:
     build:
       context: ./backend
@@ -48,12 +56,14 @@ services:
       - AI_SERVICE_URL=http://ai-service:8000
       - CORS_ORIGIN=*
     depends_on:
-      - mongodb
-      - ai-service
+      mongodb:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
     networks:
       - crowdsense-net
 
-  # 4. React Frontend Dashboard (Vite + Nginx)
+  # 4. React Frontend Operations Dashboard (Nginx Production Reverse Proxy)
   frontend:
     build:
       context: ./frontend
@@ -63,7 +73,8 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     networks:
       - crowdsense-net
 

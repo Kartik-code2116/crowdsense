@@ -162,7 +162,8 @@ export default function CamerasView() {
             <thead>
               <tr>
                 <th>CAMERA NAME</th>
-                <th>ASSIGNED ZONE</th>
+                <th>LINKED SAFETY ZONE</th>
+                <th>SPATIAL MAP PIN</th>
                 <th>STREAM SOURCE &amp; TYPE</th>
                 <th>LIVE DETECTION</th>
                 <th>RESOLUTION</th>
@@ -184,7 +185,20 @@ export default function CamerasView() {
                       <b>{cam.name}</b>
                       <small style={{ display: 'block', color: 'var(--muted)', fontFamily: 'monospace' }}>{cam.id}</small>
                     </td>
-                    <td>{cam.zone}</td>
+                    <td>
+                      <b>{cam.zoneName || cam.zone}</b>
+                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10.5px' }}>
+                        Ceiling: {cam.maxCapacity || 350} people
+                      </small>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '11px', color: '#00ffcc', fontWeight: '700' }}>
+                        📍 {cam.mapPin ? `(${cam.mapPin.x}%, ${cam.mapPin.y}%)` : '(35%, 40%)'}
+                      </span>
+                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>
+                        Facing: {cam.mapPin?.bearing || 'South'}
+                      </small>
+                    </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         <span
@@ -197,7 +211,7 @@ export default function CamerasView() {
                             color: isYt ? '#ff3344' : isWb ? '#00ffcc' : 'var(--accent-teal)'
                           }}
                         >
-                          {isYt ? '🌐 YOUTUBE LIVE' : isWb ? '📹 LAPTOP WEBCAM' : '🔗 RTSP / VIDEO FEED'}
+                          {isYt ? '🔴 YOUTUBE LIVE' : isWb ? '📹 LAPTOP WEBCAM' : '🔗 RTSP / VIDEO FEED'}
                         </span>
                         <code style={{ fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cam.streamUrl}>
                           {cam.streamUrl || 'demo://sample'}

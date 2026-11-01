@@ -2,6 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 import { apiClient } from '../api/client';
 import { webcamManager } from '../services/webcamManager';
+import VenueSpatialMap from '../components/VenueSpatialMap';
+import {
+  Layers,
+  MapPin,
+  Video,
+  Shield,
+  AlertTriangle,
+  Radio,
+  Plus,
+  Compass,
+  Maximize2,
+  Trash2,
+  Edit2,
+  Activity,
+  CheckCircle2
+} from 'lucide-react';
 
 /**
  * Intelligent Stream URL Parser
@@ -68,16 +84,21 @@ export function parseStreamMeta(url) {
 export default function ZonesView() {
   const {
     zones,
+    cameras,
     addZone,
     deleteZone,
     updateZone,
     updateZoneThresholds,
     recordRealDetection,
-    inspectInCrowdSearch
+    inspectInCrowdSearch,
+    setShowAddCameraModal,
+    setActiveCameraId,
+    setPage
   } = useCrowdStore();
 
-  // Modal & Edit States
+  const [activeTab, setActiveTab] = useState('cards'); // 'cards' | 'map'
   const [showAddModal, setShowAddModal] = useState(false);
+  const [modalStep, setModalStep] = useState('details'); // 'details' | 'map'
   const [editingStreamZoneId, setEditingStreamZoneId] = useState(null);
   const [newStreamUrl, setNewStreamUrl] = useState('');
 
@@ -95,38 +116,85 @@ export default function ZonesView() {
   const streamTrackRef = useRef(null);
   const liveIntervalRef = useRef(null);
 
-  // Form Data for Adding a New Zone
+  // Form Data for Adding a New Zone with Real Spatial Area
   const [newZoneForm, setNewZoneForm] = useState({
-    name: '',
-    code: '',
-    floor: 'Ground Level',
-    maxCapacity: 200,
+    name: 'East Spectator Plaza',
+    code: `ZONE-0${zones.length + 1}`,
+    floor: 'Level 1 Concourse',
+    maxCapacity: 300,
     warningPct: 70,
     criticalPct: 85,
-    egressCount: 2,
+    egressCount: 3,
     streamUrl: '/samples/mall_concourse.jpg',
-    description: ''
+    description: 'Designated outdoor spectator area with continuous dilated CSRNet density estimation.',
+    mapLocation: {
+      lat: 35.6598,
+      lng: 139.7008,
+      areaSqM: 380,
+      boundary: [
+        { x: 20, y: 30 },
+        { x: 70, y: 30 },
+        { x: 70, y: 70 },
+        { x: 20, y: 70 }
+      ]
+    }
   });
 
-  // Preset stream options for rapid selection
   const streamPresets = [
-    { label: '▶ YouTube Live Stream / Video (Paste your URL)', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    { label: '▶ YouTube Live Stream / Video', url: 'https://www.youtube.com/watch?v=1-iS7LArMPA' },
     { label: '💻 Integrated Webcam / USB Camera', url: 'webcam' },
-    { label: '🏢 Arena Concourse Ingress Feed (Real Crowd)', url: '/samples/mall_concourse.jpg' },
-    { label: '🚶 Urban Pedestrian Crossing (Real Crowd)', url: '/samples/street_pedestrians.jpg' },
-    { label: '🏟️ Dense Stadium Bleachers Feed (Real Crowd)', url: '/samples/stadium_dense.jpg' },
-    { label: '🏃 Marathon Chokepoint Egress (Real Crowd)', url: '/samples/marathon_crowd.jpg' },
+    { label: '🏢 Arena Concourse Ingress Feed', url: '/samples/mall_concourse.jpg' },
+    { label: '🚶 Urban Pedestrian Crossing', url: '/samples/street_pedestrians.jpg' },
+    { label: '🏟️ Dense Stadium Bleachers Feed', url: '/samples/stadium_dense.jpg' },
+    { label: '🏃 Marathon Chokepoint Egress', url: '/samples/marathon_crowd.jpg' },
     { label: '🌐 Custom RTSP / HLS / MP4 Stream', url: 'rtsp://edge.venue.lan/live/cam1' }
   ];
 
-  // Stop scanning & media tracks on modal close
+  const handleBoundaryChange = (boundaryData) => {
+    setNewZoneForm((prev) => ({
+      ...prev,
+      mapLocation: {
+        ...prev.mapLocation,
+        boundary: boundaryData.boundary,
+        areaSqM: boundaryData.areaSqM,
+        lat: boundaryData.lat,
+        lng: boundaryData.lng
+      }
+    }));
+  };
+
+  const handleCreateZone = async (e) => {
+    e.preventDefault();
+    await addZone({
+      name: newZoneForm.name,
+      code: newZoneForm.code || `ZONE-0${zones.length + 1}`,
+      floor: newZoneForm.floor,
+      maxCapacity: Number(newZoneForm.maxCapacity) || 200,
+      warningPct: Number(newZoneForm.warningPct) || 70,
+      criticalPct: Number(newZoneForm.criticalPct) || 85,
+      egressCount: Number(newZoneForm.egressCount) || 2,
+      streamUrl: newZoneForm.streamUrl || '/samples/mall_concourse.jpg',
+      streamType: parseStreamMeta(newZoneForm.streamUrl).type,
+      description: newZoneForm.description,
+      mapLocation: newZoneForm.mapLocation
+    });
+
+    setShowAddModal(false);
+    setModalStep('details');
+  };
+
+  const handleDeleteZone = async (zone) => {
+    if (window.confirm(`Are you sure you want to remove zone "${zone.name}"?`)) {
+      await deleteZone(zone.id);
+    }
+  };
+
   const stopLiveScanner = () => {
     if (liveIntervalRef.current) {
       clearInterval(liveIntervalRef.current);
       liveIntervalRef.current = null;
     }
     if (streamTrackRef.current) {
-      // Do not kill shared webcam tracks
       streamTrackRef.current = null;
     }
     setIsLiveScanning(false);
@@ -139,7 +207,6 @@ export default function ZonesView() {
     setScannerError(null);
   };
 
-  // Launch live scanner for a specific zone
   const handleOpenScanner = async (zone) => {
     setActiveScanningZone(zone);
     setScannerTelemetry(null);
@@ -149,7 +216,6 @@ export default function ZonesView() {
     const meta = parseStreamMeta(zone.streamUrl);
     setScannerViewMode(meta.type === 'youtube' || meta.type === 'twitch' ? 'split' : 'vision');
 
-    // If stream is webcam, start local camera stream immediately
     if (meta.type === 'webcam') {
       try {
         if (videoRef.current) {
@@ -164,7 +230,6 @@ export default function ZonesView() {
     }
   };
 
-  // Execute a deep AI scan on the current frame of the active zone
   const executeScanTick = async () => {
     if (!activeScanningZone) return;
     setScannerLoading(true);
@@ -178,7 +243,6 @@ export default function ZonesView() {
       let result = null;
       let frameImageSrc = activeScanningZone.streamUrl;
 
-      // Case A: Local WebRTC Webcam or direct HTML5 Video element
       if (isHtmlVideo && videoRef.current && videoRef.current.readyState >= 2) {
         const video = videoRef.current;
         const canvas = document.createElement('canvas');
@@ -187,14 +251,11 @@ export default function ZonesView() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+        const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
         frameImageSrc = canvas.toDataURL('image/jpeg', 0.9);
         result = await apiClient.predictImage(blob, scanModel, activeScanningZone.maxCapacity);
-      }
-      // Case B: YouTube URL, RTSP, HLS, or Network Stream URL
-      else {
+      } else {
         const targetUrl = activeScanningZone.streamUrl || '/samples/mall_concourse.jpg';
-        // Calls FastAPI /stream/scan-url which uses yt-dlp & OpenCV to capture an authentic frame
         const streamRes = await apiClient.scanStreamUrl(targetUrl, scanModel, activeScanningZone.maxCapacity);
         if (streamRes && streamRes.status === 'success') {
           result = streamRes.telemetry;
@@ -202,7 +263,6 @@ export default function ZonesView() {
             frameImageSrc = streamRes.frame_base64;
           }
         } else {
-          // Fallback: fetch as image blob if it's a direct image path
           const imgResp = await fetch(targetUrl);
           const blob = await imgResp.blob();
           result = await apiClient.predictImage(blob, scanModel, activeScanningZone.maxCapacity);
@@ -226,7 +286,6 @@ export default function ZonesView() {
           meta
         });
 
-        // Synchronize with global application state (Dashboard, Live Monitor, Analytics, Incidents)
         recordRealDetection({
           count: detectedCount,
           boxes: result.detected_boxes || [],
@@ -247,468 +306,461 @@ export default function ZonesView() {
     }
   };
 
-  // Toggle continuous live scanning
-  const toggleContinuousLiveScan = () => {
+  const toggleContinuousScanning = () => {
     if (isLiveScanning) {
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current);
-        liveIntervalRef.current = null;
-      }
-      setIsLiveScanning(false);
+      stopLiveScanner();
     } else {
       setIsLiveScanning(true);
       executeScanTick();
-      liveIntervalRef.current = setInterval(executeScanTick, 1800);
-    }
-  };
-
-  // Submit new zone form
-  const handleCreateZoneSubmit = async (e) => {
-    e.preventDefault();
-    if (!newZoneForm.name.trim()) return;
-
-    const zoneCount = zones.length + 1;
-    const generatedCode = newZoneForm.code.trim() || `ZONE-0${zoneCount}`;
-    const meta = parseStreamMeta(newZoneForm.streamUrl);
-
-    await addZone({
-      name: newZoneForm.name.trim(),
-      code: generatedCode.toUpperCase(),
-      floor: newZoneForm.floor.trim() || 'Ground Level',
-      maxCapacity: Number(newZoneForm.maxCapacity) || 200,
-      warningPct: Number(newZoneForm.warningPct) || 70,
-      criticalPct: Number(newZoneForm.criticalPct) || 85,
-      egressCount: Number(newZoneForm.egressCount) || 2,
-      streamUrl: newZoneForm.streamUrl.trim(),
-      streamType: meta.type,
-      description: newZoneForm.description.trim() || 'Custom user-defined venue monitoring sector.'
-    });
-
-    setShowAddModal(false);
-    setNewZoneForm({
-      name: '',
-      code: '',
-      floor: 'Ground Level',
-      maxCapacity: 200,
-      warningPct: 70,
-      criticalPct: 85,
-      egressCount: 2,
-      streamUrl: '/samples/mall_concourse.jpg',
-      description: ''
-    });
-  };
-
-  // Save updated stream URL for a zone
-  const handleSaveStream = async (zoneId) => {
-    const meta = parseStreamMeta(newStreamUrl);
-    await updateZone(zoneId, {
-      streamUrl: newStreamUrl.trim(),
-      streamType: meta.type
-    });
-    setEditingStreamZoneId(null);
-  };
-
-  // Confirm and delete zone
-  const handleDeleteZone = async (zone) => {
-    if (zones.length <= 1) {
-      alert('At least one demo safety zone must remain configured in the system.');
-      return;
-    }
-    if (window.confirm(`Are you sure you want to remove "${zone.name}" (${zone.code})?`)) {
-      await deleteZone(zone.id);
+      liveIntervalRef.current = setInterval(() => {
+        executeScanTick();
+      }, 3000);
     }
   };
 
   return (
-    <div className="zones-view-container" style={{ paddingBottom: '40px' }}>
-      {/* Top Header Row */}
-      <div className="page-action-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div className="zones-view-container">
+      {/* Top Header Row with Spatial Map Switcher */}
+      <div className="page-action-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <h2>Safety Zones & Capacity Ceiling Management</h2>
-          <p>
-            Venue Safety Sectors ({zones.length}) · Add zones, assign live YouTube / RTSP / Webcam streams, and run real AI crowd scans.
-          </p>
+          <h2>Safety Zones &amp; Capacity Ceilings ({zones.length} Zones)</h2>
+          <p>Multi-camera spatial boundaries, real physical map coverage, and safety thresholds</p>
         </div>
-        <button
-          className="button primary"
-          style={{ height: '38px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          onClick={() => setShowAddModal(true)}
-        >
-          <span>+</span> Add New Safety Zone
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div className="layout-picker" style={{ display: 'flex' }}>
+            <button
+              type="button"
+              className={`layout-btn ${activeTab === 'cards' ? 'active' : ''}`}
+              onClick={() => setActiveTab('cards')}
+            >
+              🏢 Zone Cards &amp; Cameras
+            </button>
+            <button
+              type="button"
+              className={`layout-btn ${activeTab === 'map' ? 'active' : ''}`}
+              onClick={() => setActiveTab('map')}
+            >
+              🗺️ Spatial Venue Map
+            </button>
+          </div>
+          <button className="button primary" onClick={() => setShowAddModal(true)}>
+            + Create New Zone
+          </button>
+        </div>
       </div>
 
-      {/* Zones Grid */}
-      <div className="zones-grid">
-        {zones.map((zone) => {
-          const isCritical = zone.occupancyPct >= zone.criticalPct;
-          const isWarning = zone.occupancyPct >= zone.warningPct && !isCritical;
-          const isEditingStream = editingStreamZoneId === zone.id;
-          const streamMeta = parseStreamMeta(zone.streamUrl);
-          const hasStream = Boolean(zone.streamUrl);
-
-          return (
-            <div key={zone.id} className="panel zone-detail-card" style={{ position: 'relative' }}>
-              {/* Card Header */}
-              <div className="panel-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="zone-code">{zone.code}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--muted)', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: '4px' }}>
-                      {zone.floor || 'Ground Level'}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontWeight: '700',
-                        padding: '2px 7px',
-                        borderRadius: '4px',
-                        background: streamMeta.type === 'youtube' ? '#ffebe9' : streamMeta.type === 'webcam' ? '#e6f6ee' : 'var(--surface-soft)',
-                        color: streamMeta.type === 'youtube' ? '#c00' : streamMeta.type === 'webcam' ? '#159b6f' : 'var(--text)'
-                      }}
-                    >
-                      {streamMeta.badge}
-                    </span>
-                  </div>
-                  <h2 style={{ margin: '4px 0 0 0', fontSize: '18px' }}>{zone.name}</h2>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className={`zone-badge ${zone.status}`}>
-                    {zone.occupancyPct}% Occupancy
-                  </span>
-                  {zones.length > 1 && (
-                    <button
-                      className="button secondary"
-                      style={{ height: '26px', padding: '0 8px', fontSize: '11px', color: '#cf4b54' }}
-                      title="Delete this zone"
-                      onClick={() => handleDeleteZone(zone)}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
+      {/* VIEW MODE 1: INTERACTIVE SPATIAL VENUE MAP */}
+      {activeTab === 'map' && (
+        <div style={{ marginTop: '16px' }}>
+          <div className="panel" style={{ padding: '16px' }}>
+            <div className="panel-heading" style={{ marginBottom: '12px' }}>
+              <div>
+                <h2>Venue Spatial Map &amp; Edge Camera Topology</h2>
+                <p>Interactive spatial view showing zones, physical boundaries, and camera field-of-view cones</p>
               </div>
-
-              {/* Metric Stats */}
-              <div className="zone-metric-stats" style={{ margin: '14px 0' }}>
-                <div>
-                  <small>Real Headcount</small>
-                  <b>{zone.currentCount} <small>people</small></b>
-                </div>
-                <div>
-                  <small>Safety Ceiling</small>
-                  <b>{zone.maxCapacity} <small>limit</small></b>
-                </div>
-                <div>
-                  <small>Egress Routes</small>
-                  <b>{zone.egressCount || 2} <small>doors</small></b>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="progress-track" style={{ height: '8px', margin: '8px 0 14px 0' }}>
-                <div
-                  className={`progress-fill ${zone.status}`}
-                  style={{ width: `${Math.min(100, zone.occupancyPct)}%` }}
-                />
-              </div>
-
-              {/* Assigned Live Streaming Feed Box */}
-              <div
-                style={{
-                  background: 'var(--surface-soft)',
-                  border: '1px solid var(--line)',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                  marginBottom: '14px',
-                  fontSize: '12px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: hasStream ? '#159b6f' : '#cc841b', fontWeight: 'bold' }}>
-                      {hasStream ? '● Stream Configured' : '○ No Stream Assigned'}
-                    </span>
-                    <span style={{ color: 'var(--muted)', fontSize: '11px' }}>
-                      ({streamMeta.label})
-                    </span>
-                  </div>
-                  <button
-                    className="text-button"
-                    style={{ fontSize: '11px', padding: 0 }}
-                    onClick={() => {
-                      if (isEditingStream) {
-                        setEditingStreamZoneId(null);
-                      } else {
-                        setEditingStreamZoneId(zone.id);
-                        setNewStreamUrl(zone.streamUrl || '');
-                      }
-                    }}
-                  >
-                    {isEditingStream ? 'Cancel' : 'Change Stream URL ✎'}
-                  </button>
-                </div>
-
-                {/* Current Stream URL display */}
-                <div style={{ marginTop: '6px', wordBreak: 'break-all' }}>
-                  <code style={{ fontSize: '11.5px', color: 'var(--text)' }}>
-                    {zone.streamUrl || 'None (Click "Change Stream URL" to assign)'}
-                  </code>
-                </div>
-
-                {/* Inline Stream Editing Form */}
-                {isEditingStream && (
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--line)' }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
-                        Quick Select Feed Preset:
-                      </label>
-                      <select
-                        style={{ width: '100%', fontSize: '12px', padding: '6px', borderRadius: '4px', border: '1px solid var(--line)' }}
-                        onChange={(e) => setNewStreamUrl(e.target.value)}
-                        value={newStreamUrl}
-                      >
-                        {streamPresets.map((p, idx) => (
-                          <option key={idx} value={p.url}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={{ marginBottom: '8px' }}>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
-                        Stream URL (YouTube, RTSP, HLS, or Video):
-                      </label>
-                      <input
-                        type="text"
-                        style={{ width: '100%', fontSize: '12px', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--line)' }}
-                        placeholder="e.g. https://www.youtube.com/watch?v=... or rtsp://... or webcam"
-                        value={newStreamUrl}
-                        onChange={(e) => setNewStreamUrl(e.target.value)}
-                      />
-                      {newStreamUrl && (
-                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#159b6f' }}>
-                          ✓ Detected Source: <b>{parseStreamMeta(newStreamUrl).label}</b>
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <button
-                        className="button secondary"
-                        style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                        onClick={() => setEditingStreamZoneId(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="button primary"
-                        style={{ height: '28px', fontSize: '11px', padding: '0 12px' }}
-                        onClick={() => handleSaveStream(zone.id)}
-                      >
-                        Save Stream URL
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Threshold Sliders */}
-              <div className="threshold-controls">
-                <div className="slider-group">
-                  <div className="slider-label">
-                    <span>Warning Surge Threshold</span>
-                    <b>{zone.warningPct}%</b>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="85"
-                    value={zone.warningPct}
-                    onChange={(e) => updateZoneThresholds(zone.id, Number(e.target.value), zone.criticalPct)}
-                  />
-                </div>
-
-                <div className="slider-group">
-                  <div className="slider-label">
-                    <span>Critical Breach Threshold</span>
-                    <b>{zone.criticalPct}%</b>
-                  </div>
-                  <input
-                    type="range"
-                    min="75"
-                    max="98"
-                    value={zone.criticalPct}
-                    onChange={(e) => updateZoneThresholds(zone.id, zone.warningPct, Number(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              {/* Card Footer: Status & Scan Buttons */}
-              <div className="zone-footer-status">
-                <div style={{ marginBottom: '10px' }}>
-                  {isCritical ? (
-                    <span className="text-red">⚠ Critical Alert: Occupancy exceeds safety threshold</span>
-                  ) : isWarning ? (
-                    <span className="text-amber">▲ Warning: Influx nearing threshold limit</span>
-                  ) : (
-                    <span className="text-green">✓ Normal operating condition within NFPA standards</span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <button
-                    className="button primary"
-                    style={{ fontSize: '12px', padding: '6px 14px', height: '32px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => handleOpenScanner(zone)}
-                  >
-                    <span>🔍</span> Scan Zone Live Stream
-                  </button>
-                  <button
-                    className="button secondary"
-                    style={{ fontSize: '12px', padding: '6px 12px', height: '32px' }}
-                    onClick={() => inspectInCrowdSearch(zone.streamUrl || '/samples/mall_concourse.jpg', zone.id)}
-                  >
-                    Studio Scan →
-                  </button>
-                </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span className="badge-pill" style={{ background: '#edf4ff', color: '#276de0' }}>
+                  {zones.length} Monitored Zones
+                </span>
+                <span className="badge-pill" style={{ background: '#e6f6ee', color: '#159b6f' }}>
+                  {cameras.length} Active Cameras
+                </span>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* MODAL 1: ADD NEW SAFETY ZONE */}
+            <VenueSpatialMap
+              mode="view"
+              zones={zones}
+              cameras={cameras}
+              height={440}
+              showControls={true}
+              onSelectZone={(z) => setActiveTab('cards')}
+              onSelectCamera={(cam) => {
+                setActiveCameraId(cam.id);
+                setPage('Live monitor');
+              }}
+            />
+
+            <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--muted)', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <i style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px', display: 'inline-block' }} /> Normal (&lt; 70%)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <i style={{ width: '10px', height: '10px', background: '#f59e0b', borderRadius: '2px', display: 'inline-block' }} /> Warning (&gt; 70%)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <i style={{ width: '10px', height: '10px', background: '#ef4444', borderRadius: '2px', display: 'inline-block' }} /> Critical Ceiling (&gt; 85%)
+                </span>
+              </div>
+              <div>
+                💡 <b>Click any camera pin</b> on the map to jump directly to its Live CCTV stream.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW MODE 2: ZONE CARDS WITH HIERARCHICAL IMPLEMENTED CAMERAS */}
+      {activeTab === 'cards' && (
+        <div className="zone-grid" style={{ marginTop: '16px' }}>
+          {zones.map((zone) => {
+            const streamMeta = parseStreamMeta(zone.streamUrl);
+            const isEditingStream = editingStreamZoneId === zone.id;
+            const hasStream = zone.streamUrl && zone.streamUrl.trim() !== '';
+
+            // Find all cameras implemented under this specific zone
+            const zoneCameras = cameras.filter((c) => c.zoneId === zone.id);
+
+            return (
+              <div key={zone.id} className="panel zone-detail-card" style={{ position: 'relative' }}>
+                {/* Zone Header */}
+                <div className="panel-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="zone-code">{zone.code}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: '4px' }}>
+                        {zone.floor || 'Ground Level'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: '700',
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          background: streamMeta.type === 'youtube' ? '#ffebe9' : streamMeta.type === 'webcam' ? '#e6f6ee' : 'var(--surface-soft)',
+                          color: streamMeta.type === 'youtube' ? '#c00' : streamMeta.type === 'webcam' ? '#159b6f' : 'var(--text)'
+                        }}
+                      >
+                        {streamMeta.badge}
+                      </span>
+                    </div>
+                    <h2 style={{ margin: '4px 0 0 0', fontSize: '18px' }}>{zone.name}</h2>
+                    {zone.mapLocation?.areaSqM && (
+                      <small style={{ color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
+                        📍 Spatial Footprint: <b>{zone.mapLocation.areaSqM} m²</b> • ({zone.mapLocation.lat?.toFixed(4) || '35.6595'}°N, {zone.mapLocation.lng?.toFixed(4) || '139.7004'}°E)
+                      </small>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={`zone-badge ${zone.status}`}>
+                      {zone.occupancyPct}% Occupancy
+                    </span>
+                    {zones.length > 1 && (
+                      <button
+                        className="button secondary"
+                        style={{ height: '26px', padding: '0 8px', fontSize: '11px', color: '#cf4b54' }}
+                        title="Delete this zone"
+                        onClick={() => handleDeleteZone(zone)}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Key Capacity Metrics */}
+                <div className="zone-metric-stats" style={{ margin: '14px 0' }}>
+                  <div>
+                    <small>Real Headcount</small>
+                    <b>{zone.currentCount} <small>people</small></b>
+                  </div>
+                  <div>
+                    <small>Safety Ceiling</small>
+                    <b>{zone.maxCapacity} <small>limit</small></b>
+                  </div>
+                  <div>
+                    <small>Egress Routes</small>
+                    <b>{zone.egressCount || 2} <small>doors</small></b>
+                  </div>
+                  <div>
+                    <small>Implemented Cams</small>
+                    <b style={{ color: '#38bdf8' }}>{zoneCameras.length} <small>feeds</small></b>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="progress-track" style={{ height: '8px', margin: '8px 0 14px 0' }}>
+                  <div
+                    className={`progress-fill ${zone.status}`}
+                    style={{ width: `${Math.min(100, zone.occupancyPct)}%` }}
+                  />
+                </div>
+
+                {/* HIERARCHICAL CAMERAS IMPLEMENTED UNDER THIS ZONE */}
+                <div
+                  style={{
+                    background: 'var(--surface-soft)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '14px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Video size={14} color="#38bdf8" />
+                      <strong style={{ fontSize: '12px' }}>
+                        Cameras Implemented Under This Zone ({zoneCameras.length})
+                      </strong>
+                    </div>
+                    <button
+                      className="button secondary"
+                      style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
+                      onClick={() => setShowAddCameraModal(true)}
+                    >
+                      + Add Camera to Zone
+                    </button>
+                  </div>
+
+                  {zoneCameras.length === 0 ? (
+                    <div style={{ padding: '10px', textAlign: 'center', color: 'var(--muted)', fontSize: '11.5px' }}>
+                      No cameras currently linked to this zone. Click "+ Add Camera to Zone" to link a feed.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {zoneCameras.map((cam) => {
+                        const isYt = cam.streamType === 'youtube' || cam.streamUrl?.includes('youtube');
+                        const isWb = cam.streamType === 'webcam' || cam.id === 'CAM-WEBCAM';
+                        const badgeColor = isYt ? '#ef4444' : isWb ? '#00ffcc' : '#38bdf8';
+
+                        return (
+                          <div
+                            key={cam.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              background: 'var(--surface)',
+                              border: '1px solid var(--line)',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              fontSize: '11.5px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ height: '6px', width: '6px', borderRadius: '50%', background: badgeColor }} />
+                              <b>{cam.id}</b>
+                              <span style={{ color: 'var(--text)' }}>{cam.name}</span>
+                              {cam.mapPin && (
+                                <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                                  📍 Pin ({cam.mapPin.x}%, {cam.mapPin.y}%)
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span style={{ fontWeight: '700', color: '#38bdf8' }}>
+                                {cam.count || 0} people
+                              </span>
+                              <button
+                                className="text-button"
+                                style={{ fontSize: '11px', padding: 0 }}
+                                onClick={() => {
+                                  setActiveCameraId(cam.id);
+                                  setPage('Live monitor');
+                                }}
+                              >
+                                View Feed →
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Primary Stream Scanner Action Bar */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    className="button secondary"
+                    style={{ fontSize: '11.5px', height: '32px' }}
+                    onClick={() => handleOpenScanner(zone)}
+                  >
+                    ⚡ Test AI Frame Scan
+                  </button>
+                  <button
+                    className="button primary"
+                    style={{ fontSize: '11.5px', height: '32px' }}
+                    onClick={() => {
+                      if (zoneCameras[0]) {
+                        setActiveCameraId(zoneCameras[0].id);
+                      }
+                      setPage('Live monitor');
+                    }}
+                  >
+                    📹 Monitor Zone Feeds →
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CREATE ZONE MODAL WITH REAL MAP DRAWING INTERFACE */}
       {showAddModal && (
-        <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-          <div className="modal-content" style={{ maxWidth: '560px' }}>
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '720px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <div>
-                <h3>Add New Venue Safety Zone</h3>
-                <p>Register a safety sector and assign any YouTube, RTSP, or live stream</p>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#276de0" />
+                  Define Safety Zone &amp; Spatial Boundary on Real Map
+                </h3>
+                <small style={{ color: 'var(--muted)' }}>
+                  Mark polygon boundaries, calculate physical area (m²), and establish NFPA safety limits
+                </small>
               </div>
               <button className="close-btn" onClick={() => setShowAddModal(false)}>✕</button>
             </div>
 
-            <form onSubmit={handleCreateZoneSubmit}>
-              <div className="form-group">
-                <label>Zone Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. North Concourse Entrance"
-                  required
-                  value={newZoneForm.name}
-                  onChange={(e) => setNewZoneForm({ ...newZoneForm, name: e.target.value })}
-                />
-              </div>
+            {/* Step Selector */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--line)', paddingBottom: '8px', margin: '14px 0' }}>
+              <button
+                type="button"
+                className={`pill-btn ${modalStep === 'details' ? 'active' : ''}`}
+                onClick={() => setModalStep('details')}
+              >
+                1. Zone Details &amp; Ceilings
+              </button>
+              <button
+                type="button"
+                className={`pill-btn ${modalStep === 'map' ? 'active' : ''}`}
+                onClick={() => setModalStep('map')}
+              >
+                2. Mark Area on Real Map 🗺️
+              </button>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group">
-                  <label>Zone Code</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ZONE-02"
-                    value={newZoneForm.code}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, code: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Floor / Level</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Ground Floor"
-                    value={newZoneForm.floor}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, floor: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                <div className="form-group">
-                  <label>Max Capacity *</label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="5000"
-                    required
-                    value={newZoneForm.maxCapacity}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, maxCapacity: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Warning %</label>
-                  <input
-                    type="number"
-                    min="30"
-                    max="90"
-                    value={newZoneForm.warningPct}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, warningPct: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Critical %</label>
-                  <input
-                    type="number"
-                    min="50"
-                    max="99"
-                    value={newZoneForm.criticalPct}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, criticalPct: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              {/* Streaming Video Source Assignment */}
-              <div style={{ marginTop: '10px', padding: '12px', background: 'var(--surface-soft)', borderRadius: '8px', border: '1px solid var(--line)' }}>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>
-                  Assign Live Streaming URL / Video Source
-                </label>
-                <div style={{ marginBottom: '8px' }}>
-                  <select
-                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '12.5px' }}
-                    onChange={(e) => {
-                      setNewZoneForm({
-                        ...newZoneForm,
-                        streamUrl: e.target.value
-                      });
-                    }}
-                    value={newZoneForm.streamUrl}
-                  >
-                    {streamPresets.map((p, idx) => (
-                      <option key={idx} value={p.url}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+            <form onSubmit={handleCreateZone}>
+              {modalStep === 'details' && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>
-                    Paste Custom URL (YouTube, RTSP, HLS, MP4, or Webcam):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="https://www.youtube.com/watch?v=... or rtsp://... or webcam"
-                    value={newZoneForm.streamUrl}
-                    onChange={(e) => setNewZoneForm({ ...newZoneForm, streamUrl: e.target.value })}
-                    style={{ width: '100%', fontSize: '12px' }}
-                  />
-                  {newZoneForm.streamUrl && (
-                    <div style={{ marginTop: '4px', fontSize: '11.5px', color: '#159b6f' }}>
-                      ✓ Recognized Source: <b>{parseStreamMeta(newZoneForm.streamUrl).label}</b>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  <div className="form-group">
+                    <label>Zone Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. North Concourse Entrance"
+                      required
+                      value={newZoneForm.name}
+                      onChange={(e) => setNewZoneForm({ ...newZoneForm, name: e.target.value })}
+                    />
+                  </div>
 
-              <div className="modal-actions" style={{ marginTop: '18px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="form-group">
+                      <label>Zone Code</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. ZONE-02"
+                        value={newZoneForm.code}
+                        onChange={(e) => setNewZoneForm({ ...newZoneForm, code: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Floor / Level</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Ground Floor"
+                        value={newZoneForm.floor}
+                        onChange={(e) => setNewZoneForm({ ...newZoneForm, floor: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                    <div className="form-group">
+                      <label>Max Safety Ceiling *</label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="5000"
+                        required
+                        value={newZoneForm.maxCapacity}
+                        onChange={(e) => setNewZoneForm({ ...newZoneForm, maxCapacity: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Warning %</label>
+                      <input
+                        type="number"
+                        min="30"
+                        max="90"
+                        value={newZoneForm.warningPct}
+                        onChange={(e) => setNewZoneForm({ ...newZoneForm, warningPct: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Critical %</label>
+                      <input
+                        type="number"
+                        min="50"
+                        max="99"
+                        value={newZoneForm.criticalPct}
+                        onChange={(e) => setNewZoneForm({ ...newZoneForm, criticalPct: Number(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      className="button primary"
+                      style={{ fontSize: '12px' }}
+                      onClick={() => setModalStep('map')}
+                    >
+                      Next: Mark Area on Real Map →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {modalStep === 'map' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ margin: 0, fontSize: '12px', fontWeight: '700' }}>
+                      Mark Zone Boundaries &amp; Perimeter on Real Map
+                    </label>
+                    <span style={{ fontSize: '11.5px', color: '#38bdf8', fontWeight: '700' }}>
+                      Calculated Area: {newZoneForm.mapLocation.areaSqM} m²
+                    </span>
+                  </div>
+
+                  <VenueSpatialMap
+                    mode="draw-zone"
+                    zones={zones}
+                    cameras={cameras}
+                    initialBoundary={newZoneForm.mapLocation.boundary}
+                    onBoundaryChange={handleBoundaryChange}
+                    height={260}
+                    showControls={true}
+                  />
+
+                  <small style={{ display: 'block', color: 'var(--muted)', marginTop: '8px', fontSize: '11px' }}>
+                    💡 Use <b>Quick Shapes</b> below the map or hold <b>SHIFT + Click</b> on the map to define custom polygon boundary points for this zone.
+                  </small>
+                </div>
+              )}
+
+              <div className="modal-actions" style={{ marginTop: '18px', display: 'flex', justifyContent: 'space-between' }}>
                 <button type="button" className="button secondary" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="button primary">
-                  Create Zone & Assign Stream
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {modalStep === 'map' && (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => setModalStep('details')}
+                    >
+                      ← Back to Details
+                    </button>
+                  )}
+                  <button type="submit" className="button primary">
+                    ✓ Complete Zone &amp; Spatial Perimeter →
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -751,302 +803,60 @@ export default function ZonesView() {
               </div>
             )}
 
-            {/* View Mode Switcher (Live Video Player vs AI Vision Overlay vs Split) */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  className={`button ${scannerViewMode === 'split' ? 'primary' : 'secondary'}`}
-                  style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                  onClick={() => setScannerViewMode('split')}
-                >
-                  ◫ Split Live & AI
-                </button>
-                <button
-                  className={`button ${scannerViewMode === 'vision' ? 'primary' : 'secondary'}`}
-                  style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                  onClick={() => setScannerViewMode('vision')}
-                >
-                  🔍 AI Vision Overlay
-                </button>
-                <button
-                  className={`button ${scannerViewMode === 'player' ? 'primary' : 'secondary'}`}
-                  style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                  onClick={() => setScannerViewMode('player')}
-                >
-                  ▶ Native Stream Player
-                </button>
-              </div>
-
-              <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
-                {isLiveScanning ? (
-                  <span style={{ color: '#159b6f', fontWeight: 'bold' }}>● Continuous live AI scan active (1.8s)</span>
-                ) : (
-                  <span>Ready to scan stream frames</span>
-                )}
-              </div>
-            </div>
-
-            {/* Video / Stream Display Player Area */}
-            <div
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: scannerViewMode === 'split' ? '300px' : '380px',
-                background: '#0b1320',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                display: 'grid',
-                gridTemplateColumns: scannerViewMode === 'split' ? '1fr 1fr' : '1fr',
-                gap: scannerViewMode === 'split' ? '2px' : '0'
-              }}
-            >
-              {/* PANEL 1: NATIVE STREAM PLAYER (Active when view is 'player' or 'split') */}
-              {(scannerViewMode === 'player' || scannerViewMode === 'split') && (
-                <div style={{ position: 'relative', width: '100%', height: '100%', background: '#050a12', overflow: 'hidden' }}>
-                  {parseStreamMeta(activeScanningZone.streamUrl).type === 'youtube' ? (
-                    <iframe
-                      src={parseStreamMeta(activeScanningZone.streamUrl).embedUrl}
-                      title="YouTube Live Stream"
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : parseStreamMeta(activeScanningZone.streamUrl).type === 'twitch' ? (
-                    <iframe
-                      src={parseStreamMeta(activeScanningZone.streamUrl).embedUrl}
-                      title="Twitch Live Stream"
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                      allowFullScreen
-                    />
-                  ) : parseStreamMeta(activeScanningZone.streamUrl).type === 'webcam' ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : parseStreamMeta(activeScanningZone.streamUrl).type === 'video' ? (
-                    <video
-                      ref={videoRef}
-                      src={activeScanningZone.streamUrl}
-                      autoPlay
-                      loop
-                      playsInline
-                      muted
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 420px', minWidth: '320px' }}>
+                <div style={{ height: '260px', background: '#000', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                  {parseStreamMeta(activeScanningZone.streamUrl).type === 'webcam' ? (
+                    <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img
-                        src={activeScanningZone.streamUrl || '/samples/mall_concourse.jpg'}
-                        alt="Stream Feed"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    </div>
+                    <img
+                      src={scannerTelemetry?.frameImageSrc || activeScanningZone.streamUrl || '/samples/mall_concourse.jpg'}
+                      alt="Zone Live Feed"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   )}
+                </div>
 
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '8px',
-                      left: '8px',
-                      background: 'rgba(0, 0, 0, 0.7)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '10.5px'
-                    }}
+                <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                  <button
+                    className={`button ${isLiveScanning ? 'secondary' : 'primary'}`}
+                    onClick={toggleContinuousScanning}
                   >
-                    ▶ Live Feed Player
+                    {isLiveScanning ? '⏸ Pause Continuous Scan' : '▶ Start Continuous Scan'}
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={scannerLoading}
+                    onClick={executeScanTick}
+                  >
+                    {scannerLoading ? 'Inferencing...' : '📸 Scan Single Frame'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Telemetry output */}
+              <div style={{ flex: '1 1 300px' }}>
+                <div className="telemetry-card" style={{ height: '100%' }}>
+                  <h4>Neural Estimation Output</h4>
+                  <div className="metric-row">
+                    <span>Headcount</span>
+                    <b style={{ color: '#38bdf8', fontSize: '18px' }}>
+                      {scannerTelemetry ? scannerTelemetry.count : '—'} persons
+                    </b>
+                  </div>
+                  <div className="metric-row">
+                    <span>Capacity Status</span>
+                    <b>{scannerTelemetry ? `${scannerTelemetry.occupancyPct}%` : '—'}</b>
+                  </div>
+                  <div className="metric-row">
+                    <span>Active DL Model</span>
+                    <b>{scanModel.toUpperCase()}</b>
+                  </div>
+                  <div className="metric-row">
+                    <span>Inference Latency</span>
+                    <b>{scannerTelemetry ? `${scannerTelemetry.latencyMs} ms` : '—'}</b>
                   </div>
                 </div>
-              )}
-
-              {/* PANEL 2: AI VISION SCANNER OVERLAY (Active when view is 'vision' or 'split') */}
-              {(scannerViewMode === 'vision' || scannerViewMode === 'split') && (
-                <div style={{ position: 'relative', width: '100%', height: '100%', background: '#0b1320', overflow: 'hidden' }}>
-                  {scannerTelemetry?.frameImageSrc ? (
-                    <img
-                      src={scannerTelemetry.frameImageSrc}
-                      alt="Scanned AI Frame"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : parseStreamMeta(activeScanningZone.streamUrl).thumbnailUrl ? (
-                    <img
-                      src={parseStreamMeta(activeScanningZone.streamUrl).thumbnailUrl}
-                      alt="Stream Thumbnail"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8a97a6' }}>
-                      <span style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</span>
-                      <span>Click "Scan Current Frame" or start live scan</span>
-                    </div>
-                  )}
-
-                  {/* Heatmap Overlay if available */}
-                  {scannerTelemetry?.heatmapUrl && (
-                    <img
-                      src={scannerTelemetry.heatmapUrl}
-                      alt="AI Density Heatmap"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                        opacity: 0.65,
-                        pointerEvents: 'none'
-                      }}
-                    />
-                  )}
-
-                  {/* Bounding Boxes Overlay */}
-                  {scannerTelemetry?.boxes && scannerTelemetry.boxes.length > 0 && (
-                    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                      {scannerTelemetry.boxes.slice(0, 100).map((box, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            position: 'absolute',
-                            left: `${box.x_min_pct || (box.x / 6.4)}%`,
-                            top: `${box.y_min_pct || (box.y / 4.8)}%`,
-                            width: `${box.width_pct || (box.w / 6.4)}%`,
-                            height: `${box.height_pct || (box.h / 4.8)}%`,
-                            border: '2px solid #00f0ff',
-                            borderRadius: '3px',
-                            boxShadow: '0 0 6px rgba(0, 240, 255, 0.6)'
-                          }}
-                        >
-                          <span
-                            style={{
-                              position: 'absolute',
-                              top: '-16px',
-                              left: '0',
-                              background: 'rgba(0, 240, 255, 0.85)',
-                              color: '#000',
-                              fontSize: '9px',
-                              fontWeight: 'bold',
-                              padding: '1px 3px',
-                              borderRadius: '2px',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {Math.round((box.confidence || 0.88) * 100)}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '8px',
-                      left: '8px',
-                      background: 'rgba(0, 0, 0, 0.7)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      color: '#00f0ff',
-                      fontSize: '10.5px'
-                    }}
-                  >
-                    🔍 AI Vision & BBoxes ({scannerTelemetry?.count ?? activeScanningZone.currentCount} persons)
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Scanner Telemetry HUD */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '12px',
-                margin: '16px 0',
-                background: 'var(--surface-soft)',
-                padding: '12px',
-                borderRadius: '8px',
-                textAlign: 'center'
-              }}
-            >
-              <div>
-                <small style={{ display: 'block', fontSize: '11px', color: 'var(--muted)' }}>Detected Headcount</small>
-                <b style={{ fontSize: '22px', color: 'var(--text)' }}>
-                  {scannerTelemetry ? scannerTelemetry.count : activeScanningZone.currentCount}
-                </b>
-                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>persons verified</span>
-              </div>
-
-              <div>
-                <small style={{ display: 'block', fontSize: '11px', color: 'var(--muted)' }}>Occupancy Rate</small>
-                <b style={{ fontSize: '22px', color: 'var(--text)' }}>
-                  {scannerTelemetry ? scannerTelemetry.occupancyPct : activeScanningZone.occupancyPct}%
-                </b>
-                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>of {activeScanningZone.maxCapacity} ceiling</span>
-              </div>
-
-              <div>
-                <small style={{ display: 'block', fontSize: '11px', color: 'var(--muted)' }}>Safety State</small>
-                <b
-                  style={{
-                    fontSize: '15px',
-                    display: 'inline-block',
-                    marginTop: '4px',
-                    color:
-                      (scannerTelemetry?.safetyBadge === 'CRITICAL' || activeScanningZone.status === 'critical')
-                        ? '#cf4b54'
-                        : (scannerTelemetry?.safetyBadge === 'WARNING' || activeScanningZone.status === 'warning')
-                        ? '#cc841b'
-                        : '#159b6f'
-                  }}
-                >
-                  {scannerTelemetry?.safetyBadge || (activeScanningZone.status === 'critical' ? 'CRITICAL' : activeScanningZone.status === 'warning' ? 'WARNING' : 'SAFE & NORMAL')}
-                </b>
-              </div>
-
-              <div>
-                <small style={{ display: 'block', fontSize: '11px', color: 'var(--muted)' }}>AI Inference Latency</small>
-                <b style={{ fontSize: '22px', color: 'var(--text)' }}>
-                  {scannerTelemetry ? scannerTelemetry.latencyMs : 38.2}
-                </b>
-                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>ms per frame</span>
-              </div>
-            </div>
-
-            {/* Controls & Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>Inference Model:</label>
-                <select
-                  value={scanModel}
-                  onChange={(e) => setScanModel(e.target.value)}
-                  style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--line)' }}
-                >
-                  <option value="yolov8">YOLOv8 Detection Baseline (BBoxes)</option>
-                  <option value="csrnet">CSRNet Dilated Conv (Density Map)</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="button secondary"
-                  style={{ height: '34px', fontSize: '12.5px' }}
-                  onClick={executeScanTick}
-                  disabled={scannerLoading}
-                >
-                  {scannerLoading ? 'Scanning...' : '⚡ Scan Current Frame'}
-                </button>
-
-                <button
-                  className={`button ${isLiveScanning ? 'secondary' : 'primary'}`}
-                  style={{ height: '34px', fontSize: '12.5px' }}
-                  onClick={toggleContinuousLiveScan}
-                >
-                  {isLiveScanning ? '⏹ Stop Live Scan' : '● Start Continuous Live Scan'}
-                </button>
               </div>
             </div>
           </div>
