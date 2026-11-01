@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { webcamManager } from '../services/webcamManager';
 import { useCrowdStore } from '../store/useCrowdStore';
 
@@ -26,6 +26,9 @@ function extractYouTubeId(url) {
  * - Direct Video Streams (MP4 / WebM / RTSP URLs)
  * - High-Resolution Continuous Density Photography Presets
  * Renders authentic OSD timecodes, live density heatmaps, and Farneback optical flow vectors.
+ *
+ * IMPORTANT: When aiConnected is false, NO fake crowd counts are generated.
+ * The canvas OSD shows "AI MODEL OFFLINE — Detection Suspended" instead.
  */
 export default function CCTVCanvasStream({
   cameraId = 'CAM-01',
@@ -55,7 +58,8 @@ export default function CCTVCanvasStream({
   const [osdTime, setOsdTime] = useState('');
   const [liveCount, setLiveCount] = useState(count || 0);
 
-  const { recordRealDetection, zones } = useCrowdStore();
+  // Pull aiConnected from store — determines whether detection is active
+  const { aiConnected } = useCrowdStore();
 
   // Detect Stream Kind
   const ytId = extractYouTubeId(streamUrl);
@@ -87,7 +91,7 @@ export default function CCTVCanvasStream({
   const videoRef = useRef(null);
   const mediaStreamRef = useRef(null);
 
-  // Sync count when external prop updates
+  // Sync count when external prop updates (from real AI detections)
   useEffect(() => {
     if (count !== undefined && count !== null) {
       setLiveCount(count);
@@ -143,46 +147,9 @@ export default function CCTVCanvasStream({
     }
   }, [photoSrc, heatmapSrc, sceneType, cameraId, isWebcam, isYouTube, isDirectVideo, streamUrl]);
 
-  // Live Detection Simulation & Telemetry Loop for YouTube / Remote Streams
-  useEffect(() => {
-    if (!isYouTube && !isDirectVideo) return;
-
-    // Immediately seed realistic count if 0 or uninitialized
-    let currentCount = liveCount > 0 ? liveCount : Math.floor(Math.random() * 32) + 45;
-    if (liveCount === 0) {
-      setLiveCount(currentCount);
-      const targetZoneId = zoneId || zones[0]?.id || 'zone-arena-01';
-      recordRealDetection({
-        cameraId,
-        zoneId: targetZoneId,
-        count: currentCount,
-        latencyMs: Math.round(34 + Math.random() * 4),
-        modelName: 'CSRNet',
-        source: isYouTube ? 'youtube-stream' : 'video-stream'
-      });
-      if (onCountChange) onCountChange(currentCount);
-    }
-
-    const interval = setInterval(() => {
-      // Natural crowd fluctuation (±2 to 5 persons)
-      const delta = Math.floor(Math.random() * 7) - 3;
-      currentCount = Math.max(14, currentCount + delta);
-      setLiveCount(currentCount);
-
-      const targetZoneId = zoneId || zones[0]?.id || 'zone-arena-01';
-      recordRealDetection({
-        cameraId,
-        zoneId: targetZoneId,
-        count: currentCount,
-        latencyMs: Math.round(33 + Math.random() * 5),
-        modelName: 'CSRNet',
-        source: isYouTube ? 'youtube-stream' : 'video-stream'
-      });
-      if (onCountChange) onCountChange(currentCount);
-    }, 3500);
-
-    return () => clearInterval(interval);
-  }, [isYouTube, isDirectVideo, cameraId, zoneId, zones, onCountChange]);
+  // NOTE: The fake crowd count simulation that previously existed here for YouTube/video streams
+  // has been REMOVED. No synthetic detections are generated when AI service is offline.
+  // Real counts only come from the AI service (localhost:8000) via recordRealDetection.
 
   // Canvas Render Loop (Overlays, OSD, Heatmaps, Vectors)
   useEffect(() => {
@@ -270,8 +237,8 @@ export default function CCTVCanvasStream({
         }
       }
 
-      // 2. Real Continuous Density Heatmap Overlay
-      if (heatmap) {
+      // 2. Real Continuous Density Heatmap Overlay (only when AI is connected)
+      if (heatmap && aiConnected) {
         ctx.save();
         if (heatmapImgRef.current && heatmapImgRef.current.complete && !isYouTube && !isWebcam) {
           ctx.globalAlpha = 0.65;
@@ -303,8 +270,8 @@ export default function CCTVCanvasStream({
         ctx.restore();
       }
 
-      // 3. Farneback Optical Flow Motion Vectors
-      if (flowVectors) {
+      // 3. Farneback Optical Flow Motion Vectors (only when AI is connected)
+      if (flowVectors && aiConnected) {
         ctx.strokeStyle = '#00ffcc';
         ctx.fillStyle = '#00ffcc';
         ctx.lineWidth = 1.5;
@@ -356,17 +323,28 @@ export default function CCTVCanvasStream({
       const todayStr = new Date().toISOString().slice(0, 10);
       ctx.fillText(`${todayStr} ${timeStr}`, w - 141, 21);
 
-      // Bottom Left: CSRNet Density Telemetry HUD
-      ctx.fillStyle = 'rgba(10, 18, 25, 0.88)';
-      ctx.fillRect(8, h - 26, 240, 20);
-      ctx.fillStyle = '#3478e5';
-      ctx.fillText('CSRNet DENSITY:', 14, h - 13);
-      ctx.fillStyle = '#00ffcc';
-      ctx.font = '700 9.5px "JetBrains Mono", monospace';
-      ctx.fillText(`${liveCount} PEOPLE`, 112, h - 13);
-      ctx.fillStyle = '#8a96a5';
-      ctx.font = '500 7.5px "JetBrains Mono", monospace';
-      ctx.fillText(`[${latencyMs}ms · ${fps} FPS]`, 178, h - 13);
+      // Bottom Left: AI Status / CSRNet Density Telemetry HUD
+      if (aiConnected) {
+        // AI is online — show real telemetry
+        ctx.fillStyle = 'rgba(10, 18, 25, 0.88)';
+        ctx.fillRect(8, h - 26, 260, 20);
+        ctx.fillStyle = '#3478e5';
+        ctx.font = '700 8.5px "JetBrains Mono", monospace';
+        ctx.fillText('CSRNet DENSITY:', 14, h - 13);
+        ctx.fillStyle = '#00ffcc';
+        ctx.font = '700 9.5px "JetBrains Mono", monospace';
+        ctx.fillText(`${liveCount} PEOPLE`, 112, h - 13);
+        ctx.fillStyle = '#8a96a5';
+        ctx.font = '500 7.5px "JetBrains Mono", monospace';
+        ctx.fillText(`[${latencyMs}ms · ${fps} FPS]`, 178, h - 13);
+      } else {
+        // AI is offline — show honest offline state
+        ctx.fillStyle = 'rgba(30, 10, 10, 0.92)';
+        ctx.fillRect(8, h - 26, 290, 20);
+        ctx.fillStyle = '#e05555';
+        ctx.font = '700 8px "JetBrains Mono", monospace';
+        ctx.fillText('⚠ AI MODEL OFFLINE — Detection Suspended', 14, h - 13);
+      }
 
       // Center crosshairs
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
@@ -388,7 +366,7 @@ export default function CCTVCanvasStream({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, zoomLevel, heatmap, flowVectors, latencyMs, fps, liveCount, cameraId, isYouTube, isWebcam, isDirectVideo]);
+  }, [isPlaying, zoomLevel, heatmap, flowVectors, latencyMs, fps, liveCount, cameraId, isYouTube, isWebcam, isDirectVideo, aiConnected]);
 
   const handleSnapshot = () => {
     const canvas = canvasRef.current;

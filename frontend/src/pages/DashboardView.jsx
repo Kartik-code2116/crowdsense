@@ -63,7 +63,8 @@ export default function DashboardView() {
     setShowAddCameraModal,
     latestDetection,
     detectionLog,
-    inspectInCrowdSearch
+    inspectInCrowdSearch,
+    aiConnected
   } = useCrowdStore();
 
   const totalPeople = latestDetection
@@ -80,8 +81,33 @@ export default function DashboardView() {
     inspectInCrowdSearch(dataUrl);
   };
 
+  // Determine honest offline state
+  const isOfflineNoData = !aiConnected && totalPeople === 0 && detectionLog.length === 0;
+
   return (
     <div className="dashboard-content-wrapper">
+      {/* AI Offline Warning Banner — shown when service is down and no cached data */}
+      {!aiConnected && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          background: 'linear-gradient(90deg, rgba(224, 85, 85, 0.12), rgba(219, 146, 37, 0.08))',
+          border: '1px solid #e05555',
+          borderRadius: '8px',
+          padding: '10px 18px',
+          marginBottom: '16px'
+        }}>
+          <span style={{ fontSize: '18px' }}>⚠</span>
+          <div>
+            <b style={{ fontSize: '13px', color: '#e05555' }}>AI Detection Service Offline</b>
+            <small style={{ display: 'block', color: 'var(--muted)', marginTop: '2px' }}>
+              The CSRNet model server (localhost:8000) is not running. Camera streams are active but crowd detection is suspended. Start the AI service to enable live detection.
+            </small>
+          </div>
+        </div>
+      )}
+
       {/* Live AI Crowd Detection Banner */}
       {latestDetection && (
         <div style={{
@@ -127,15 +153,21 @@ export default function DashboardView() {
             <span className="stat-icon blue">♙</span>
           </div>
           <div className="stat-value">
-            {totalPeople.toLocaleString()}{' '}
-            <span className="trend positive">
-              {latestDetection ? '● Live AI Sync' : 'Real-time'}
+            {isOfflineNoData ? '—' : totalPeople.toLocaleString()}{' '}
+            <span className={`trend ${isOfflineNoData ? 'critical' : totalPeople > 0 ? 'positive' : 'stable'}`}>
+              {isOfflineNoData
+                ? '⚠ AI Model Offline'
+                : latestDetection
+                  ? '● Live AI Sync'
+                  : 'Real-time'}
             </span>
           </div>
           <div className="stat-foot">
-            {latestDetection
-              ? `Real-time detection: ${latestDetection.modelName || 'YOLOv8'} (${latestDetection.latencyMs}ms)`
-              : 'Live edge streams monitored'}
+            {isOfflineNoData
+              ? 'Start AI service to enable crowd detection'
+              : latestDetection
+                ? `Real-time detection: ${latestDetection.modelName || 'YOLOv8'} (${latestDetection.latencyMs}ms)`
+                : 'Live edge streams monitored'}
           </div>
         </article>
 
@@ -149,7 +181,11 @@ export default function DashboardView() {
             <span className="trend stable">All online</span>
           </div>
           <div className="stat-foot">
-            <span className="mini-live" /> All edge & local camera streams healthy
+            {!aiConnected ? (
+              <span style={{ color: '#db9225' }}>⚠ AI Detection Paused — streams active without detection</span>
+            ) : (
+              <><span className="mini-live" /> All edge &amp; local camera streams healthy</>
+            )}
           </div>
         </article>
 
@@ -159,9 +195,9 @@ export default function DashboardView() {
             <span className={`stat-icon ${avgCapacity > 75 ? 'red' : avgCapacity > 50 ? 'amber' : 'green'}`}>◴</span>
           </div>
           <div className="stat-value">
-            {avgCapacity}<span className="unit">%</span>
-            <span className={`trend ${avgCapacity > 75 ? 'critical' : avgCapacity > 50 ? 'warning' : 'positive'}`}>
-              {avgCapacity > 75 ? 'High Density' : avgCapacity > 50 ? 'Moderate' : 'Safe Limits'}
+            {isOfflineNoData ? '—' : <>{avgCapacity}<span className="unit">%</span></>}
+            <span className={`trend ${isOfflineNoData ? 'stable' : avgCapacity > 75 ? 'critical' : avgCapacity > 50 ? 'warning' : 'positive'}`}>
+              {isOfflineNoData ? 'No Detection Data' : avgCapacity > 75 ? 'High Density' : avgCapacity > 50 ? 'Moderate' : 'Safe Limits'}
             </span>
           </div>
           <div className="stat-foot">Across {zones.length} monitored safety zones</div>
@@ -192,7 +228,7 @@ export default function DashboardView() {
         <section className="panel trend-panel">
           <div className="panel-heading">
             <div>
-              <h2>People in Venue Trend & Influx</h2>
+              <h2>People in Venue Trend &amp; Influx</h2>
               <p>Continuous density regression integration across all camera zones</p>
             </div>
             <select value={range} onChange={(e) => setRange(e.target.value)} aria-label="Chart range">
@@ -202,46 +238,70 @@ export default function DashboardView() {
             </select>
           </div>
 
-          <div className="chart-summary">
-            <strong>{totalPeople.toLocaleString()} people</strong>
-            <span className={`trend ${totalPeople > 0 ? 'positive' : 'stable'}`}>
-              {totalPeople > 0 ? (latestDetection ? '● Live AI Detection' : '● Live Stream') : '○ Ready for Live Stream'}
-            </span>
-            <small>
-              {totalPeople > 0
-                ? (latestDetection ? `Active scan: ${latestDetection.modelName?.toUpperCase() || 'CSRNET'} in ${latestDetection.zoneName || 'Venue Zone'}` : 'Active detected venue occupancy')
-                : 'No individuals currently detected across monitored camera zones'}
-            </small>
-          </div>
-
-          <div className="chart-wrap">
-            <div className="y-labels">
-              <span>{Math.max(10, Math.round(totalPeople * 1.5))}</span>
-              <span>{Math.max(6, Math.round(totalPeople * 1.0))}</span>
-              <span>{Math.max(2, Math.round(totalPeople * 0.5))}</span>
-              <span>0</span>
+          {/* Offline empty state for chart */}
+          {isOfflineNoData ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '40px 24px',
+              textAlign: 'center',
+              background: 'rgba(224, 85, 85, 0.05)',
+              borderRadius: '8px',
+              margin: '12px 0',
+              border: '1px dashed rgba(224, 85, 85, 0.3)'
+            }}>
+              <div style={{ fontSize: '28px', marginBottom: '8px' }}>📊</div>
+              <b style={{ color: '#e05555', fontSize: '14px' }}>AI service offline — No detection data available</b>
+              <p style={{ color: 'var(--muted)', fontSize: '12px', margin: '6px 0 0' }}>
+                Start the AI service (localhost:8000) and run crowd scans to populate this chart with real detection data.
+              </p>
             </div>
-            <TrendLineChart totalCount={totalPeople} range={range} detectionLog={detectionLog} />
-            <div className="x-labels">
-              <span>-30m</span>
-              <span>-20m</span>
-              <span>-15m</span>
-              <span>-10m</span>
-              <span>-5m</span>
-              <span>Now</span>
-              <span>+15m</span>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="chart-summary">
+                <strong>{totalPeople.toLocaleString()} people</strong>
+                <span className={`trend ${totalPeople > 0 ? 'positive' : 'stable'}`}>
+                  {totalPeople > 0 ? (latestDetection ? '● Live AI Detection' : '● Live Stream') : '○ Ready for Live Stream'}
+                </span>
+                <small>
+                  {totalPeople > 0
+                    ? (latestDetection ? `Active scan: ${latestDetection.modelName?.toUpperCase() || 'CSRNET'} in ${latestDetection.zoneName || 'Venue Zone'}` : 'Active detected venue occupancy')
+                    : 'No individuals currently detected across monitored camera zones'}
+                </small>
+              </div>
 
-          <div className="chart-legend">
-            <span><i className="legend-blue" /> Actual Occupancy (YOLOv8 / CSRNet)</span>
-            <span><i className="legend-dash" /> LSTM Forecast (+15m)</span>
-            <span className="forecast-note">
-              {totalPeople > 0
-                ? `◷ Predicted peak: ${Math.round(totalPeople * 1.15)} people · Safe Operations`
-                : '◷ Awaiting camera ingress data to project LSTM forecast'}
-            </span>
-          </div>
+              <div className="chart-wrap">
+                <div className="y-labels">
+                  <span>{Math.max(10, Math.round(totalPeople * 1.5))}</span>
+                  <span>{Math.max(6, Math.round(totalPeople * 1.0))}</span>
+                  <span>{Math.max(2, Math.round(totalPeople * 0.5))}</span>
+                  <span>0</span>
+                </div>
+                <TrendLineChart totalCount={totalPeople} range={range} detectionLog={detectionLog} />
+                <div className="x-labels">
+                  <span>-30m</span>
+                  <span>-20m</span>
+                  <span>-15m</span>
+                  <span>-10m</span>
+                  <span>-5m</span>
+                  <span>Now</span>
+                  <span>+15m</span>
+                </div>
+              </div>
+
+              <div className="chart-legend">
+                <span><i className="legend-blue" /> Actual Occupancy (YOLOv8 / CSRNet)</span>
+                <span><i className="legend-dash" /> LSTM Forecast (+15m)</span>
+                <span className="forecast-note">
+                  {totalPeople > 0
+                    ? `◷ Predicted peak: ${Math.round(totalPeople * 1.15)} people · Safe Operations`
+                    : '◷ Awaiting camera ingress data to project LSTM forecast'}
+                </span>
+              </div>
+            </>
+          )}
         </section>
 
         {/* Zone Capacity Panel */}
@@ -262,15 +322,21 @@ export default function DashboardView() {
                 <div className="zone-name">
                   <span className={`zone-dot ${zone.status}`} />
                   <b>{zone.name}</b>
-                  <span className={`zone-badge ${zone.status}`}>{zone.occupancyPct}%</span>
+                  <span className={`zone-badge ${zone.status}`}>
+                    {isOfflineNoData ? '—' : `${zone.occupancyPct}%`}
+                  </span>
                 </div>
                 <div className="progress-track">
                   <div
-                    className={`progress-fill ${zone.status}`}
-                    style={{ width: `${Math.min(100, zone.occupancyPct)}%` }}
+                    className={`progress-fill ${isOfflineNoData ? 'normal' : zone.status}`}
+                    style={{ width: isOfflineNoData ? '0%' : `${Math.min(100, zone.occupancyPct)}%` }}
                   />
                 </div>
-                <small>{zone.currentCount} / {zone.maxCapacity} people ({zone.egressCount} egress corridors)</small>
+                <small>
+                  {isOfflineNoData
+                    ? `— / ${zone.maxCapacity} people (${zone.egressCount} egress corridors) · AI offline`
+                    : `${zone.currentCount} / ${zone.maxCapacity} people (${zone.egressCount} egress corridors)`}
+                </small>
               </div>
             ))}
           </div>
@@ -302,7 +368,11 @@ export default function DashboardView() {
         <div className="panel-heading">
           <div>
             <h2>Live CCTV Edge Feeds <span className="feed-count">{cameras.length} Active Streams</span></h2>
-            <p>1-2 FPS sampled frames regressed via CSRNet Deep Learning Model</p>
+            <p>
+              {aiConnected
+                ? '1-2 FPS sampled frames regressed via CSRNet Deep Learning Model'
+                : '⚠ Camera streams active — AI detection suspended until service restarts'}
+            </p>
           </div>
           <div className="camera-actions">
             <button
@@ -360,17 +430,17 @@ export default function DashboardView() {
                   <small>{cam.zone} · {cam.latencyMs}ms</small>
                 </div>
                 <span className="camera-count">
-                  {cam.count} <small>people</small>
+                  {aiConnected ? cam.count : '—'} <small>people</small>
                 </span>
               </div>
               <div className="camera-capacity">
                 <div className="camera-track">
                   <div
                     className={`progress-fill ${cam.capacity > 85 ? 'critical' : cam.capacity > 70 ? 'warning' : 'normal'}`}
-                    style={{ width: `${cam.capacity}%` }}
+                    style={{ width: aiConnected ? `${cam.capacity}%` : '0%' }}
                   />
                 </div>
-                <small>{cam.capacity}% capacity</small>
+                <small>{aiConnected ? `${cam.capacity}% capacity` : 'AI offline'}</small>
                 <button
                   className="text-button"
                   style={{ marginLeft: 'auto', fontSize: '12px' }}
@@ -382,6 +452,19 @@ export default function DashboardView() {
             </article>
           ))}
         </div>
+
+        {/* Camera grid footer status */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)', fontSize: '12px', color: 'var(--muted)' }}>
+          {!aiConnected ? (
+            <span style={{ color: '#db9225' }}>
+              ⚠ AI detection service offline — camera streams active without detection
+            </span>
+          ) : (
+            <span style={{ color: '#19a779' }}>
+              ● All edge &amp; local camera streams healthy · CSRNet detection active
+            </span>
+          )}
+        </div>
       </section>
 
       {/* Recent Incidents Table */}
@@ -392,7 +475,7 @@ export default function DashboardView() {
             <p>Automated threshold breaches and operator incident logging</p>
           </div>
           <button className="text-button" onClick={() => setPage('Incidents')}>
-            Incident center & Replay <span>→</span>
+            Incident center &amp; Replay <span>→</span>
           </button>
         </div>
 
@@ -439,7 +522,11 @@ export default function DashboardView() {
 
       <footer className="page-footer">
         <span>© 2026 CrowdSense <b>·</b> Production Crowd Safety Architecture</span>
-        <span>Active Backbone: <b>CSRNet v1.2.0</b> <b>·</b> Mean Latency: <b>38.4ms</b> <b>·</b> Synchronized</span>
+        <span>
+          Active Backbone: <b>{aiConnected ? 'CSRNet v1.2.0' : 'AI Service Offline'}</b> <b>·</b>
+          Mean Latency: <b>{aiConnected ? '38.4ms' : '—'}</b> <b>·</b>
+          {aiConnected ? 'Synchronized' : 'Detection Suspended'}
+        </span>
       </footer>
     </div>
   );

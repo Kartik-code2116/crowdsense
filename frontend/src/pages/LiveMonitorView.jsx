@@ -129,7 +129,7 @@ export default function LiveMonitorView() {
 
                   <div className="tile-header-right">
                     <span className={`cctv-cap-badge ${isCritical ? 'crit' : isWarning ? 'warn' : 'ok'}`}>
-                      <i className="status-dot" /> {currentCapacity}% Cap
+                      <i className="status-dot" /> {aiConnected ? `${currentCapacity}% Cap` : '—% Cap'}
                     </span>
                     <button
                       className="cctv-quick-focus"
@@ -174,7 +174,7 @@ export default function LiveMonitorView() {
                 <div className="cctv-bar-track">
                   <div
                     className={`cctv-bar-fill ${isCritical ? 'crit' : isWarning ? 'warn' : 'ok'}`}
-                    style={{ width: `${Math.min(100, Math.max(4, currentCapacity))}%` }}
+                    style={{ width: `${aiConnected ? Math.min(100, Math.max(4, currentCapacity)) : 0}%` }}
                   />
                 </div>
 
@@ -183,13 +183,13 @@ export default function LiveMonitorView() {
                   <div className="telemetry-chip">
                     <span className="telemetry-label">👥 Headcount</span>
                     <span className="telemetry-val headcount-val">
-                      {currentCount} <small>people</small>
+                      {aiConnected ? currentCount : '—'} <small>people</small>
                     </span>
                   </div>
                   <div className="telemetry-chip">
                     <span className="telemetry-label">⚡ AI Latency</span>
                     <span className="telemetry-val">
-                      {cam.latencyMs || 35} <small>ms</small>
+                      {aiConnected ? <>{cam.latencyMs || 35} <small>ms</small></> : '— ms'}
                     </span>
                   </div>
                   <div className="telemetry-chip">
@@ -209,8 +209,10 @@ export default function LiveMonitorView() {
                 {/* 5. Tile Action Toolbar */}
                 <div className="tile-action-bar">
                   <div className="feed-status-indicator">
-                    <span className="status-ping" />
-                    <span>FEED ONLINE · CSRNET ACTIVE</span>
+                    <span className="status-ping" style={{ background: aiConnected ? undefined : '#e05555' }} />
+                    <span style={{ color: aiConnected ? undefined : '#e05555' }}>
+                      {aiConnected ? 'FEED ONLINE · CSRNET ACTIVE' : '⚠ DETECTION PAUSED · AI SERVICE OFFLINE'}
+                    </span>
                   </div>
                   <div className="tile-action-buttons">
                     <button
@@ -262,18 +264,20 @@ export default function LiveMonitorView() {
                 </div>
                 <div className="metric-row">
                   <span>Current Crowd Count</span>
-                  <b style={{ color: '#38bdf8', fontSize: '16px', fontWeight: 800 }}>{selectedCount} persons</b>
+                  <b style={{ color: aiConnected ? '#38bdf8' : '#e05555', fontSize: '16px', fontWeight: 800 }}>
+                    {aiConnected ? `${selectedCount} persons` : '— (AI offline)'}
+                  </b>
                 </div>
                 <div className="metric-row">
                   <span>Zone Capacity Status</span>
-                  <b className={selectedCapacity > 85 ? 'text-red' : selectedCapacity > 70 ? 'text-amber' : 'text-green'}>
-                    {selectedCapacity}% ({selectedCount}/{selMax})
+                  <b className={!aiConnected ? '' : selectedCapacity > 85 ? 'text-red' : selectedCapacity > 70 ? 'text-amber' : 'text-green'}>
+                    {aiConnected ? `${selectedCapacity}% (${selectedCount}/${selMax})` : '— (no detection data)'}
                   </b>
                 </div>
                 <div className="progress-track" style={{ marginTop: '8px', marginBottom: '14px' }}>
                   <div
                     className={`progress-fill ${selectedCapacity > 85 ? 'critical' : selectedCapacity > 70 ? 'warning' : 'normal'}`}
-                    style={{ width: `${Math.min(100, Math.max(4, selectedCapacity))}%` }}
+                    style={{ width: `${aiConnected ? Math.min(100, Math.max(4, selectedCapacity)) : 0}%` }}
                   />
                 </div>
               </div>
