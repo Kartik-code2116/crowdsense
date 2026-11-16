@@ -219,7 +219,8 @@ async def capture_and_detect_camera(
     inference_result = InferenceEngine.process_image(
         image_bytes=image_bytes,
         model_name=model,
-        zone_capacity=zone_capacity
+        zone_capacity=zone_capacity,
+        source_key=f"camera-device:{device_index}"
     )
 
     frame_base64 = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
@@ -253,7 +254,8 @@ async def scan_stream_url(
     inference_result = InferenceEngine.process_image(
         image_bytes=image_bytes,
         model_name=model,
-        zone_capacity=zone_capacity
+        zone_capacity=zone_capacity,
+        source_key=f"stream:{stream_url}"
     )
 
     frame_base64 = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('utf-8')}"

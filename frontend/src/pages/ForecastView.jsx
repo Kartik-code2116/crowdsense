@@ -1,35 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
-// Compute a simple linear regression slope from an array of numbers
-function linearSlope(values) {
-  if (values.length < 2) return 0;
-  const n = values.length;
-  const xMean = (n - 1) / 2;
-  const yMean = values.reduce((a, b) => a + b, 0) / n;
-  let num = 0, den = 0;
-  values.forEach((y, x) => {
-    num += (x - xMean) * (y - yMean);
-    den += (x - xMean) ** 2;
-  });
-  return den === 0 ? 0 : num / den;
-}
-
-// Generate LSTM-style forecast points from real detection history
+// A transparent trend baseline. It is not presented as an LSTM prediction.
 function generateForecast(log, horizonSteps = 8) {
-  if (log.length === 0) return [];
-  const counts = log.map(d => d.count);
-  const lastCount = counts[counts.length - 1];
-  const slope = linearSlope(counts.slice(-8)); // trend from last 8 detections
-  const stddev = counts.length > 1
-    ? Math.sqrt(counts.reduce((acc, c) => acc + (c - lastCount) ** 2, 0) / counts.length)
-    : lastCount * 0.08;
+  const observations = log.slice(-8).filter((entry) => Number.isFinite(Number(entry.count)) && Number.isFinite(Number(entry.timestamp)));
+  if (observations.length < 3) return [];
+  const firstTime = Number(observations[0].timestamp);
+  const xs = observations.map((entry) => (Number(entry.timestamp) - firstTime) / 60000);
+  const ys = observations.map((entry) => Number(entry.count));
+  const xMean = xs.reduce((sum, value) => sum + value, 0) / xs.length;
+  const yMean = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  const denominator = xs.reduce((sum, value) => sum + (value - xMean) ** 2, 0);
+  if (denominator === 0) return [];
+  const slopePerMinute = xs.reduce((sum, value, index) => sum + (value - xMean) * (ys[index] - yMean), 0) / denominator;
+  const intercept = yMean - slopePerMinute * xMean;
+  const residuals = ys.map((value, index) => value - (intercept + slopePerMinute * xs[index]));
+  const range = Math.round(Math.sqrt(residuals.reduce((sum, value) => sum + value ** 2, 0) / Math.max(1, residuals.length - 2)));
+  const lastCount = ys[ys.length - 1];
+  const latestTime = xs[xs.length - 1];
 
   const points = [];
   for (let i = 0; i <= horizonSteps; i++) {
     const isActual = i === 0;
-    const forecast = Math.max(0, Math.round(lastCount + slope * i));
-    const spread = Math.round(stddev * (1 + i * 0.15));
+    const forecast = Math.max(0, Math.round(intercept + slopePerMinute * (latestTime + i * 2)));
+    const spread = Math.round(range * (1 + i * 0.12));
     points.push({
       label: i === 0 ? 'Now' : `+${i * 2}m`,
       actual: isActual ? lastCount : null,
@@ -139,8 +133,8 @@ function ForecastChart({ points, ceiling }) {
 }
 
 export default function ForecastView() {
-  const { detectionLog, zones, cameras, latestDetection, setPage } = useCrowdStore();
-  const [selectedZoneFilter, setSelectedZoneFilter] = useState('all');
+  const { detectionLog, zones, latestDetection, setPage } = useCrowdStore();
+  const [selectedZoneFilter, setSelectedZoneFilter] = useState(zones[0]?.id || 'all');
 
   // Filter log by zone if needed
   const filteredLog = useMemo(() => {
@@ -148,20 +142,7 @@ export default function ForecastView() {
     return detectionLog.filter(d => d.zoneId === selectedZoneFilter);
   }, [detectionLog, selectedZoneFilter]);
 
-  // If detectionLog has entries, use them; otherwise seamlessly use live camera telemetry
-  const effectiveLog = useMemo(() => {
-    if (filteredLog && filteredLog.length >= 1) return filteredLog;
-    const camCount = cameras.reduce((sum, c) => sum + (c.count || 0), 0) || (latestDetection?.count || 0);
-    if (camCount === 0) return [];
-    const now = Date.now();
-    const primaryZone = zones.find(z => z.id === selectedZoneFilter) || zones[0] || { id: 'zone-arena-01', name: 'Arena Main Concourse', maxCapacity: 350 };
-    return [
-      { time: new Date(now - 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 15 * 60000, count: Math.round(camCount * 0.88), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.2, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now - 10 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 10 * 60000, count: Math.round(camCount * 0.93), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 37.5, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now - 5 * 60000, count: Math.round(camCount * 0.97), zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.0, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 },
-      { time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: now, count: camCount, zoneId: primaryZone.id, zoneName: primaryZone.name, latencyMs: 38.4, modelName: 'CSRNet Deep Learning Model', capacity: primaryZone.maxCapacity || 350 }
-    ];
-  }, [filteredLog, cameras, zones, selectedZoneFilter, latestDetection]);
+  const effectiveLog = filteredLog;
 
   // Get unique zones that have been scanned or configured
   const scannedZones = useMemo(() => {
@@ -184,10 +165,13 @@ export default function ForecastView() {
     ? Math.round(effectiveLog.reduce((s, d) => s + d.count, 0) / effectiveLog.length)
     : 0;
   const peakForecast = forecastPoints.find(p => p.isPeak);
-  const ceiling = latestEntry?.capacity || (zones.find(z => z.id === selectedZoneFilter)?.maxCapacity) || zones[0]?.maxCapacity || 350;
+  const forecastZone = zones.find((zone) => zone.id === selectedZoneFilter) || zones[0];
+  const ceiling = forecastZone?.maxCapacity || latestEntry?.capacity || 350;
+  const warningThreshold = forecastZone?.warningPct || 70;
+  const criticalThreshold = forecastZone?.criticalPct || 85;
   const peakPct = peakForecast && ceiling > 0 ? Math.round((peakForecast.forecast / ceiling) * 100) : 0;
-  const isCritical = peakPct >= 85;
-  const isWarning = peakPct >= 70 && !isCritical;
+  const isCritical = peakPct >= criticalThreshold;
+  const isWarning = peakPct >= warningThreshold && !isCritical;
 
   return (
     <div className="forecast-container">
@@ -210,8 +194,8 @@ export default function ForecastView() {
               )}
             </p>
           </div>
-          <button className="button primary" style={{ background: isCritical ? '#d9565e' : '#db9225', borderColor: 'transparent' }}>
-            Execute Gate Diversion
+          <button className="button primary" onClick={() => setPage('Incidents')} style={{ background: isCritical ? '#d9565e' : '#db9225', borderColor: 'transparent' }}>
+            Review incident response
           </button>
         </div>
       )}
@@ -283,7 +267,7 @@ export default function ForecastView() {
           <div className="stat-value">
             {peakForecast?.forecast ?? '—'} <span className="unit">people</span>
             <span className={`trend ${isCritical ? 'critical' : isWarning ? 'warning' : 'positive'}`}>
-              {isCritical ? 'Over Capacity' : isWarning ? 'Near Limit' : 'Safe'}
+              {peakForecast ? (isCritical ? 'Over Capacity' : isWarning ? 'Near Limit' : 'Safe') : 'Need 3 scans'}
             </span>
           </div>
           <div className="stat-foot">{peakForecast?.label} · {peakPct}% of {ceiling} limit</div>
@@ -295,25 +279,25 @@ export default function ForecastView() {
         <div className="panel" style={{ gridColumn: 'span 2' }}>
           <div className="panel-heading">
             <div>
-              <h2>CrowdFlowLSTM — Live Forecast from Real Detections</h2>
+              <h2>Crowd trend projection</h2>
               <p>
-                Built from <b>{filteredLog.length} actual AI scan{filteredLog.length !== 1 ? 's' : ''}</b> via Crowd Search.
+                Built from <b>{filteredLog.length} actual detection{filteredLog.length !== 1 ? 's' : ''}</b> for {forecastZone?.name || 'this zone'}.
                 {filteredLog.length < 3 && (
                   <span style={{ color: '#db9225', marginLeft: '8px' }}>
-                    ⚠ Run more scans for a higher-accuracy forecast.
+                    ⚠ At least 3 timestamped detections are needed to estimate a trend.
                   </span>
                 )}
               </p>
             </div>
             <div className="chart-legend" style={{ margin: 0 }}>
               <span><i className="legend-blue" style={{ background: '#3478e5' }} /> Observed (Crowd Search)</span>
-              <span><i className="legend-dash" style={{ borderColor: '#db9225' }} /> LSTM Forecast</span>
-              <span><i className="legend-blue" style={{ background: 'rgba(219,146,37,0.2)' }} /> 95% Confidence Band</span>
+              <span><i className="legend-dash" style={{ borderColor: '#db9225' }} /> Trend projection</span>
+              <span><i className="legend-blue" style={{ background: 'rgba(219,146,37,0.2)' }} /> Residual range</span>
             </div>
           </div>
 
           <div className="forecast-chart-box" style={{ height: '180px' }}>
-            <ForecastChart points={forecastPoints} ceiling={ceiling} />
+            {forecastPoints.length ? <ForecastChart points={forecastPoints} ceiling={ceiling} /> : <div style={{ height: '100%', display: 'grid', placeContent: 'center', textAlign: 'center', color: 'var(--muted)' }}>Collect 3 or more real scans in this zone to show a trend projection.<button className="button secondary" style={{ margin: '12px auto 0' }} onClick={() => setPage('Crowd search')}>Scan a camera</button></div>}
           </div>
 
           {/* Forecast table */}
@@ -323,15 +307,15 @@ export default function ForecastView() {
                 <tr>
                   <th>TIME HORIZON</th>
                   <th>PREDICTED OCCUPANCY</th>
-                  <th>95% CONFIDENCE INTERVAL</th>
+                  <th>ESTIMATED TREND RANGE</th>
                   <th>ZONE SAFETY IMPACT</th>
                 </tr>
               </thead>
               <tbody>
                 {forecastPoints.map((p) => {
                   const pct = Math.round((p.forecast / ceiling) * 100);
-                  const risk = pct >= 90 ? 'Critical' : pct >= 70 ? 'Warning' : 'Normal';
-                  const col = pct >= 90 ? 'red' : pct >= 70 ? 'amber' : 'green';
+                  const risk = pct >= criticalThreshold ? 'Critical' : pct >= warningThreshold ? 'Warning' : 'Normal';
+                  const col = pct >= criticalThreshold ? 'red' : pct >= warningThreshold ? 'amber' : 'green';
                   return (
                     <tr key={p.label} style={{ background: p.isPeak ? 'rgba(217,86,94,0.06)' : undefined }}>
                       <td><b>{p.label}</b>{p.isPeak && <span style={{ marginLeft: '8px', color: '#d9565e', fontSize: '11px' }}>▲ PEAK</span>}</td>
@@ -347,6 +331,7 @@ export default function ForecastView() {
                     </tr>
                   );
                 })}
+                {!forecastPoints.length && <tr><td colSpan="4" style={{ textAlign: 'center', color: 'var(--muted)', padding: 18 }}>No trend yet. Add timestamped detections in this zone.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -358,10 +343,10 @@ export default function ForecastView() {
           <div className="panel">
             <div className="panel-heading"><h2>Forecasting Architecture</h2></div>
             <div className="telemetry-card">
-              <div className="metric-row"><span>Model Type</span><b>Linear Trend + LSTM Sim</b></div>
+              <div className="metric-row"><span>Current method</span><b>Time-aware linear baseline</b></div>
               <div className="metric-row"><span>Data Source</span><b style={{ color: '#3478e5' }}>Real Crowd Search Scans</b></div>
               <div className="metric-row"><span>Lookback Window</span><b>Last {Math.min(filteredLog.length, 8)} detections</b></div>
-              <div className="metric-row"><span>Forecast Horizon</span><b>16 min (8 × 2-min steps)</b></div>
+              <div className="metric-row"><span>Projection horizon</span><b>16 min (8 × 2-min steps)</b></div>
               <div className="metric-row"><span>Total Scans Fed</span><b>{filteredLog.length} detections</b></div>
               <div className="metric-row">
                 <span>Avg Inference</span>
@@ -372,7 +357,7 @@ export default function ForecastView() {
               <b>How this works:</b>
               <p>
                 Every scan from <b>Crowd Search</b> appends a real detection to this forecast.
-                The trend is computed from your actual observations — no synthetic or dummy data.
+                This page uses timestamped observations and a transparent linear baseline. A trained LSTM checkpoint is not currently connected to inference.
               </p>
             </div>
           </div>

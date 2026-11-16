@@ -59,7 +59,9 @@ export default function CCTVCanvasStream({
   const [liveCount, setLiveCount] = useState(count || 0);
 
   // Pull aiConnected from store — determines whether detection is active
-  const { aiConnected } = useCrowdStore();
+  const { aiConnected, cameras: storeCameras } = useCrowdStore();
+  const cameraFlow = storeCameras.find((camera) => camera.id === cameraId)?.lastDetection?.flow;
+  const motionVectors = cameraFlow?.available ? cameraFlow.vectors || [] : [];
 
   // Detect Stream Kind
   const ytId = extractYouTubeId(streamUrl);
@@ -156,19 +158,6 @@ export default function CCTVCanvasStream({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-
-    // Synthesize motion vectors
-    const vectors = [];
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 5; c++) {
-        vectors.push({
-          x: 40 + c * 90,
-          y: 40 + r * 35,
-          vx: 1.2 + (Math.sin(c + r) * 0.4),
-          vy: 0.3 + (Math.cos(c * 2) * 0.3)
-        });
-      }
-    }
 
     const render = () => {
       const w = canvas.width;
@@ -276,18 +265,23 @@ export default function CCTVCanvasStream({
         ctx.fillStyle = '#00ffcc';
         ctx.lineWidth = 1.5;
 
-        vectors.forEach((v) => {
+        motionVectors.forEach((v) => {
+          const x = ((v.grid_x + 0.5) / 4) * w;
+          const y = ((v.grid_y + 0.5) / 4) * h;
+          const vx = v.dx;
+          const vy = v.dy;
           const arrowLen = 14;
-          const targetX = v.x + v.vx * arrowLen;
-          const targetY = v.y + v.vy * arrowLen;
+          const magnitude = Math.max(0.001, Math.hypot(vx, vy));
+          const targetX = x + (vx / magnitude) * arrowLen;
+          const targetY = y + (vy / magnitude) * arrowLen;
 
           ctx.beginPath();
-          ctx.moveTo(v.x, v.y);
+          ctx.moveTo(x, y);
           ctx.lineTo(targetX, targetY);
           ctx.stroke();
 
           // Arrow head
-          const angle = Math.atan2(v.vy, v.vx);
+          const angle = Math.atan2(vy, vx);
           ctx.beginPath();
           ctx.moveTo(targetX, targetY);
           ctx.lineTo(targetX - 4 * Math.cos(angle - Math.PI / 6), targetY - 4 * Math.sin(angle - Math.PI / 6));
@@ -366,7 +360,7 @@ export default function CCTVCanvasStream({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, zoomLevel, heatmap, flowVectors, latencyMs, fps, liveCount, cameraId, isYouTube, isWebcam, isDirectVideo, aiConnected]);
+  }, [isPlaying, zoomLevel, heatmap, flowVectors, latencyMs, fps, liveCount, cameraId, isYouTube, isWebcam, isDirectVideo, aiConnected, motionVectors]);
 
   const handleSnapshot = () => {
     const canvas = canvasRef.current;

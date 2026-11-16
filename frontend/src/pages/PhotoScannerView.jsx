@@ -5,7 +5,11 @@ import { webcamManager } from '../services/webcamManager';
 
 export default function PhotoScannerView() {
   const {
+    cameras,
     zones,
+    activeCameraId,
+    setActiveCameraId,
+    setCameraModel,
     recordRealDetection,
     scannerTargetZoneId,
     setScannerTargetZoneId,
@@ -33,7 +37,8 @@ export default function PhotoScannerView() {
   const [activeImage, setActiveImage] = useState(sandboxSnapshot || sampleLibrary[0].src);
   const [selectedSampleId, setSelectedSampleId] = useState(sandboxSnapshot ? null : sampleLibrary[0].id);
   const [isScanning, setIsScanning] = useState(false);
-  const [modelType, setModelType] = useState('yolov8');
+  const selectedCamera = cameras.find((camera) => camera.id === activeCameraId) || cameras[0];
+  const [modelType, setModelType] = useState(selectedCamera?.modelType || 'csrnet');
 
   // Selected Venue Zone
   const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || 'zone-arena-01');
@@ -335,7 +340,9 @@ export default function PhotoScannerView() {
       latencyMs: result.latency_ms || 38.2,
       resolution: { width: w, height: h },
       zoneId: selectedZoneId,
+      cameraId: selectedCamera?.id,
       modelName: modelType,
+      flow: result.flow || null,
       imageSrc: activeImage,
       isWebcam: activeTab === 'camera'
     });
@@ -1026,10 +1033,22 @@ export default function PhotoScannerView() {
             </span>
           </div>
 
-          {/* Venue Zone Assignment & Model Controls */}
+          {/* Selected camera, linked zone, and assigned model */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '8px 0 12px' }}>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)' }}>ASSIGN TO VENUE ZONE</label>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)' }}>CAMERA TO SCAN</label>
+              <select className="select-input" value={selectedCamera?.id || ''} onChange={(e) => {
+                const camera = cameras.find((item) => item.id === e.target.value);
+                if (!camera) return;
+                setActiveCameraId(camera.id);
+                setModelType(camera.modelType || 'csrnet');
+                if (camera.zoneId) handleZoneChange(camera.zoneId);
+              }} style={{ width: '100%', padding: '6px', fontSize: '12px', marginTop: '4px' }}>
+                {cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name} · {camera.zoneName || camera.zone}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)' }}>ZONE CAPACITY</label>
               <select
                 className="select-input"
                 value={selectedZoneId}
@@ -1050,7 +1069,10 @@ export default function PhotoScannerView() {
                 <select
                   className="select-input"
                   value={modelType}
-                  onChange={(e) => setModelType(e.target.value)}
+                  onChange={(e) => {
+                    setModelType(e.target.value);
+                    if (selectedCamera) setCameraModel(selectedCamera.id, e.target.value);
+                  }}
                   style={{ width: '100%', padding: '6px', fontSize: '12px', marginTop: '4px' }}
                 >
                   <option value="yolov8">YOLOv8 Person Detector</option>

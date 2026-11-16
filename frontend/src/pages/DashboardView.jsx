@@ -76,6 +76,11 @@ export default function DashboardView() {
     : 0;
 
   const activeIncidentsCount = incidents.filter((i) => i.status === 'Open').length;
+  const setupSteps = [
+    { title: 'Set zone capacity', detail: `${zones.length} ${zones.length === 1 ? 'zone' : 'zones'} configured`, page: 'Zones' },
+    { title: 'Add cameras to zones', detail: `${cameras.length} ${cameras.length === 1 ? 'camera' : 'cameras'} connected`, page: 'Cameras' },
+    { title: 'Choose each camera model', detail: 'Assign in Cameras or compare in Models', page: 'Model lab' }
+  ];
 
   const handleCameraSnapshot = (dataUrl) => {
     inspectInCrowdSearch(dataUrl);
@@ -107,6 +112,24 @@ export default function DashboardView() {
           </div>
         </div>
       )}
+
+      <section className="panel" style={{ padding: '16px 18px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '15px' }}>Set up your monitoring</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '12px' }}>Create zones and capacity limits, attach cameras, then assign a model to each camera.</p>
+          </div>
+          <span style={{ color: 'var(--muted)', fontSize: '11px' }}>Zones → Cameras → Model per camera</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+          {setupSteps.map((step, index) => (
+            <button key={step.title} className="button secondary" onClick={() => setPage(step.page)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', height: 'auto', padding: '10px 12px', textAlign: 'left' }}>
+              <b style={{ fontSize: '12px' }}>{index + 1}. {step.title}</b>
+              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>{step.detail}</small>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Live AI Crowd Detection Banner */}
       {latestDetection && (

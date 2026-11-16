@@ -110,7 +110,7 @@ class ModelLoader:
         if not self.initialized:
             self.initialize()
         name = (model_name or self.active_model_name).lower()
-        return self.models.get(name, self.models.get('csrnet'))
+        return self.models.get(name)
 
     def get_gradcam(self, model_name=None):
         if not self.initialized:

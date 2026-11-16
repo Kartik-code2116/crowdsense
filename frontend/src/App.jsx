@@ -40,30 +40,27 @@ import {
 
 const navGroups = [
   {
-    label: 'OVERVIEW',
+    label: 'SETUP',
+    items: [
+      { id: 'Zones', label: '1. Zones & Capacity', icon: Layers },
+      { id: 'Cameras', label: '2. Cameras', icon: Camera },
+      { id: 'Model lab', label: '3. Models', icon: Cpu }
+    ]
+  },
+  {
+    label: 'MONITOR',
     items: [
       { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'Live monitor', label: 'Live Monitor', icon: Video },
-      { id: 'Analytics', label: 'Analytics', icon: BarChart3 }
+      { id: 'Live monitor', label: 'All Cameras', icon: Video },
+      { id: 'Crowd search', label: 'Camera Scanner', icon: ScanSearch },
+      { id: 'Incidents', label: 'Incidents', icon: AlertTriangle, hasCounter: true }
     ]
   },
   {
-    label: 'OPERATIONS',
+    label: 'INSIGHTS',
     items: [
-      { id: 'Cameras', label: 'Cameras', icon: Camera },
-      { id: 'Zones', label: 'Zones & Ceilings', icon: Layers },
-      { id: 'Incidents', label: 'Incidents', icon: AlertTriangle, hasCounter: true },
-      { id: 'Reports', label: 'Reports & Audits', icon: FileText }
-    ]
-  },
-  {
-    label: 'INTELLIGENCE',
-    items: [
-      { id: 'Crowd search', label: 'Crowd Scanner', icon: ScanSearch, badge: 'AI', badgeClass: 'pulse' },
-      { id: 'Forecast', label: 'LSTM Forecast', icon: TrendingUp },
-      { id: 'Model lab', label: 'Model Lab', icon: Cpu, badge: 'DL' },
-      { id: 'Sandbox', label: 'AI Sandbox', icon: FlaskConical },
-      { id: 'Settings', label: 'Settings', icon: Settings }
+      { id: 'Analytics', label: 'Analytics', icon: BarChart3 },
+      { id: 'Forecast', label: 'LSTM Forecast', icon: TrendingUp }
     ]
   }
 ];

@@ -287,7 +287,8 @@ export const useCrowdStore = create((set, get) => {
             lastSnapshot: c.lastSnapshot || c.snapshotUrl || null,
             snapshotUrl: c.snapshotUrl || c.lastSnapshot || null,
             heatmapUrl: c.heatmapUrl || null,
-            isWebcam: isWb
+            isWebcam: isWb,
+            modelType: c.modelType || 'csrnet'
           };
         });
         set({ cameras: mapped, dbConnected: true, dbSource: 'MongoDB Local (27017)' });
@@ -502,6 +503,38 @@ export const useCrowdStore = create((set, get) => {
   setHeatmap: (heatmap) => set({ heatmap }),
   setFlowVectors: (flowVectors) => set({ flowVectors }),
   setActiveCameraId: (activeCameraId) => set({ activeCameraId }),
+  setCameraModel: (cameraId, modelType) => {
+    const camera = get().cameras.find((item) => item.id === cameraId);
+    if (!camera) return;
+    set((state) => ({ cameras: state.cameras.map((item) => item.id === cameraId ? { ...item, modelType } : item) }));
+    apiClient.createCamera({
+      id: camera.id, name: camera.name, zoneId: camera.zoneId, zoneName: camera.zoneName,
+      streamUrl: camera.streamUrl, streamType: camera.streamType, resolution: camera.resolution,
+      sampleFps: camera.fps, sceneType: camera.scene, lastCount: camera.count, modelType
+    }).catch((e) => console.warn('Camera model preference persist deferred:', e.message));
+  },
+  setCameraZone: (cameraId, zoneId) => {
+    const state = get();
+    const camera = state.cameras.find((item) => item.id === cameraId);
+    const zone = state.zones.find((item) => item.id === zoneId);
+    if (!camera || !zone) return;
+    const updatedCamera = {
+      ...camera,
+      zoneId: zone.id,
+      zone: zone.code || zone.name,
+      zoneName: zone.name,
+      maxCapacity: zone.maxCapacity,
+      capacity: Math.min(100, Math.round(((camera.count || 0) / Math.max(1, zone.maxCapacity || 1)) * 100))
+    };
+    set((current) => ({ cameras: current.cameras.map((item) => item.id === cameraId ? updatedCamera : item) }));
+    apiClient.createCamera({
+      id: updatedCamera.id, name: updatedCamera.name, zoneId: updatedCamera.zoneId,
+      zoneName: updatedCamera.zoneName, streamUrl: updatedCamera.streamUrl,
+      streamType: updatedCamera.streamType, modelType: updatedCamera.modelType,
+      resolution: updatedCamera.resolution, sampleFps: updatedCamera.fps,
+      sceneType: updatedCamera.scene, lastCount: updatedCamera.count
+    }).catch((e) => console.warn('Camera zone assignment persist deferred:', e.message));
+  },
   setSandboxSnapshot: (sandboxSnapshot) => set({ sandboxSnapshot, page: 'Sandbox' }),
 
   // Camera Management (Connected to MongoDB & Live Streaming)
@@ -535,6 +568,7 @@ export const useCrowdStore = create((set, get) => {
       scene: scene,
       streamUrl: streamUrl,
       streamType: streamType,
+      modelType: newCam.modelType || (state.models.find((m) => m.isActive)?.name.includes('MCNN') ? 'mcnn' : state.models.find((m) => m.isActive)?.name.includes('YOLO') ? 'yolov8' : 'csrnet'),
       fps: Number(newCam.fps) || (isWebcam ? 15.0 : 2.0),
       latencyMs: isWebcam ? 32 : 38,
       resolution: newCam.resolution || (isWebcam ? '1280x720' : '1920x1080'),
@@ -559,6 +593,7 @@ export const useCrowdStore = create((set, get) => {
       zoneName: targetZone.name,
       streamUrl: newCamObj.streamUrl,
       streamType: newCamObj.streamType,
+      modelType: newCamObj.modelType,
       resolution: newCamObj.resolution,
       sampleFps: newCamObj.fps,
       sceneType: newCamObj.scene,
@@ -908,7 +943,12 @@ export const useCrowdStore = create((set, get) => {
     }));
 
     try {
-      await apiClient.updateZone(zoneId, updates);
+      const { warningPct, criticalPct, ...zoneFields } = updates;
+      await apiClient.updateZone(zoneId, {
+        ...zoneFields,
+        ...(warningPct !== undefined ? { warningThresholdPct: Number(warningPct) } : {}),
+        ...(criticalPct !== undefined ? { criticalThresholdPct: Number(criticalPct) } : {})
+      });
     } catch (e) {
       console.warn('Update zone failed:', e.message);
     }
@@ -954,12 +994,20 @@ export const useCrowdStore = create((set, get) => {
   })),
 
   // Models
-  setActiveModel: (modelName) => set((state) => ({
-    models: state.models.map((m) => ({
-      ...m,
-      isActive: m.name === modelName
-    }))
-  }))
+  setActiveModel: (modelName) => {
+    const modelType = modelName.includes('YOLO') ? 'yolov8' : modelName.includes('MCNN') ? null : 'csrnet';
+    if (!modelType) return;
+    const cameras = get().cameras;
+    set((state) => ({
+      models: state.models.map((m) => ({ ...m, isActive: m.name === modelName })),
+      cameras: state.cameras.map((camera) => ({ ...camera, modelType }))
+    }));
+    cameras.forEach((camera) => apiClient.createCamera({
+      id: camera.id, name: camera.name, zoneId: camera.zoneId, zoneName: camera.zoneName,
+      streamUrl: camera.streamUrl, streamType: camera.streamType, resolution: camera.resolution,
+      sampleFps: camera.fps, sceneType: camera.scene, lastCount: camera.count, modelType
+    }).catch((e) => console.warn('Active model preference persist deferred:', e.message)));
+  }
   };
 });
 

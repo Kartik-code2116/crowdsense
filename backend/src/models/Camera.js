@@ -6,6 +6,7 @@ const cameraSchema = new mongoose.Schema({
   name: { type: String, required: true },
   streamUrl: { type: String, default: 'mock://camera_feed_01' },
   streamType: { type: String, default: 'demo' }, // 'youtube', 'webcam', 'url', 'rtsp', 'demo'
+  modelType: { type: String, enum: ['csrnet', 'mcnn', 'yolov8'], default: 'csrnet' },
   zoneId: { type: String, required: true },
   zoneName: { type: String, default: 'Zone 01' },
   resolution: { type: String, default: '1920x1080' },

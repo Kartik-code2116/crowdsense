@@ -96,7 +96,7 @@ def generate_gaussian_density_map(heads_and_boxes, width, height, downsample_fac
 
 class InferenceEngine:
     @staticmethod
-    def process_image(image_bytes: bytes, model_name="yolov8", zone_capacity=200):
+    def process_image(image_bytes: bytes, model_name="yolov8", zone_capacity=200, source_key=None):
         start_time = time.time()
         
         # Load and parse image
@@ -110,9 +110,17 @@ class InferenceEngine:
             img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
             w, h = img.size
 
-        norm_model = (model_name or "yolov8").lower().strip()
+        requested_model = (model_name or "yolov8").lower().strip()
+        norm_model = requested_model if requested_model in ("csrnet", "yolo", "yolov8") else "csrnet"
         yolo_model = model_loader.get_model('yolov8') or model_loader.get_model('yolo')
         csrnet_model = model_loader.get_model('csrnet')
+
+        if norm_model in ("yolo", "yolov8") and yolo_model is None and csrnet_model is not None:
+            norm_model = "csrnet"
+        elif norm_model == "csrnet" and csrnet_model is None and yolo_model is not None:
+            norm_model = "yolov8"
+        elif csrnet_model is None and yolo_model is None:
+            raise RuntimeError("No trained inference weights are available. Load CSRNet or YOLOv8 weights before running detection.")
 
         detected_boxes = []
         detected_heads = []
@@ -120,7 +128,7 @@ class InferenceEngine:
         count_val = 0.0
 
         # Primary real YOLOv8 detection branch (for exact bounding boxes and real person count)
-        use_yolo = (norm_model in ['yolo', 'yolov8', 'auto'] or csrnet_model is None or yolo_model is not None)
+        use_yolo = norm_model in ['yolo', 'yolov8']
 
         if use_yolo and yolo_model is not None:
             try:
@@ -182,7 +190,7 @@ class InferenceEngine:
                     if len(csr_heads) > 0 and len(detected_heads) == 0:
                         detected_heads = csr_heads
                 else:
-                    count_val = max(0.0, raw_integral * 38.0)
+                    count_val = max(0.0, raw_integral)
                     density_grid = csr_density
                     detected_heads = find_density_peaks(csr_density, w, h)
             except Exception as ec:
@@ -199,13 +207,14 @@ class InferenceEngine:
         heatmap_url = density_to_base64_heatmap(density_grid, target_size=(w, h))
 
         # Optical flow dynamics
-        flow_data = CrowdFlowService.estimate_flow()
+        flow_data = CrowdFlowService.estimate_flow(current_frame=np.asarray(img), source_key=source_key)
 
         # Anomaly / Risk evaluation
         anomaly_data = AnomalyDetector.evaluate_risk(
             current_count=round_count,
             capacity=zone_capacity,
-            flow_speed=flow_data.get('average_speed_px', 1.2)
+            flow_speed=flow_data.get('average_speed_px_per_frame'),
+            flow_available=flow_data.get('available', False)
         )
 
         occupancy_pct = round((round_count / max(1, zone_capacity)) * 100, 1)
@@ -244,8 +253,10 @@ class InferenceEngine:
 
         return {
             "model": norm_model.upper(),
+            "requested_model": requested_model.upper(),
+            "model_fallback": norm_model != requested_model,
             "status": "success",
-            "is_real_pytorch": True,
+            "is_real_pytorch": bool((norm_model == 'csrnet' and csrnet_model is not None) or (norm_model in ('yolo', 'yolov8') and yolo_model is not None)),
             "count": round_count,
             "exact_integral": round(count_val, 2),
             "uncertainty": uncertainty,

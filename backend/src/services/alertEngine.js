@@ -1,4 +1,5 @@
 const Alert = require('../models/Alert');
+const Incident = require('../models/Incident');
 const { getIsConnected, getMemoryStore } = require('../config/db');
 
 /**
@@ -56,17 +57,52 @@ class AlertEngine {
     }
 
     if (alert) {
+      let created = true;
       if (getIsConnected()) {
         try {
-          await Alert.create(alert);
+          const existing = await Alert.findOne({ cameraId: alert.cameraId, zoneId: alert.zoneId, status: 'Active' });
+          if (existing) {
+            await Alert.findByIdAndUpdate(existing._id, { $set: { count, capacity, occupancyPct, message: alert.message, level: alert.level, title: alert.title } });
+            created = false;
+          } else {
+            await Alert.create({ ...alert, userId: camera.userId });
+            await Incident.create({
+              userId: camera.userId || '6ade4cd5c5d2c1c0ec4762e5',
+              incidentNumber: `INC-${Date.now().toString().slice(-6)}`,
+              title: alert.title,
+              description: alert.message,
+              level: alert.level,
+              location: `${zone.name} · ${camera.name || alert.cameraId}`,
+              zoneId: alert.zoneId,
+              cameraId: alert.cameraId,
+              peakCount: count,
+              capacity,
+              time: new Date().toLocaleTimeString(),
+              color: alert.color,
+              status: 'Open'
+            });
+          }
         } catch (e) {}
       } else {
-        getMemoryStore().alerts.unshift(alert);
+        const store = getMemoryStore();
+        const existing = store.alerts.find((item) => item.cameraId === alert.cameraId && item.zoneId === alert.zoneId && item.status === 'Active');
+        if (existing) {
+          Object.assign(existing, { count, capacity, occupancyPct, message: alert.message, level: alert.level, title: alert.title });
+          created = false;
+        } else {
+          store.alerts.unshift(alert);
+          store.incidents.unshift({ ...alert, id: `inc_${Date.now()}`, status: 'Open', time: new Date().toLocaleTimeString() });
+        }
       }
 
-      if (this.io) {
+      if (created && this.io) {
         this.io.emit('alert:created', alert);
       }
+    } else if (getIsConnected()) {
+      await Alert.updateMany({ cameraId: String(camera._id || camera.id), zoneId: String(zone._id || zone.id), status: 'Active' }, { $set: { status: 'Resolved' } });
+    } else {
+      const store = getMemoryStore();
+      store.alerts.filter((item) => item.cameraId === String(camera._id || camera.id) && item.zoneId === String(zone._id || zone.id) && item.status === 'Active').forEach((item) => { item.status = 'Resolved'; });
     }
 
     return { alert, occupancyPct };

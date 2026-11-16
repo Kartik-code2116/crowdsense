@@ -30,7 +30,8 @@ async def predict_crowd_density(
         result = InferenceEngine.process_image(
             image_bytes=image_bytes,
             model_name=model,
-            zone_capacity=zone_capacity
+            zone_capacity=zone_capacity,
+            source_key=f"upload:{file.filename}" if file is not None and file.filename else None
         )
         return result
 

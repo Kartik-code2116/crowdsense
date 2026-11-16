@@ -1,51 +1,46 @@
-"""
-Optical Flow and Crowd Dynamics Service
-Estimates global crowd motion vectors (dx, dy), speed, and movement entropy
-to detect stampedes, counter-flows, and turbulent bottleneck formations.
-"""
+"""Optical flow between consecutive frames for one stream."""
 
+import cv2
 import numpy as np
+
+_previous_frames = {}
 
 
 class CrowdFlowService:
     @staticmethod
-    def estimate_flow(prev_frame=None, current_frame=None, grid_size=(4, 4)):
-        """
-        Calculates directional flow vectors across a grid over the frame.
-        Returns average speed (pixels/s), dominant heading (degrees), and regional vectors.
-        """
-        # Synthesize realistic flow dynamics if consecutive video frames are simulated
+    def estimate_flow(prev_frame=None, current_frame=None, grid_size=(4, 4), source_key=None):
+        """Return measured motion vectors, or unavailable until a pair of frames exists."""
+        if current_frame is None or not source_key:
+            return {"available": False, "average_speed_px_per_frame": None, "dominant_heading_deg": None, "flow_direction": "Unavailable", "vectors": []}
+
+        gray = cv2.cvtColor(current_frame, cv2.COLOR_RGB2GRAY) if current_frame.ndim == 3 else current_frame
+        gray = cv2.resize(gray, (320, 180), interpolation=cv2.INTER_AREA)
+        key = str(source_key)
+        previous = prev_frame if prev_frame is not None else _previous_frames.get(key)
+        _previous_frames[key] = gray
+        if len(_previous_frames) > 128:
+            _previous_frames.pop(next(iter(_previous_frames)))
+        if previous is None:
+            return {"available": False, "average_speed_px_per_frame": None, "dominant_heading_deg": None, "flow_direction": "Waiting for next frame", "vectors": []}
+
+        flow = cv2.calcOpticalFlowFarneback(previous, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
         rows, cols = grid_size
+        cell_h, cell_w = gray.shape[0] // rows, gray.shape[1] // cols
         vectors = []
-        
-        # Base dominant crowd drift (e.g. towards exit / concourse center)
-        base_dx = 1.2
-        base_dy = 0.4
-        
-        for r in range(rows):
-            for c in range(cols):
-                # Small local turbulence
-                noise_x = (np.random.rand() - 0.5) * 0.8
-                noise_y = (np.random.rand() - 0.5) * 0.6
-                dx = round(float(base_dx + noise_x), 2)
-                dy = round(float(base_dy + noise_y), 2)
-                magnitude = round(float(np.sqrt(dx**2 + dy**2)), 2)
-                
-                vectors.append({
-                    "grid_x": c,
-                    "grid_y": r,
-                    "dx": dx,
-                    "dy": dy,
-                    "speed": magnitude
-                })
+        for row in range(rows):
+            for col in range(cols):
+                cell = flow[row * cell_h:(row + 1) * cell_h, col * cell_w:(col + 1) * cell_w]
+                dx, dy = np.mean(cell, axis=(0, 1))
+                vectors.append({"grid_x": col, "grid_y": row, "dx": round(float(dx), 2), "dy": round(float(dy), 2), "speed": round(float(np.hypot(dx, dy)), 2)})
 
-        avg_speed = round(float(np.mean([v['speed'] for v in vectors])), 2)
-        angle_rad = np.arctan2(base_dy, base_dx)
-        heading_deg = round(float(np.degrees(angle_rad)) % 360, 1)
-
+        avg_speed = float(np.mean([vector["speed"] for vector in vectors])) if vectors else 0.0
+        mean_dx = float(np.mean([vector["dx"] for vector in vectors])) if vectors else 0.0
+        mean_dy = float(np.mean([vector["dy"] for vector in vectors])) if vectors else 0.0
+        heading = round(float(np.degrees(np.arctan2(mean_dy, mean_dx)) % 360), 1) if avg_speed > 0.05 else None
         return {
-            "average_speed_px": avg_speed,
-            "dominant_heading_deg": heading_deg,
-            "flow_direction": "East-Southeast",
+            "available": True,
+            "average_speed_px_per_frame": round(avg_speed, 2),
+            "dominant_heading_deg": heading,
+            "flow_direction": f"{heading}°" if heading is not None else "Still",
             "vectors": vectors
         }

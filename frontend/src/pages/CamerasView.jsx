@@ -5,6 +5,7 @@ import CCTVCanvasStream from '../components/CCTVCanvasStream';
 export default function CamerasView() {
   const {
     cameras,
+    setCameraModel,
     deleteCamera,
     toggleWebcamFeed,
     setShowAddCameraModal,
@@ -166,6 +167,7 @@ export default function CamerasView() {
                 <th>SPATIAL MAP PIN</th>
                 <th>STREAM SOURCE &amp; TYPE</th>
                 <th>LIVE DETECTION</th>
+                <th>AI MODEL</th>
                 <th>RESOLUTION</th>
                 <th>FPS</th>
                 <th>STATUS</th>
@@ -229,6 +231,12 @@ export default function CamerasView() {
                           {cam.capacity || 0}%
                         </span>
                       </div>
+                    </td>
+                    <td>
+                      <select className="select-input" value={cam.modelType || 'csrnet'} onChange={(e) => setCameraModel(cam.id, e.target.value)} aria-label={`Model for ${cam.name}`} style={{ minWidth: '125px', padding: '5px', fontSize: '11px' }}>
+                        <option value="csrnet">CSRNet</option>
+                        <option value="yolov8">YOLOv8</option>
+                      </select>
                     </td>
                     <td>{cam.resolution}</td>
                     <td>{cam.fps} FPS</td>

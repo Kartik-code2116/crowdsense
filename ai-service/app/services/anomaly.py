@@ -11,7 +11,7 @@ import numpy as np
 
 class AnomalyDetector:
     @staticmethod
-    def evaluate_risk(current_count, capacity, flow_speed, historical_counts=None):
+    def evaluate_risk(current_count, capacity, flow_speed=None, historical_counts=None, flow_available=False):
         occupancy_ratio = current_count / max(1, capacity)
         
         # Surge detection
@@ -44,7 +44,7 @@ class AnomalyDetector:
                 risk_level = "Warning"
             reasons.append(f"Sudden crowd surge detected (+{round(surge_rate * 100, 1)}% in 3 min)")
 
-        if flow_speed < 0.3 and occupancy_ratio > 0.8:
+        if flow_available and flow_speed is not None and flow_speed < 0.3 and occupancy_ratio > 0.8:
             risk_score += 0.20
             risk_level = "Critical"
             reasons.append("Severe bottleneck: near-zero egress flow velocity")

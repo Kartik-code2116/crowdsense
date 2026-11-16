@@ -40,11 +40,13 @@ app.include_router(stream.router, prefix=settings.API_PREFIX)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
+    available_models = sorted(set(model_loader.models.keys()))
     return {
-        "status": "online",
+        "status": "online" if available_models else "degraded",
         "service": "CSRNet Deep Learning Model",
         "version": settings.VERSION,
         "active_model": model_loader.active_model_name,
+        "available_models": available_models,
         "device": settings.DEVICE,
         "real_weights_loaded": model_loader.has_real_weights
     }
