@@ -107,6 +107,7 @@ The Vite development server proxies `/api` and `/socket.io` to port 5000, and on
 ## Data and security notes
 
 - API routes and Socket.IO connections require a signed JWT. Passwords are hashed with bcrypt. Production registration requires the configured invitation code.
+- Docker serves HTTP for local evaluation. Put the frontend behind TLS before remote use; browser webcam access requires HTTPS outside localhost.
 - Production startup requires MongoDB and explicit secrets/origins. The development in-memory store is temporary and is cleared when the backend restarts.
 - Detection records are stored in MongoDB; set up backups and retention for the deployment. The project does not currently enforce an automatic detection TTL policy.
 - Camera URLs are fetched by the AI service. Only register streams the deployment is authorized to access and can safely expose to that service.

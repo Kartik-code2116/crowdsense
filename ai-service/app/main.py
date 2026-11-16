@@ -40,13 +40,18 @@ app.include_router(stream.router, prefix=settings.API_PREFIX)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    available_models = sorted(set(model_loader.models.keys()))
+    available = []
+    if model_loader.initialized:
+        if model_loader.models.get('csrnet'):
+            available.append('csrnet')
+        if model_loader.models.get('yolov8') or model_loader.models.get('yolo'):
+            available.append('yolov8')
     return {
-        "status": "online" if available_models else "degraded",
+        "status": "online",
         "service": "CrowdSense Inference Service",
         "version": settings.VERSION,
         "active_model": model_loader.active_model_name,
-        "available_models": available_models,
+        "available_models": available,
         "device": settings.DEVICE,
         "real_weights_loaded": model_loader.has_real_weights
     }

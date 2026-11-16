@@ -14,8 +14,24 @@ class AIClient {
     form.append('zone_capacity', String(zoneCapacity));
     form.append('warning_pct', String(warningPct));
     form.append('critical_pct', String(criticalPct));
-    const response = await this.client.post('/api/v1/predict', form, { headers: form.getHeaders() });
-    return response.data;
+    try {
+      const response = await this.client.post('/api/v1/predict', form, { headers: form.getHeaders() });
+      const result = response.data;
+      const requestedModel = String(model).toLowerCase() === 'yolo' ? 'yolov8' : String(model).toLowerCase();
+      const returnedModel = String(result?.model || '').toLowerCase() === 'yolo' ? 'yolov8' : String(result?.model || '').toLowerCase();
+      if (result?.status !== 'success' || result.is_real_pytorch !== true || result.model_fallback || returnedModel !== requestedModel || result.count === undefined || result.count === null || !Number.isFinite(Number(result.count))) {
+        const error = new Error(`The selected ${requestedModel.toUpperCase()} model did not return a real, valid crowd count.`);
+        error.statusCode = 503;
+        throw error;
+      }
+      return result;
+    } catch (error) {
+      if (error.statusCode) throw error;
+      const details = error.response?.data?.detail || error.response?.data?.message || error.message || 'Inference service unavailable.';
+      const inferenceError = new Error(`AI inference failed: ${details}`);
+      inferenceError.statusCode = error.response?.status >= 400 && error.response?.status < 500 ? error.response.status : 503;
+      throw inferenceError;
+    }
   }
 
   async scanStream(streamUrl, model = 'csrnet', zoneCapacity = 200, warningPct = 75, criticalPct = 90) {

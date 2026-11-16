@@ -3,6 +3,19 @@ import { apiClient } from '../api/client';
 import { useCrowdStore } from '../store/useCrowdStore';
 import { webcamManager } from '../services/webcamManager';
 
+const inferenceFailure = (result) => {
+  if (!result || result.success === false) {
+    return result?.message || result?.detail || 'The inference service did not return a result. Check that the AI service is running.';
+  }
+  if (result.status && result.status !== 'success') {
+    return result?.message || 'The AI service returned an error status.';
+  }
+  if (result.count === undefined || result.count === null || !Number.isFinite(Number(result.count))) {
+    return 'The model response did not include a valid people count.';
+  }
+  return '';
+};
+
 export default function PhotoScannerView() {
   const {
     cameras,
@@ -11,6 +24,8 @@ export default function PhotoScannerView() {
     setActiveCameraId,
     setCameraModel,
     recordRealDetection,
+    lastInferenceError,
+    setLastInferenceError,
     scannerTargetZoneId,
     setScannerTargetZoneId,
     setPage,
@@ -23,6 +38,10 @@ export default function PhotoScannerView() {
   const videoRef = useRef(null);
   const webcamStreamRef = useRef(null);
   const liveIntervalRef = useRef(null);
+  const liveTickInFlightRef = useRef(false);
+  const liveTickFunctionRef = useRef(null);
+  const liveContextRef = useRef(null);
+  const skipNextAutoScanRef = useRef(false);
 
   // Benchmark library presets
   const sampleLibrary = [
@@ -37,7 +56,9 @@ export default function PhotoScannerView() {
   const [activeImage, setActiveImage] = useState(sandboxSnapshot || sampleLibrary[0].src);
   const [selectedSampleId, setSelectedSampleId] = useState(sandboxSnapshot ? null : sampleLibrary[0].id);
   const [isScanning, setIsScanning] = useState(false);
-  const selectedCamera = cameras.find((camera) => camera.id === activeCameraId) || cameras[0];
+  const isWebcamCamera = (camera) => camera?.isWebcam || camera?.streamType === 'webcam' || camera?.id === 'CAM-WEBCAM';
+  const scanCameras = activeTab === 'camera' ? cameras.filter(isWebcamCamera) : cameras;
+  const selectedCamera = scanCameras.find((camera) => camera.id === activeCameraId) || scanCameras[0] || null;
   const [modelType, setModelType] = useState(selectedCamera?.modelType || 'csrnet');
   const [modelSaveError, setModelSaveError] = useState('');
   const [savingModel, setSavingModel] = useState(false);
@@ -46,6 +67,13 @@ export default function PhotoScannerView() {
   const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || '');
   const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || null;
   const [zoneCapacity, setZoneCapacity] = useState(currentZone?.maxCapacity || 200);
+
+  useEffect(() => {
+    if (activeTab === 'camera' && selectedCamera && activeCameraId !== selectedCamera.id) {
+      setActiveCameraId(selectedCamera.id);
+      setModelType(selectedCamera.modelType || 'csrnet');
+    }
+  }, [activeTab, selectedCamera?.id, activeCameraId, setActiveCameraId]);
 
   // When zone selection changes, sync capacity
   const handleZoneChange = (zId) => {
@@ -79,6 +107,8 @@ export default function PhotoScannerView() {
   // Results are empty until the inference service returns an observation.
   const [scanError, setScanError] = useState('');
   const [scanResult, setScanResult] = useState({
+    modelName: 'CSRNET',
+    hasResult: false,
     count: 0,
     exactIntegral: 0.0,
     peakDensity: 0.0,
@@ -86,8 +116,8 @@ export default function PhotoScannerView() {
     heads: [],
     boxes: [],
     heatmapUrl: null,
-    safetyBadge: 'SAFE',
-    densityLevel: 'Safe & Normal',
+    safetyBadge: 'WAITING',
+    densityLevel: 'Awaiting successful sample',
     occupancyPct: 0.0,
     hotspots: [],
     avgConfidence: 0.0,
@@ -238,6 +268,7 @@ export default function PhotoScannerView() {
     const frameData = await captureVideoFrameBlob();
     if (!frameData || !frameData.blob) return;
 
+    skipNextAutoScanRef.current = true;
     setActiveImage(frameData.dataUrl);
     setImgNaturalSize({ width: frameData.width, height: frameData.height });
     setActiveTab('upload');
@@ -248,34 +279,55 @@ export default function PhotoScannerView() {
   // 6. Toggle Live AI Continuous Scanning
   const toggleLiveAi = () => {
     if (isLiveAiRunning) {
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current);
-        liveIntervalRef.current = null;
-      }
       webcamManager.stopBackgroundAiScanning();
       setIsLiveAiRunning(false);
     } else {
       setIsLiveAiRunning(true);
-      // Run immediately then keep running in background across pages
-      runSingleLiveAiTick();
-      liveIntervalRef.current = setInterval(runSingleLiveAiTick, 1400);
     }
   };
 
   const runSingleLiveAiTick = async () => {
-    if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+    if (liveTickInFlightRef.current || !videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+    liveTickInFlightRef.current = true;
+    const requestedContext = { modelType, cameraId: selectedCamera?.id };
     try {
       const frameData = await captureVideoFrameBlob();
       if (!frameData || !frameData.blob) return;
 
       const result = await apiClient.predictImage(frameData.blob, modelType, zoneCapacity, currentZone?.warningPct, currentZone?.criticalPct);
-      if (result) {
-        applyScanResult(result, frameData.width, frameData.height, true, frameData.dataUrl);
+      const currentContext = liveContextRef.current;
+      if (currentContext?.activeTab !== 'camera' || currentContext.modelType !== requestedContext.modelType || currentContext.cameraId !== requestedContext.cameraId) return;
+      const error = inferenceFailure(result);
+      if (error) {
+        setScanError(error);
+        setLastInferenceError(error);
+        return;
       }
+      setLastInferenceError('');
+      applyScanResult(result, frameData.width, frameData.height, true, frameData.dataUrl);
     } catch (e) {
+      const currentContext = liveContextRef.current;
+      if (currentContext?.activeTab !== 'camera' || currentContext.modelType !== requestedContext.modelType || currentContext.cameraId !== requestedContext.cameraId) return;
       console.warn('Live AI tick error:', e.message);
+      const error = e.message || 'Live webcam inference failed. Check camera and AI service availability.';
+      setScanError(error);
+      setLastInferenceError(error);
+    } finally {
+      liveTickInFlightRef.current = false;
     }
   };
+  liveTickFunctionRef.current = runSingleLiveAiTick;
+  liveContextRef.current = { activeTab, modelType, cameraId: selectedCamera?.id };
+
+  useEffect(() => {
+    if (!isLiveAiRunning || activeTab !== 'camera') return undefined;
+    liveTickFunctionRef.current?.();
+    liveIntervalRef.current = setInterval(() => liveTickFunctionRef.current?.(), 1400);
+    return () => {
+      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+      liveIntervalRef.current = null;
+    };
+  }, [isLiveAiRunning, activeTab, modelType, zoneCapacity, currentZone?.warningPct, currentZone?.criticalPct, selectedCamera?.id, selectedZoneId]);
 
   // 7. Execute real deep learning search on photo
   const executeDeepScan = async (imageSrc) => {
@@ -299,15 +351,15 @@ export default function PhotoScannerView() {
     setScanError('');
     try {
       const result = await apiClient.predictImage(blob, modelType, zoneCapacity, currentZone?.warningPct, currentZone?.criticalPct);
-      if (result?.success === false) {
-        setScanError(result.message || 'Inference failed. Check the model service and try again.');
-      } else if (result) {
+      const error = inferenceFailure(result);
+      if (error) {
+        setScanError(error);
+      } else {
+        setLastInferenceError('');
         const w = result.resolution?.width || 640;
         const h = result.resolution?.height || 480;
         setImgNaturalSize({ width: w, height: h });
         applyScanResult(result, w, h, recordObservation, sourceImage);
-      } else {
-        setScanError('The inference service returned no result.');
       }
     } catch (err) {
       console.warn('Scanner inference error:', err.message);
@@ -318,11 +370,14 @@ export default function PhotoScannerView() {
   };
 
   const applyScanResult = (result, w, h, recordObservation = false, sourceImage = activeImage) => {
-    const boxes = result.detected_boxes || [];
-    const heads = result.detected_heads || [];
+    setScanError('');
+    const boxes = Array.isArray(result.detected_boxes) ? result.detected_boxes : [];
+    const heads = Array.isArray(result.detected_heads) ? result.detected_heads : [];
     const count = result.count !== undefined ? result.count : boxes.length;
 
     setScanResult({
+      modelName: result.model || modelType.toUpperCase(),
+      hasResult: true,
       count: count,
       exactIntegral: result.exact_integral !== undefined ? result.exact_integral : count,
       peakDensity: Number(result.peak_density) || 0,
@@ -350,16 +405,20 @@ export default function PhotoScannerView() {
         resolution: { width: w, height: h },
         zoneId: selectedCamera.zoneId,
         cameraId: selectedCamera.id,
-        modelName: modelType,
+        modelName: result.model || modelType,
         flow: result.flow || null,
         imageSrc: sourceImage,
-        isWebcam: activeTab === 'camera'
+        isWebcam: isWebcamCamera(selectedCamera)
       });
     }
   };
 
   useEffect(() => {
     if (activeTab !== 'camera' && activeImage) {
+      if (skipNextAutoScanRef.current) {
+        skipNextAutoScanRef.current = false;
+        return;
+      }
       executeDeepScan(activeImage);
     }
   }, [activeImage, modelType, zoneCapacity]);
@@ -526,19 +585,19 @@ export default function PhotoScannerView() {
           </p>
         </div>
         <div className="heading-actions">
-          <button className="button secondary" onClick={handleExportCSV} disabled={scanResult.count === 0}>
+          <button className="button secondary" onClick={handleExportCSV} disabled={scanResult.boxes.length === 0}>
             ⬇ Export CSV Data
           </button>
-          <button className="button secondary" onClick={handleExportJSON} disabled={scanResult.count === 0}>
+          <button className="button secondary" onClick={handleExportJSON} disabled={!scanResult.hasResult}>
             { } JSON Report
           </button>
-          <button className="button primary" onClick={handleDownloadAnnotated} disabled={scanResult.count === 0}>
+          <button className="button primary" onClick={handleDownloadAnnotated} disabled={!scanResult.hasResult}>
             📷 Save Annotated Photo
           </button>
         </div>
       </div>
 
-      {scanError && <div role="alert" style={{ marginBottom: 16, padding: 12, borderRadius: 8, color: '#9f2727', background: '#fff0ef', border: '1px solid #efc2be' }}>{scanError}</div>}
+      {(scanError || lastInferenceError) && <div role="alert" style={{ marginBottom: 16, padding: 12, borderRadius: 8, color: '#9f2727', background: '#fff0ef', border: '1px solid #efc2be' }}>{scanError || lastInferenceError}</div>}
 
       {/* Live Venue Cross-Feature Sync Bar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-soft)', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--line)', gap: '10px' }}>
@@ -671,6 +730,15 @@ export default function PhotoScannerView() {
                 <span className="heat-icon">▧</span> Density Heatmap
                 <span className={`switch ${showHeatmap ? 'on' : ''}`}><i /></span>
               </button>
+
+              <button
+                className={`toggle-chip ${showLabels ? 'selected' : ''}`}
+                onClick={() => setShowLabels(!showLabels)}
+                title="Toggle ID & Confidence tags on detected people"
+              >
+                <span className="heat-icon">🏷️</span> Labels
+                <span className={`switch ${showLabels ? 'on' : ''}`}><i /></span>
+              </button>
             </div>
           </div>
 
@@ -679,15 +747,169 @@ export default function PhotoScannerView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div
                 className="camera-stream-box"
-                style={{ height: '460px', position: 'relative', border: '1px solid var(--line)', borderRadius: '8px', background: '#0a1016' }}
+                style={{
+                  height: '460px',
+                  position: 'relative',
+                  border: '1px solid var(--line)',
+                  borderRadius: '8px',
+                  background: '#0a1016',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden'
+                }}
               >
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
+                <div
+                  style={{
+                    position: 'relative',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    aspectRatio: `${scanResult.resolution?.width || 640} / ${scanResult.resolution?.height || 480}`,
+                    width: 'auto',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                  />
+
+                  {/* Live Heatmap Overlay */}
+                  {showHeatmap && scanResult.heatmapUrl && (
+                    <img
+                      src={scanResult.heatmapUrl}
+                      alt="Live Density Heatmap"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        opacity: heatmapAlpha,
+                        mixBlendMode: 'screen',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                  )}
+
+                  {/* Overlaid Bounding Boxes for Each Person */}
+                  {showBoundingBoxes && scanResult.boxes.length > 0 && (
+                    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+                      {scanResult.boxes.map((b) => {
+                        const naturalW = scanResult.resolution.width || 640;
+                        const naturalH = scanResult.resolution.height || 480;
+                        const leftPct = (b.bbox[0] / naturalW) * 100;
+                        const topPct = (b.bbox[1] / naturalH) * 100;
+                        const widthPct = ((b.bbox[2] - b.bbox[0]) / naturalW) * 100;
+                        const heightPct = ((b.bbox[3] - b.bbox[1]) / naturalH) * 100;
+                        const isSelected = selectedPerson?.id === b.id;
+
+                        return (
+                          <div
+                            key={b.id}
+                            className={`bbox-box ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              left: `${leftPct}%`,
+                              top: `${topPct}%`,
+                              width: `${widthPct}%`,
+                              height: `${heightPct}%`,
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setSelectedPerson(b)}
+                            title={`${b.id}: (${Math.round(b.bbox[0])}, ${Math.round(b.bbox[1])}) · Conf: ${Math.round(b.confidence * 100)}%`}
+                          >
+                            {showLabels && (
+                              <span className="bbox-label">{b.id} · {Math.round(b.confidence * 100)}%</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Overlaid Head Target Crosshairs for Each Person */}
+                  {showHeadMarkers && scanResult.heads.length > 0 && (
+                    <div className="head-markers-layer" style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+                      {scanResult.heads.map((h, idx) => {
+                        const naturalW = scanResult.resolution.width || 640;
+                        const naturalH = scanResult.resolution.height || 480;
+                        const leftPct = (h.x / naturalW) * 100;
+                        const topPct = (h.y / naturalH) * 100;
+                        const isSelected = selectedPerson?.id === h.id || selectedPerson?.id === `person_${idx + 1}`;
+
+                        return (
+                          <div
+                            key={h.id || idx}
+                            className={`head-target-point ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${leftPct}%`,
+                              top: `${topPct}%`,
+                              transform: 'translate(-50%, -50%)',
+                              cursor: 'pointer',
+                              zIndex: isSelected ? 20 : 10
+                            }}
+                            onClick={() => setSelectedPerson({
+                              id: h.id || `person_${idx + 1}`,
+                              head: [h.x, h.y],
+                              confidence: h.confidence,
+                              density: h.density,
+                              bbox: scanResult.boxes.find((b) => b.id === `person_${idx + 1}`)?.bbox
+                            })}
+                            title={`Head #${idx + 1}: (${h.x}, ${h.y})`}
+                          >
+                            <div className="target-ring" />
+                            <div className="target-center-dot" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Selected Person Details Card */}
+                  {selectedPerson && (
+                    <div
+                      className="selected-head-card"
+                      style={{
+                        position: 'absolute',
+                        bottom: '16px',
+                        left: '16px',
+                        background: 'rgba(12, 20, 29, 0.94)',
+                        border: '1.5px solid #276de0',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '13px',
+                        zIndex: 35,
+                        boxShadow: '0 4px 18px rgba(0,0,0,0.5)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'center' }}>
+                        <b style={{ color: '#00ffcc', fontSize: '14px' }}>Target: {selectedPerson.id.toUpperCase()}</b>
+                        <button
+                          className="close-btn"
+                          style={{ color: '#fff', fontSize: '15px', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                          onClick={() => setSelectedPerson(null)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#c0cddb', lineHeight: '1.6' }}>
+                        {selectedPerson.bbox && (
+                          <span>Bounding Box: <b>[{selectedPerson.bbox.join(', ')}]</b><br /></span>
+                        )}
+                        <span>Head Location: <b>({selectedPerson.head ? selectedPerson.head.join(', ') : `${selectedPerson.x}, ${selectedPerson.y}`}) px</b></span><br />
+                        <span>Model Confidence: <b style={{ color: '#00ffcc' }}>{Math.round((selectedPerson.confidence || 0.9) * 100)}%</b></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Live Camera OSD Overlay */}
                 <div style={{ position: 'absolute', top: '12px', left: '14px', zIndex: 15, display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -701,55 +923,6 @@ export default function PhotoScannerView() {
                     </span>
                   )}
                 </div>
-
-                {/* Live Overlaid Bounding Boxes in Camera Feed */}
-                {isLiveAiRunning && showBoundingBoxes && (
-                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                    {scanResult.boxes.map((b) => {
-                      const naturalW = scanResult.resolution.width || 640;
-                      const naturalH = scanResult.resolution.height || 480;
-                      const leftPct = (b.bbox[0] / naturalW) * 100;
-                      const topPct = (b.bbox[1] / naturalH) * 100;
-                      const widthPct = ((b.bbox[2] - b.bbox[0]) / naturalW) * 100;
-                      const heightPct = ((b.bbox[3] - b.bbox[1]) / naturalH) * 100;
-
-                      return (
-                        <div
-                          key={b.id}
-                          className="bbox-box"
-                          style={{
-                            left: `${leftPct}%`,
-                            top: `${topPct}%`,
-                            width: `${widthPct}%`,
-                            height: `${heightPct}%`
-                          }}
-                        >
-                          {showLabels && (
-                            <span className="bbox-label">{b.id} · {Math.round(b.confidence * 100)}%</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Live Heatmap Overlay */}
-                {isLiveAiRunning && showHeatmap && scanResult.heatmapUrl && (
-                  <img
-                    src={scanResult.heatmapUrl}
-                    alt="Live Density Heatmap"
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      opacity: heatmapAlpha,
-                      mixBlendMode: 'screen',
-                      pointerEvents: 'none'
-                    }}
-                  />
-                )}
 
                 {cameraError && (
                   <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'grid', placeItems: 'center', color: '#ff6677', padding: '20px', textAlign: 'center' }}>
@@ -799,148 +972,172 @@ export default function PhotoScannerView() {
               <div
                 ref={containerRef}
                 className="scanner-viewport-box"
-                style={{ position: 'relative', height: '460px', borderRadius: '8px', overflow: 'hidden', background: '#0a1016' }}
+                style={{
+                  position: 'relative',
+                  height: '460px',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  background: '#0a1016',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
               >
-                <img
-                  ref={imgRef}
-                  src={activeImage}
-                  alt="Crowd Under Search"
-                  onLoad={(e) => {
-                    setImgNaturalSize({
-                      width: e.target.naturalWidth || 640,
-                      height: e.target.naturalHeight || 480
-                    });
+                <div
+                  style={{
+                    position: 'relative',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    aspectRatio: `${imgNaturalSize.width || 640} / ${imgNaturalSize.height || 480}`,
+                    width: 'auto',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                />
-
-                {/* Density Heatmap Overlay */}
-                {showHeatmap && scanResult.heatmapUrl && (
+                >
                   <img
-                    src={scanResult.heatmapUrl}
-                    alt="PyTorch Density Map"
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      opacity: heatmapAlpha,
-                      mixBlendMode: 'screen',
-                      pointerEvents: 'none'
+                    ref={imgRef}
+                    src={activeImage}
+                    alt="Crowd Under Search"
+                    onLoad={(e) => {
+                      setImgNaturalSize({
+                        width: e.target.naturalWidth || 640,
+                        height: e.target.naturalHeight || 480
+                      });
                     }}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   />
-                )}
 
-                {/* Real Bounding Boxes Over Photo */}
-                {showBoundingBoxes && (
-                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
-                    {scanResult.boxes.map((b) => {
-                      const naturalW = imgNaturalSize.width || 640;
-                      const naturalH = imgNaturalSize.height || 480;
-                      const leftPct = (b.bbox[0] / naturalW) * 100;
-                      const topPct = (b.bbox[1] / naturalH) * 100;
-                      const widthPct = ((b.bbox[2] - b.bbox[0]) / naturalW) * 100;
-                      const heightPct = ((b.bbox[3] - b.bbox[1]) / naturalH) * 100;
-                      const isSelected = selectedPerson?.id === b.id;
+                  {/* Density Heatmap Overlay */}
+                  {showHeatmap && scanResult.heatmapUrl && (
+                    <img
+                      src={scanResult.heatmapUrl}
+                      alt="PyTorch Density Map"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        opacity: heatmapAlpha,
+                        mixBlendMode: 'screen',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                  )}
 
-                      return (
-                        <div
-                          key={b.id}
-                          className={`bbox-box ${isSelected ? 'selected' : ''}`}
-                          style={{
-                            left: `${leftPct}%`,
-                            top: `${topPct}%`,
-                            width: `${widthPct}%`,
-                            height: `${heightPct}%`
-                          }}
-                          onClick={() => setSelectedPerson(b)}
-                          title={`${b.id}: (${Math.round(b.bbox[0])}, ${Math.round(b.bbox[1])}) · Conf: ${Math.round(b.confidence * 100)}%`}
-                        >
-                          {showLabels && (
-                            <span className="bbox-label">{b.id} · {Math.round(b.confidence * 100)}%</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  {/* Real Bounding Boxes Over Photo */}
+                  {showBoundingBoxes && (
+                    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+                      {scanResult.boxes.map((b) => {
+                        const naturalW = imgNaturalSize.width || 640;
+                        const naturalH = imgNaturalSize.height || 480;
+                        const leftPct = (b.bbox[0] / naturalW) * 100;
+                        const topPct = (b.bbox[1] / naturalH) * 100;
+                        const widthPct = ((b.bbox[2] - b.bbox[0]) / naturalW) * 100;
+                        const heightPct = ((b.bbox[3] - b.bbox[1]) / naturalH) * 100;
+                        const isSelected = selectedPerson?.id === b.id;
 
-                {/* Localized Head Markers */}
-                {showHeadMarkers && (
-                  <div className="head-markers-layer" style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
-                    {scanResult.heads.map((h, idx) => {
-                      const naturalW = imgNaturalSize.width || 640;
-                      const naturalH = imgNaturalSize.height || 480;
-                      const leftPct = (h.x / naturalW) * 100;
-                      const topPct = (h.y / naturalH) * 100;
-                      const isSelected = selectedPerson?.id === h.id || selectedPerson?.id === `person_${idx + 1}`;
-
-                      return (
-                        <div
-                          key={h.id || idx}
-                          className={`head-target-point ${isSelected ? 'selected' : ''}`}
-                          style={{
-                            position: 'absolute',
-                            left: `${leftPct}%`,
-                            top: `${topPct}%`,
-                            transform: 'translate(-50%, -50%)',
-                            cursor: 'pointer',
-                            zIndex: isSelected ? 20 : 10
-                          }}
-                          onClick={() => setSelectedPerson({
-                            id: h.id || `person_${idx + 1}`,
-                            head: [h.x, h.y],
-                            confidence: h.confidence,
-                            density: h.density
-                          })}
-                          title={`Head #${idx + 1}: (${h.x}, ${h.y})`}
-                        >
-                          <div className="target-ring" />
-                          <div className="target-center-dot" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Selected Person Details Card */}
-                {selectedPerson && (
-                  <div
-                    className="selected-head-card"
-                    style={{
-                      position: 'absolute',
-                      bottom: '16px',
-                      left: '16px',
-                      background: 'rgba(12, 20, 29, 0.94)',
-                      border: '1.5px solid #276de0',
-                      padding: '12px 16px',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontSize: '13px',
-                      zIndex: 35,
-                      boxShadow: '0 4px 18px rgba(0,0,0,0.5)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'center' }}>
-                      <b style={{ color: '#00ffcc', fontSize: '14px' }}>Target: {selectedPerson.id.toUpperCase()}</b>
-                      <button
-                        className="close-btn"
-                        style={{ color: '#fff', fontSize: '15px', cursor: 'pointer', background: 'transparent', border: 'none' }}
-                        onClick={() => setSelectedPerson(null)}
-                      >
-                        ✕
-                      </button>
+                        return (
+                          <div
+                            key={b.id}
+                            className={`bbox-box ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              left: `${leftPct}%`,
+                              top: `${topPct}%`,
+                              width: `${widthPct}%`,
+                              height: `${heightPct}%`
+                            }}
+                            onClick={() => setSelectedPerson(b)}
+                            title={`${b.id}: (${Math.round(b.bbox[0])}, ${Math.round(b.bbox[1])}) · Conf: ${Math.round(b.confidence * 100)}%`}
+                          >
+                            {showLabels && (
+                              <span className="bbox-label">{b.id} · {Math.round(b.confidence * 100)}%</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div style={{ marginTop: '8px', fontSize: '11px', color: '#c0cddb', lineHeight: '1.6' }}>
-                      {selectedPerson.bbox && (
-                        <span>Bounding Box: <b>[{selectedPerson.bbox.join(', ')}]</b><br /></span>
-                      )}
-                      <span>Head Location: <b>({selectedPerson.head ? selectedPerson.head.join(', ') : `${selectedPerson.x}, ${selectedPerson.y}`}) px</b></span><br />
-                      <span>Model Confidence: <b style={{ color: '#00ffcc' }}>{Math.round((selectedPerson.confidence || 0.9) * 100)}%</b></span>
+                  )}
+
+                  {/* Localized Head Markers */}
+                  {showHeadMarkers && (
+                    <div className="head-markers-layer" style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+                      {scanResult.heads.map((h, idx) => {
+                        const naturalW = imgNaturalSize.width || 640;
+                        const naturalH = imgNaturalSize.height || 480;
+                        const leftPct = (h.x / naturalW) * 100;
+                        const topPct = (h.y / naturalH) * 100;
+                        const isSelected = selectedPerson?.id === h.id || selectedPerson?.id === `person_${idx + 1}`;
+
+                        return (
+                          <div
+                            key={h.id || idx}
+                            className={`head-target-point ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${leftPct}%`,
+                              top: `${topPct}%`,
+                              transform: 'translate(-50%, -50%)',
+                              cursor: 'pointer',
+                              zIndex: isSelected ? 20 : 10
+                            }}
+                            onClick={() => setSelectedPerson({
+                              id: h.id || `person_${idx + 1}`,
+                              head: [h.x, h.y],
+                              confidence: h.confidence,
+                              density: h.density,
+                              bbox: scanResult.boxes.find((b) => b.id === `person_${idx + 1}`)?.bbox
+                            })}
+                            title={`Head #${idx + 1}: (${h.x}, ${h.y})`}
+                          >
+                            <div className="target-ring" />
+                            <div className="target-center-dot" />
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {/* Selected Person Details Card */}
+                  {selectedPerson && (
+                    <div
+                      className="selected-head-card"
+                      style={{
+                        position: 'absolute',
+                        bottom: '16px',
+                        left: '16px',
+                        background: 'rgba(12, 20, 29, 0.94)',
+                        border: '1.5px solid #276de0',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '13px',
+                        zIndex: 35,
+                        boxShadow: '0 4px 18px rgba(0,0,0,0.5)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'center' }}>
+                        <b style={{ color: '#00ffcc', fontSize: '14px' }}>Target: {selectedPerson.id.toUpperCase()}</b>
+                        <button
+                          className="close-btn"
+                          style={{ color: '#fff', fontSize: '15px', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                          onClick={() => setSelectedPerson(null)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#c0cddb', lineHeight: '1.6' }}>
+                        {selectedPerson.bbox && (
+                          <span>Bounding Box: <b>[{selectedPerson.bbox.join(', ')}]</b><br /></span>
+                        )}
+                        <span>Head Location: <b>({selectedPerson.head ? selectedPerson.head.join(', ') : `${selectedPerson.x}, ${selectedPerson.y}`}) px</b></span><br />
+                        <span>Model Confidence: <b style={{ color: '#00ffcc' }}>{Math.round((selectedPerson.confidence || 0.9) * 100)}%</b></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Scanning Progress Banner */}
                 {isScanning && (
@@ -1037,7 +1234,7 @@ export default function PhotoScannerView() {
                 borderRadius: '4px',
                 fontWeight: '800',
                 fontSize: '11px',
-                background: scanResult.safetyBadge === 'CRITICAL' ? '#cf4b54' : scanResult.safetyBadge === 'WARNING' ? '#e59534' : '#19a779',
+                background: scanResult.safetyBadge === 'CRITICAL' ? '#cf4b54' : scanResult.safetyBadge === 'WARNING' ? '#e59534' : scanResult.safetyBadge === 'WAITING' ? '#64748b' : '#19a779',
                 color: '#fff'
               }}
             >
@@ -1056,8 +1253,9 @@ export default function PhotoScannerView() {
                 setModelType(camera.modelType || 'csrnet');
                 if (camera.zoneId) handleZoneChange(camera.zoneId);
               }} style={{ width: '100%', padding: '6px', fontSize: '12px', marginTop: '4px' }}>
-                {cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name} · {camera.zoneName || camera.zone}</option>)}
+                {scanCameras.length ? scanCameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name} · {camera.zoneName || camera.zone}</option>) : <option value="">No laptop webcam registered</option>}
               </select>
+              {activeTab === 'camera' && !selectedCamera && <small style={{ display: 'block', color: 'var(--muted)', marginTop: 5 }}>Local webcam inference will run on this device. Add the laptop webcam in Cameras to send its counts to Dashboard, Analytics, and Incidents. <button className="text-button" onClick={() => setPage('Cameras')}>Open Cameras →</button></small>}
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)' }}>ZONE CAPACITY</label>
@@ -1121,23 +1319,23 @@ export default function PhotoScannerView() {
           {/* Real Metrics Telemetry Cards */}
           <div className="telemetry-card" style={{ background: 'var(--surface-soft)', borderRadius: '8px', padding: '14px' }}>
             <div className="metric-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Total People Detected</span>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>{modelType === 'csrnet' ? 'Estimated people count' : 'People detected by YOLOv8'}</span>
               <b style={{ color: '#276de0', fontSize: '26px', fontWeight: '800' }}>
-                {scanResult.count}
+                {scanResult.hasResult ? scanResult.count : '—'}
               </b>
             </div>
 
             {/* Capacity Progress Meter */}
             <div style={{ margin: '6px 0 14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                <span>Occupancy Rate ({scanResult.densityLevel})</span>
-                <b>{scanResult.occupancyPct}% of {zoneCapacity}</b>
+                <span>{scanResult.hasResult ? `Occupancy Rate (${scanResult.densityLevel})` : 'Occupancy rate'}</span>
+                <b>{scanResult.hasResult ? `${scanResult.occupancyPct}% of ${zoneCapacity}` : 'Waiting for model result'}</b>
               </div>
               <div className="crowd-density-meter">
                 <div
                   className="crowd-density-fill"
                   style={{
-                    width: `${Math.min(100, scanResult.occupancyPct)}%`,
+                    width: `${scanResult.hasResult ? Math.min(100, scanResult.occupancyPct) : 0}%`,
                     backgroundColor: scanResult.occupancyPct >= 90 ? '#cf4b54' : scanResult.occupancyPct >= 75 ? '#e59534' : '#19a779'
                   }}
                 />
@@ -1145,15 +1343,17 @@ export default function PhotoScannerView() {
             </div>
 
             <div className="metric-row" style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '12px' }}>
-              <span style={{ color: 'var(--muted)' }}>Bounding Boxes Found:</span>
+              <span style={{ color: 'var(--muted)' }}>Detected person boxes:</span>
               <b style={{ color: '#00ffcc', background: '#0f242e', padding: '1px 6px', borderRadius: '4px' }}>
-                {scanResult.boxes.length} individuals
+                {scanResult.boxes.length} people localized
               </b>
             </div>
 
             <div className="metric-row" style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '12px' }}>
-              <span style={{ color: 'var(--muted)' }}>Head Peaks Located:</span>
-              <b>{scanResult.heads.length} coordinates</b>
+              <span style={{ color: 'var(--muted)' }}>Head target markers:</span>
+              <b style={{ color: '#ff6677', background: 'rgba(255,102,119,0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+                {scanResult.heads.length} localized coordinates
+              </b>
             </div>
 
             <div className="metric-row" style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '12px' }}>
@@ -1189,10 +1389,12 @@ export default function PhotoScannerView() {
             </div>
           )}
 
-          {/* Table of Every Single Detected Person */}
+          {/* Table of Every Single Detected Person in the Crowd */}
           <div style={{ marginTop: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <b style={{ fontSize: '11px' }}>Detected Individuals Table ({scanResult.boxes.length})</b>
+              <b style={{ fontSize: '12px', color: 'var(--text)' }}>
+                Detected Individuals in Crowd ({scanResult.boxes.length})
+              </b>
               <small style={{ color: 'var(--muted)', fontSize: '10px' }}>Click row to highlight</small>
             </div>
 
@@ -1201,6 +1403,7 @@ export default function PhotoScannerView() {
                 <thead>
                   <tr>
                     <th>#</th>
+                    <th>TARGET ID</th>
                     <th>BOUNDING BOX</th>
                     <th>CONF</th>
                   </tr>
@@ -1211,10 +1414,11 @@ export default function PhotoScannerView() {
                     return (
                       <tr
                         key={b.id || idx}
-                        style={{ cursor: 'pointer', background: isSelected ? 'rgba(39, 109, 224, 0.2)' : 'transparent' }}
+                        style={{ cursor: 'pointer', background: isSelected ? 'rgba(39, 109, 224, 0.25)' : 'transparent' }}
                         onClick={() => setSelectedPerson(b)}
                       >
                         <td><b>{idx + 1}</b></td>
+                        <td style={{ color: '#00ffcc', fontWeight: '700' }}>{b.id}</td>
                         <td style={{ fontFamily: 'monospace', fontSize: '10px' }}>
                           [{b.bbox.map((v) => Math.round(v)).join(', ')}]
                         </td>
@@ -1228,8 +1432,8 @@ export default function PhotoScannerView() {
                   })}
                   {scanResult.boxes.length === 0 && (
                     <tr>
-                      <td colSpan="3" style={{ textAlign: 'center', color: 'var(--muted)', padding: '16px' }}>
-                        No individuals detected in current frame.
+                      <td colSpan="4" style={{ textAlign: 'center', color: 'var(--muted)', padding: '16px' }}>
+                        {!scanResult.hasResult ? 'Waiting for model scan to locate individuals in the frame...' : 'No people detected in this frame.'}
                       </td>
                     </tr>
                   )}

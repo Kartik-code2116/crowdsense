@@ -58,7 +58,10 @@ class VideoProcessorWorker {
       const model = camera.modelType === 'yolov8' ? 'yolov8' : 'csrnet';
       const scan = await aiClient.scanStream(camera.streamUrl, model, zone.maxCapacity, zone.warningThresholdPct, zone.criticalThresholdPct);
       const result = scan.telemetry;
-      if (scan.status !== 'success' || !result || !Number.isFinite(Number(result.count))) throw new Error('AI service returned no crowd count');
+      const returnedModel = String(result?.model || '').toLowerCase();
+      if (scan.status !== 'success' || !result || result.status !== 'success' || result.is_real_pytorch !== true || result.model_fallback || returnedModel !== model || result.count === undefined || result.count === null || !Number.isFinite(Number(result.count))) {
+        throw new Error(`AI service did not return a real ${model.toUpperCase()} crowd count`);
+      }
 
       const count = Math.max(0, Math.round(Number(result.count)));
       const modelUsed = result.model || model.toUpperCase();

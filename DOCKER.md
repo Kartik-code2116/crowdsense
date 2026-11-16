@@ -25,6 +25,8 @@ Open `http://localhost:3000`, register a workspace using the invitation code fro
 
 The API health check is available at `http://localhost:3000/api/v1/health`. AI model health is exposed read-only at `http://localhost:3000/ai/health`. Inference requests require a signed-in session and go through the authenticated API. The AI service and MongoDB are not exposed as host ports.
 
+Compose serves HTTP for local evaluation. Before remote use, put it behind a TLS reverse proxy, restrict access to the published frontend, and apply network egress rules for camera sources. Browser webcam access requires HTTPS outside localhost.
+
 ## Stop and update
 
 ```sh

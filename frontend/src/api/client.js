@@ -59,7 +59,7 @@ export const apiClient = {
   },
 
   // Real PyTorch Deep Learning Inference
-  async predictImage(fileBlob, model = 'yolov8', capacity = 250, warningPct = 75, criticalPct = 90) {
+  async predictImage(fileBlob, model = 'csrnet', capacity = 250, warningPct = 75, criticalPct = 90) {
     try {
       if (!fileBlob || !fileBlob.size) return { success: false, message: 'Choose a non-empty image before running inference.' };
       const formData = new FormData();

@@ -230,6 +230,8 @@ export const useCrowdStore = create((set, get) => {
   dbSource: 'Not connected',
   aiConnected: false,
   aiModelInfo: 'AI Service Offline',
+  aiAvailableModels: [],
+  lastInferenceError: '',
   lastSyncTimestamp: null,
 
   // Real-Time Cross-Feature Synchronization
@@ -404,17 +406,18 @@ export const useCrowdStore = create((set, get) => {
       if (aiHealth && aiHealth.status === 'online') {
         set({
           aiConnected: true,
+          aiAvailableModels: Array.isArray(aiHealth.available_models) ? aiHealth.available_models.map((model) => String(model).toLowerCase()) : [],
           aiModelInfo: `${(aiHealth.available_models || []).map((model) => model.toUpperCase()).join(' · ') || 'AI ready'} (${String(aiHealth.device || 'cpu').toUpperCase()})`
         });
       } else {
         // Deep Learning model is not reachable — mark as offline
-        set({ aiConnected: false, aiModelInfo: 'Model Offline' });
+        set({ aiConnected: false, aiAvailableModels: [], aiModelInfo: 'Model Offline' });
       }
 
       set({ lastSyncTimestamp: new Date().toLocaleTimeString() });
     } catch (e) {
       console.warn('Real live data fetch fallback:', e.message);
-      set({ aiConnected: false, aiModelInfo: 'Model Offline', dbConnected: false });
+      set({ aiConnected: false, aiAvailableModels: [], aiModelInfo: 'Model Offline', dbConnected: false });
     }
   },
 
@@ -519,6 +522,7 @@ export const useCrowdStore = create((set, get) => {
   setHeatmap: (heatmap) => set({ heatmap }),
   setFlowVectors: (flowVectors) => set({ flowVectors }),
   setActiveCameraId: (activeCameraId) => set({ activeCameraId }),
+  setLastInferenceError: (lastInferenceError) => set({ lastInferenceError }),
   setCameraModel: async (cameraId, modelType) => {
     const camera = get().cameras.find((item) => item.id === cameraId);
     if (!camera || !['csrnet', 'yolov8'].includes(modelType)) return { success: false, message: 'Choose a camera and supported model.' };
@@ -529,9 +533,9 @@ export const useCrowdStore = create((set, get) => {
     });
     if (!saved?.success) return { success: false, message: saved?.message || 'Could not save the camera model. Check the API connection.' };
     set((state) => ({ cameras: state.cameras.map((item) => item.id === cameraId ? { ...item, modelType, count: 0, capacity: 0, status: 'Pending', latencyMs: 0, lastSampleAt: 0, lastDetection: null } : item) }));
-    if (camera.id === 'CAM-WEBCAM' && webcamManager.isLiveAiActive) {
+    if ((camera.isWebcam || camera.streamType === 'webcam' || camera.id === 'CAM-WEBCAM') && webcamManager.isLiveAiActive) {
       const zone = get().zones.find((item) => item.id === camera.zoneId);
-      if (zone) webcamManager.startBackgroundAiScanning(zone.id, zone.maxCapacity, modelType, zone.warningPct, zone.criticalPct);
+      if (zone) webcamManager.startBackgroundAiScanning(zone.id, zone.maxCapacity, modelType, zone.warningPct, zone.criticalPct, camera.id);
     }
     return { success: true };
   },
@@ -558,8 +562,8 @@ export const useCrowdStore = create((set, get) => {
     if (!saved?.success) return { success: false, message: saved?.message || 'Could not save this camera assignment.' };
     const nextCamera = { ...updatedCamera, count: 0, capacity: 0, status: 'Pending', latencyMs: 0, lastSampleAt: 0, lastDetection: null };
     set((current) => ({ cameras: current.cameras.map((item) => item.id === cameraId ? nextCamera : item) }));
-    if (camera.id === 'CAM-WEBCAM' && webcamManager.isLiveAiActive) {
-      webcamManager.startBackgroundAiScanning(zone.id, zone.maxCapacity, camera.modelType, zone.warningPct, zone.criticalPct);
+    if ((camera.isWebcam || camera.streamType === 'webcam' || camera.id === 'CAM-WEBCAM') && webcamManager.isLiveAiActive) {
+      webcamManager.startBackgroundAiScanning(zone.id, zone.maxCapacity, camera.modelType, zone.warningPct, zone.criticalPct, camera.id);
     }
     return { success: true };
   },
@@ -641,7 +645,7 @@ export const useCrowdStore = create((set, get) => {
     });
 
     if (isWebcam) {
-      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, newCamObj.modelType, targetZone.warningPct, targetZone.criticalPct);
+      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, newCamObj.modelType, targetZone.warningPct, targetZone.criticalPct, newCamObj.id);
     }
     return { success: true };
   },
@@ -678,6 +682,7 @@ export const useCrowdStore = create((set, get) => {
     } else {
       const targetZone = state.zones[0];
       if (!targetZone) return { success: false, message: 'Create a zone and capacity ceiling before adding the laptop webcam.' };
+      const defaultModelType = state.models.find((model) => model.isActive)?.name.toLowerCase().includes('yolo') ? 'yolov8' : 'csrnet';
       const webcamCam = {
         id: 'CAM-WEBCAM',
         name: 'Laptop Camera Feed (Live)',
@@ -694,6 +699,7 @@ export const useCrowdStore = create((set, get) => {
         fps: 15.0,
         latencyMs: 0,
         resolution: '1280x720',
+        modelType: defaultModelType,
         isWebcam: true
       };
 
@@ -708,11 +714,11 @@ export const useCrowdStore = create((set, get) => {
         sampleFps: 15.0,
         sceneType: 'webcam',
         lastCount: 0,
-        modelType: webcamCam.modelType || 'csrnet'
+        modelType: webcamCam.modelType
       });
       if (!saved?.success) return { success: false, message: saved?.message || 'Could not register the laptop camera.' };
 
-      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, webcamCam.modelType, targetZone.warningPct, targetZone.criticalPct);
+      webcamManager.startBackgroundAiScanning(targetZone.id, targetZone.maxCapacity, webcamCam.modelType, targetZone.warningPct, targetZone.criticalPct, webcamCam.id);
 
       set({
         cameras: [webcamCam, ...state.cameras],
@@ -816,6 +822,7 @@ export const useCrowdStore = create((set, get) => {
       cameras: updatedCameras,
       zones: updatedZones,
       detectionLog: updatedLog,
+      lastInferenceError: '',
       latestDetection: {
         ...payload,
         zoneName: targetZone.name,
@@ -1056,6 +1063,12 @@ try {
 // Register global webcam background detection dispatcher
 try {
   webcamManager.setStoreDispatch((payload) => {
-    useCrowdStore.getState().recordRealDetection(payload);
+    const store = useCrowdStore.getState();
+    if (payload?.type === 'inference_error') {
+      store.setLastInferenceError(payload.message || 'Live inference failed. No count was recorded.');
+      return;
+    }
+    store.setLastInferenceError('');
+    store.recordRealDetection(payload);
   });
 } catch (e) {}
