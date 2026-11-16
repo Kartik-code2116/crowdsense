@@ -1,8 +1,9 @@
 const Camera = require('../models/Camera');
+const Zone = require('../models/Zone');
 const { getIsConnected, getMemoryStore } = require('../config/db');
 
 exports.getCameras = async (req, res) => {
-  const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+  const userId = req.user.id;
 
   if (getIsConnected()) {
     const cameras = await Camera.find({ userId });
@@ -10,12 +11,12 @@ exports.getCameras = async (req, res) => {
   }
 
   const store = getMemoryStore();
-  const filtered = (store.cameras || []).filter(c => !c.userId || c.userId === userId);
+  const filtered = (store.cameras || []).filter(c => c.userId === userId);
   return res.json({ success: true, count: filtered.length, data: filtered });
 };
 
 exports.createCamera = async (req, res) => {
-  const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+  const userId = req.user.id;
   const {
     id,
     name,
@@ -35,6 +36,22 @@ exports.createCamera = async (req, res) => {
 
   const cameraId = id || `CAM-${Date.now().toString().slice(-4)}`;
 
+  if (!name || !zoneId || !streamUrl) {
+    return res.status(400).json({ success: false, message: 'Camera name, zone, and stream source are required.' });
+  }
+  if (String(streamUrl).toLowerCase() !== 'webcam' && !String(streamUrl).startsWith('/samples/')) {
+    try {
+      const parsed = new URL(streamUrl);
+      if (!['http:', 'https:', 'rtsp:'].includes(parsed.protocol)) throw new Error('Unsupported protocol');
+    } catch {
+      return res.status(400).json({ success: false, message: 'Use an HTTP, HTTPS, or RTSP stream URL.' });
+    }
+  }
+  const zone = getIsConnected()
+    ? await Zone.findOne({ $or: [{ _id: zoneId }, { id: zoneId }], userId }).lean()
+    : (getMemoryStore().zones || []).find((item) => String(item._id || item.id) === String(zoneId) && item.userId === userId);
+  if (!zone) return res.status(404).json({ success: false, message: 'The selected zone was not found for this account.' });
+
   // Determine stream type if not explicitly passed
   let detectedType = streamType || 'demo';
   const urlLower = (streamUrl || '').toLowerCase();
@@ -50,18 +67,17 @@ exports.createCamera = async (req, res) => {
     _id: cameraId,
     userId,
     name: name || 'Edge Camera Stream',
-    zoneId: zoneId || 'zone-arena-01',
-    zoneName: zoneName || 'Central Hall',
-    streamUrl: streamUrl || '/samples/mall_concourse.jpg',
+    zoneId: String(zoneId),
+    zoneName: zoneName || zone.name,
+    streamUrl,
     streamType: detectedType,
-    modelType: ['csrnet', 'mcnn', 'yolov8'].includes(modelType) ? modelType : 'csrnet',
+    modelType: ['csrnet', 'yolov8'].includes(modelType) ? modelType : 'csrnet',
     resolution: resolution || '1920x1080',
     sampleFps: Number(sampleFps) || 2.0,
-    status: 'Live',
+    status: 'Pending',
     sceneType: sceneType || (detectedType === 'webcam' ? 'webcam' : detectedType === 'youtube' ? 'youtube' : 'concourse'),
     lastCount: Number(lastCount) || 0,
-    lastLatencyMs: 38,
-    lastActive: new Date(),
+    lastLatencyMs: 0,
     lastSnapshot: lastSnapshot || snapshotUrl || null,
     snapshotUrl: snapshotUrl || lastSnapshot || null,
     heatmapUrl: heatmapUrl || null
@@ -95,7 +111,7 @@ exports.createCamera = async (req, res) => {
 };
 
 exports.deleteCamera = async (req, res) => {
-  const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+  const userId = req.user.id;
   const { id } = req.params;
 
   if (getIsConnected()) {
@@ -104,6 +120,6 @@ exports.deleteCamera = async (req, res) => {
   }
 
   const store = getMemoryStore();
-  store.cameras = (store.cameras || []).filter(c => String(c._id) !== String(id) || (c.userId && c.userId !== userId));
+  store.cameras = (store.cameras || []).filter(c => String(c._id) !== String(id) || c.userId !== userId);
   return res.json({ success: true, message: 'Camera removed successfully.' });
 };

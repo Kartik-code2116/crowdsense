@@ -7,7 +7,7 @@ const Incident = require('../models/Incident');
 
 exports.exportCSV = async (req, res, next) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
     let detections = [];
     let zones = [];
 
@@ -16,8 +16,8 @@ exports.exportCSV = async (req, res, next) => {
       zones = await Zone.find({ userId }).lean();
     } else {
       const store = getMemoryStore();
-      detections = (store.detections || []).filter(d => !d.userId || d.userId === userId);
-      zones = (store.zones || []).filter(z => !z.userId || z.userId === userId);
+      detections = (store.detections || []).filter(d => d.userId === userId);
+      zones = (store.zones || []).filter(z => z.userId === userId);
     }
 
     const csv = reportService.generateCSV(detections, zones);
@@ -31,7 +31,7 @@ exports.exportCSV = async (req, res, next) => {
 
 exports.getReportSummary = async (req, res, next) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
 
     if (getIsConnected()) {
       const totalDetections = await Detection.countDocuments({ userId });
@@ -51,13 +51,13 @@ exports.getReportSummary = async (req, res, next) => {
           peakCrowd: peakDoc ? peakDoc.count : 0,
           avgCrowd,
           totalIncidents,
-          complianceRate: '100%'
+          complianceRate: null
         }
       });
     }
 
     const store = getMemoryStore();
-    const userDets = (store.detections || []).filter(d => !d.userId || d.userId === userId);
+    const userDets = (store.detections || []).filter(d => d.userId === userId);
     const summary = reportService.generateSummaryMetrics(userDets);
     res.json({ success: true, source: 'Memory-Fallback', data: summary });
   } catch (err) {
@@ -67,7 +67,7 @@ exports.getReportSummary = async (req, res, next) => {
 
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
     const { limit = 50, zoneId } = req.query;
     const query = { userId };
     if (zoneId && zoneId !== 'all') query.zoneId = zoneId;
@@ -81,10 +81,11 @@ exports.getAuditLogs = async (req, res, next) => {
       const camMap = new Map(cameras.map(c => [String(c._id || c.id), c]));
 
       const enriched = detections.map(d => {
-        const zone = zoneMap.get(String(d.zoneId)) || { name: 'Main Concourse Sector', maxCapacity: 350 };
-        const cam = camMap.get(String(d.cameraId)) || { name: 'Sector Sensor Cam A' };
-        const cap = zone.maxCapacity || 350;
-        const occPct = Math.round((d.count / cap) * 100);
+        const zone = zoneMap.get(String(d.zoneId)) || { name: 'Unknown zone', maxCapacity: 0 };
+        const cam = camMap.get(String(d.cameraId)) || { name: 'Unknown camera' };
+        const cap = Number(zone.maxCapacity) || 0;
+        const zoneCount = Number.isFinite(Number(d.zoneCount)) ? Number(d.zoneCount) : Number(d.count) || 0;
+        const occPct = cap > 0 ? Math.round((zoneCount / cap) * 100) : 0;
         return {
           id: String(d._id),
           timestamp: d.timestamp,
@@ -94,15 +95,17 @@ exports.getAuditLogs = async (req, res, next) => {
           cameraName: cam.name,
           zoneId: d.zoneId,
           zoneName: zone.name,
-          count: d.count,
+          count: Number(d.count) || 0,
+          zoneCount,
           capacity: cap,
           occupancyPct: occPct,
           status: occPct >= (zone.criticalThresholdPct || 85) ? 'critical' : occPct >= (zone.warningThresholdPct || 70) ? 'warning' : 'safe',
-          peakDensity: d.peakDensity || 0.08,
-          latencyMs: d.latencyMs || 38,
+          peakDensity: d.peakDensity || 0,
+          latencyMs: d.latencyMs || 0,
           modelUsed: d.modelUsed || 'CSRNet',
-          snapshotUrl: d.snapshotUrl || d.snapshotBase64 || cam.lastSnapshot || null,
-          heatmapUrl: d.heatmapUrl || cam.heatmapUrl || null
+          snapshotUrl: d.snapshotUrl || d.snapshotBase64 || null,
+          heatmapUrl: d.heatmapUrl || null,
+          flowVector: d.flowVector || null
         };
       });
 

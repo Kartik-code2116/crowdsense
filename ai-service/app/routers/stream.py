@@ -37,7 +37,7 @@ def fetch_frame_from_stream_url(stream_url: str):
     Robust multi-protocol frame extractor:
     1. Local hardware webcam / device index
     2. YouTube / Twitch / Vimeo video & live streams via yt-dlp + OpenCV
-    3. YouTube thumbnail / frame fallback (img.youtube.com)
+    3. Static thumbnails are deliberately not treated as live camera frames
     4. RTSP, HLS (.m3u8), and direct MP4/WebM video feeds via OpenCV
     5. Local sample images & benchmark files
     6. HTTP/HTTPS snapshot endpoints
@@ -109,21 +109,6 @@ def fetch_frame_from_stream_url(stream_url: str):
                         return buf.getvalue(), "youtube_stream"
         except Exception as e:
             print(f"[yt-dlp] Stream extraction notice: {e}")
-
-        # YouTube live frame fallback via YouTube CDN
-        if youtube_id:
-            for thumb_url in [
-                f"https://img.youtube.com/vi/{youtube_id}/maxresdefault.jpg",
-                f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg"
-            ]:
-                try:
-                    req = urllib.request.Request(thumb_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-                    with urllib.request.urlopen(req, timeout=5) as resp:
-                        data = resp.read()
-                        if len(data) > 3000:
-                            return data, "youtube_thumbnail"
-                except Exception:
-                    pass
 
     # 4. Direct RTSP / HLS (.m3u8) / MP4 / IP Camera stream via OpenCV
     if clean_url.startswith("rtsp://") or ".m3u8" in clean_url or ".mp4" in clean_url or ".webm" in clean_url or clean_url.startswith("http://") or clean_url.startswith("https://"):
@@ -237,7 +222,9 @@ async def capture_and_detect_camera(
 async def scan_stream_url(
     stream_url: str = Query(..., description="YouTube URL, RTSP, HTTP/HTTPS stream, video URL, webcam, or sample name"),
     model: str = Query("yolov8"),
-    zone_capacity: int = Query(200)
+    zone_capacity: int = Query(200),
+    warning_pct: float = Query(75),
+    critical_pct: float = Query(90)
 ):
     """
     Grabs a live frame from YouTube, RTSP, HLS, HTTP stream, video, or webcam,
@@ -255,6 +242,8 @@ async def scan_stream_url(
         image_bytes=image_bytes,
         model_name=model,
         zone_capacity=zone_capacity,
+        warning_pct=warning_pct,
+        critical_pct=critical_pct,
         source_key=f"stream:{stream_url}"
     )
 
@@ -283,8 +272,6 @@ async def start_stream_worker(config: StreamConfigRequest):
 async def get_stream_status(camera_id: str):
     return {
         "camera_id": camera_id,
-        "status": "healthy",
-        "uptime_seconds": 1840,
-        "fps": 2.0,
-        "packet_drop_rate": 0.001
+        "status": "not_tracked",
+        "message": "Stream health is tracked by the backend worker after successful samples."
     }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
-import { Database, Cpu, Video, Clock, Minimize2, Maximize2, Radio, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Database, Cpu, Video, Clock, Minimize2, Maximize2, Radio } from 'lucide-react';
 
 export default function TelemetryDock() {
   const [minimized, setMinimized] = useState(false);
@@ -14,6 +14,7 @@ export default function TelemetryDock() {
   } = useCrowdStore();
 
   const isHealthy = dbConnected && aiConnected;
+  const liveCameras = cameras.filter((camera) => camera.status === 'Live').length;
 
   if (minimized) {
     return (
@@ -26,11 +27,11 @@ export default function TelemetryDock() {
         <span className="telemetry-pill-sep">•</span>
         <Cpu size={13} className="telemetry-pill-icon" />
         <span className="telemetry-pill-label">
-          {aiConnected ? 'CSRNet Model' : 'Model Offline'}
+          {aiConnected ? 'AI Available' : 'AI Offline'}
         </span>
         <span className="telemetry-pill-sep">•</span>
         <Video size={13} className="telemetry-pill-icon" />
-        <span className="telemetry-pill-label">{cameras.length} Cam</span>
+          <span className="telemetry-pill-label">{liveCameras}/{cameras.length} live</span>
         <button
           className="telemetry-dock-expand-btn"
           aria-label="Expand telemetry panel"
@@ -53,7 +54,7 @@ export default function TelemetryDock() {
           <span className={`status-dot ${dbConnected ? 'green' : 'red'}`} />
           <div>
             <strong>{dbConnected ? (dbSource || 'MongoDB Local (27017)') : 'Database Offline'}</strong>
-            <small>{dbConnected ? 'Real time-series collection connected' : 'Backend not reachable'}</small>
+            <small>{dbConnected ? 'Database connected' : 'Database unavailable'}</small>
           </div>
         </div>
         <div className="telemetry-dock-header-actions">
@@ -76,13 +77,13 @@ export default function TelemetryDock() {
         <div className="telemetry-metric-row">
           <div className="telemetry-metric-label">
             <Cpu size={13} />
-            <span>CSRNet Deep Learning Model</span>
+            <span>Available inference models</span>
           </div>
           <span
             className="telemetry-metric-value"
             style={{ color: aiConnected ? '#159b6f' : '#cf4b54' }}
           >
-            {aiConnected ? (aiModelInfo || 'CSRNet Dilated Conv (PyTorch)') : '⚠ Offline'}
+            {aiConnected ? (aiModelInfo || 'AI service ready') : 'Unavailable'}
           </span>
         </div>
 
@@ -92,7 +93,7 @@ export default function TelemetryDock() {
             <span>Active Cameras</span>
           </div>
           <span className="telemetry-metric-value">
-            <b>{cameras.length} / {cameras.length} Live</b>
+            <b>{liveCameras} / {cameras.length} Live</b>
           </span>
         </div>
 
@@ -105,7 +106,7 @@ export default function TelemetryDock() {
             className="telemetry-metric-value sync-time"
             style={{ color: '#159b6f' }}
           >
-            {lastSyncTimestamp || new Date().toLocaleTimeString()}
+            {lastSyncTimestamp || 'Not synced yet'}
           </span>
         </div>
       </div>

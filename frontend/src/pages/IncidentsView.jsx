@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function IncidentsView() {
-  const { incidents, resolveIncident, inspectInCrowdSearch, cameras, latestDetection } = useCrowdStore();
+  const { incidents, resolveIncident, inspectInCrowdSearch, cameras } = useCrowdStore();
   const [filter, setFilter] = useState('All');
   const [selectedIncident, setSelectedIncident] = useState(incidents[0]);
-  const [replayOffsetMinutes, setReplayOffsetMinutes] = useState(0); // -15, -10, -5, 0 (trigger), +5
   const [showHeatmapOverlay, setShowHeatmapOverlay] = useState(true);
+  const [resolveError, setResolveError] = useState('');
+  const [resolving, setResolving] = useState(false);
 
   // Sync selectedIncident if list changes and nothing selected
   React.useEffect(() => {
@@ -19,24 +20,28 @@ export default function IncidentsView() {
     ? incidents 
     : incidents.filter((i) => i.level === filter || (filter === 'Resolved' && i.status === 'Resolved'));
 
-  // Calculate real reconstructed count based on scrub offset
-  const baseCount = selectedIncident ? (selectedIncident.count || 0) : 0;
-  const scrubbedCount = baseCount > 0 ? Math.max(0, Math.round(baseCount + (replayOffsetMinutes * 4.5))) : 0;
+  const incidentCamera = cameras.find((camera) => camera.id === selectedIncident?.cameraId);
+  const realImageSrc = selectedIncident?.snapshotBase64 || selectedIncident?.snapshotUrl || incidentCamera?.lastSnapshot || null;
+  const realHeatmapSrc = selectedIncident?.heatmapUrl || incidentCamera?.heatmapUrl || null;
+  const incidentCount = Number(selectedIncident?.count) || 0;
+  const capacityPct = selectedIncident?.capacity ? Math.round((incidentCount / selectedIncident.capacity) * 100) : selectedIncident?.occupancyPct;
 
-  const realImageSrc = selectedIncident?.snapshotUrl || selectedIncident?.snapshotBase64 || latestDetection?.imageSrc || cameras[0]?.lastSnapshot || cameras[0]?.streamUrl || '/samples/mall_concourse.jpg';
-  const realHeatmapSrc = selectedIncident?.heatmapUrl || latestDetection?.heatmapUrl || cameras[0]?.heatmapUrl || '/samples/mall_concourse_heatmap.png';
+  const handleResolve = async () => {
+    setResolving(true);
+    setResolveError('');
+    const result = await resolveIncident(selectedIncident.id);
+    if (!result?.success) setResolveError(result?.message || 'Could not resolve this incident.');
+    setResolving(false);
+  };
 
   return (
     <div className="incidents-container">
       <div className="page-action-row">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2>Incident Center & Forensic Incident Replay</h2>
-            <span className="badge-pill" style={{ background: 'rgba(25,167,121,0.12)', color: '#19a779', border: '1px solid rgba(25,167,121,0.3)', fontSize: '11px', padding: '3px 8px' }}>
-              ● MongoDB Permanent Frame Storage
-            </span>
+            <h2>Incident review</h2>
           </div>
-          <p>Real-time deep learning detection threshold logs & high-resolution CCTV visual reconstruction stored permanently</p>
+          <p>Review incidents created when a recorded zone estimate crosses its configured capacity threshold.</p>
         </div>
         <div className="range-pills">
           {['All', 'Critical', 'Warning', 'Resolved'].map((lvl) => (
@@ -69,7 +74,7 @@ export default function IncidentsView() {
                 <div
                   key={item.id}
                   className={`incident-card-item ${selectedIncident?.id === item.id ? 'active-incident' : ''}`}
-                  onClick={() => { setSelectedIncident(item); setReplayOffsetMinutes(0); }}
+                  onClick={() => { setSelectedIncident(item); setResolveError(''); }}
                 >
                   <div className="incident-card-top">
                     <span className={`incident-mark ${item.color}`}>
@@ -93,12 +98,12 @@ export default function IncidentsView() {
           </div>
         </div>
 
-        {/* Right: Incident Replay Scrubber Studio */}
+        {/* Incident evidence and threshold context */}
         {selectedIncident ? (
           <div className="incident-replay-studio panel">
             <div className="panel-heading">
               <div>
-                <h2>Incident Forensic Replay: {selectedIncident.title}</h2>
+                <h2>{selectedIncident.title}</h2>
                 <p>Location: <b>{selectedIncident.location}</b> · Trigger Timestamp: <b>{selectedIncident.time}</b></p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -113,10 +118,11 @@ export default function IncidentsView() {
                 {selectedIncident.status !== 'Resolved' ? (
                   <button
                     className="button primary"
-                    onClick={() => resolveIncident(selectedIncident.id)}
+                    onClick={handleResolve}
+                    disabled={resolving}
                     style={{ height: '32px', fontSize: '12px' }}
                   >
-                    ✓ Mark Resolved
+                    {resolving ? 'Saving…' : '✓ Mark resolved'}
                   </button>
                 ) : (
                   <span className="badge-pill" style={{ background: '#ecf8f2', color: '#279d75' }}>
@@ -125,14 +131,11 @@ export default function IncidentsView() {
                 )}
               </div>
             </div>
+            {resolveError && <div role="alert" className="diagnostic-note" style={{ marginTop: 10 }}>{resolveError}</div>}
 
-            {/* Reconstructed Real CCTV Frame & Density Heatmap */}
+            {/* Evidence captured when the threshold was crossed */}
             <div className="replay-visual-box" style={{ position: 'relative', overflow: 'hidden', height: '280px', background: '#0a1016', borderRadius: '8px' }}>
-              <img
-                src={realImageSrc}
-                alt="Real CCTV Crowd Capture"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              {realImageSrc ? <img src={realImageSrc} alt="Frame captured when the incident threshold was crossed" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <div style={{ display: 'grid', placeContent: 'center', height: '100%', textAlign: 'center', color: 'var(--muted)', padding: 20 }}>No camera frame was saved with this incident.<br />Threshold and detection details remain available below.</div>}
 
               {showHeatmapOverlay && realHeatmapSrc && (
                 <img
@@ -145,7 +148,7 @@ export default function IncidentsView() {
                     width: '100%',
                     height: '100%',
                     objectFit: 'cover',
-                    opacity: 0.65 + (replayOffsetMinutes * 0.015),
+                    opacity: 0.65,
                     mixBlendMode: 'screen',
                     pointerEvents: 'none'
                   }}
@@ -169,10 +172,9 @@ export default function IncidentsView() {
                 gap: '12px',
                 zIndex: 2
               }}>
-                <span style={{ color: '#00ffcc', fontWeight: '700' }}>● REC FORENSIC</span>
-                <span>CAM: <b>{selectedIncident.cameraId || 'CAM-01'}</b></span>
-                <span>TIME: <b>{selectedIncident.time}</b></span>
-                <span style={{ color: '#ffb300' }}>CSRNet: <b>{scrubbedCount}</b> ({Math.round((scrubbedCount / (selectedIncident.capacity || 350)) * 100)}% Cap)</span>
+                <span style={{ color: '#ffb300', fontWeight: '700' }}>THRESHOLD INCIDENT</span>
+                {selectedIncident.cameraId && <span>Camera: <b>{selectedIncident.cameraId}</b></span>}
+                <span>Observed: <b>{incidentCount} people{capacityPct !== undefined && capacityPct !== null ? ` · ${capacityPct}% of ${selectedIncident.capacity || 'configured'} capacity` : ''}</b></span>
               </div>
 
               <div style={{
@@ -187,67 +189,29 @@ export default function IncidentsView() {
                 fontFamily: 'monospace',
                 zIndex: 2
               }}>
-                1920x1080 @ 2.0 FPS · ShanghaiTech Dilated Backend
+                {selectedIncident.level} · {selectedIncident.time}
               </div>
             </div>
 
             <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
-                Replay offset: <b>{replayOffsetMinutes === 0 ? 'Trigger Moment (0m)' : `${replayOffsetMinutes > 0 ? '+' : ''}${replayOffsetMinutes} minutes`}</b>
-              </div>
+              <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>Recorded threshold event · {selectedIncident.time}</div>
               <button
                 className="button secondary"
                 style={{ fontSize: '12px', padding: '6px 14px' }}
                 onClick={() => inspectInCrowdSearch(realImageSrc, selectedIncident.zoneId)}
+                disabled={!realImageSrc}
               >
-                🔍 Deep Inspect Source Frame in Crowd Search →
+                🔍 Inspect saved frame →
               </button>
             </div>
 
-            {/* Scrubber Timeline Controls */}
-            <div className="scrubber-control-box" style={{ marginTop: '14px' }}>
-              <div className="scrubber-header">
-                <div>
-                  <small>TIMELINE FORENSIC SCRUBBER</small>
-                  <b>{replayOffsetMinutes === 0 ? `Trigger Breached (${selectedIncident.time})` : `${replayOffsetMinutes > 0 ? '+' : ''}${replayOffsetMinutes} min relative to breach`}</b>
-                </div>
-                <div className="scrubber-readout">
-                  <span>Reconstructed Count:</span>
-                  <b style={{ color: scrubbedCount > 250 ? '#cf4b54' : '#276de0', fontSize: '16px' }}>
-                    {scrubbedCount} people
-                  </b>
-                </div>
-              </div>
-
-              <input
-                type="range"
-                min="-15"
-                max="10"
-                step="5"
-                value={replayOffsetMinutes}
-                onChange={(e) => setReplayOffsetMinutes(Number(e.target.value))}
-                className="timeline-slider"
-              />
-
-              <div className="timeline-ticks">
-                <span>-15 min</span>
-                <span>-10 min</span>
-                <span>-5 min</span>
-                <b className="trigger-tick">● Trigger (0m)</b>
-                <span>+5 min</span>
-                <span>+10 min</span>
-              </div>
-            </div>
-
-            {/* Operator Incident Notes */}
             <div className="incident-diagnostic-notes">
-              <h4>Safety Officer Forensic Log</h4>
+              <h4>Incident details</h4>
               <p>
                 {selectedIncident.notes || (
                   <>
-                    At {selectedIncident.time}, deep learning crowd detection recorded an active threshold trigger in {selectedIncident.location}. 
-                    Peak count recorded at <b>{selectedIncident.count} persons</b> against a ceiling of <b>{selectedIncident.capacity}</b>. 
-                    Automated safety telemetry dispatched to control room.
+                    At {selectedIncident.time}, the observed zone estimate crossed its configured threshold in {selectedIncident.location}.
+                    The recorded estimate was <b>{incidentCount} people</b> against a capacity of <b>{selectedIncident.capacity}</b>.
                   </>
                 )}
               </p>

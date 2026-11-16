@@ -12,8 +12,10 @@ class WebcamManager {
     this.activeDeviceId = null;
     this.isLiveAiActive = false;
     this.liveIntervalId = null;
-    this.targetZoneId = 'zone-arena-01';
-    this.targetCapacity = 350;
+    this.targetZoneId = '';
+    this.targetCapacity = 0;
+    this.warningPct = 75;
+    this.criticalPct = 90;
     this.modelType = 'yolov8';
     this.storeDispatch = null;
     this.listeners = new Set();
@@ -101,9 +103,12 @@ class WebcamManager {
     this.notifyListeners({ status: 'stopped' });
   }
 
-  startBackgroundAiScanning(zoneId = 'zone-arena-01', capacity = 350, model = 'yolov8') {
+  startBackgroundAiScanning(zoneId, capacity, model = 'csrnet', warningPct = 75, criticalPct = 90) {
+    if (!zoneId || !Number.isFinite(Number(capacity)) || Number(capacity) <= 0) return;
     this.targetZoneId = zoneId;
     this.targetCapacity = capacity;
+    this.warningPct = warningPct;
+    this.criticalPct = criticalPct;
     this.modelType = model;
     this.isLiveAiActive = true;
 
@@ -177,15 +182,15 @@ class WebcamManager {
           reader.readAsDataURL(blob);
         });
 
-        const result = await apiClient.predictImage(blob, this.modelType, this.targetCapacity);
+        const result = await apiClient.predictImage(blob, this.modelType, this.targetCapacity, this.warningPct, this.criticalPct);
         if (result) {
-          const count = result.count !== undefined ? result.count : (result.detected_boxes?.length || 1);
+          const count = result.count !== undefined ? result.count : (Array.isArray(result.detected_boxes) ? result.detected_boxes.length : 0);
           this.storeDispatch({
             count,
             boxes: result.detected_boxes || [],
             heads: result.detected_heads || [],
             heatmapUrl: result.heatmap_data_url || null,
-            latencyMs: result.latency_ms || 34.0,
+            latencyMs: Number(result.latency_ms) || 0,
             resolution: { width, height },
             zoneId: this.targetZoneId,
             modelName: this.modelType,

@@ -33,11 +33,10 @@ export default function LiveMonitorView() {
     toggleWebcamFeed,
     inspectInCrowdSearch,
     aiConnected,
-    aiModelInfo,
     latestDetection
   } = useCrowdStore();
 
-  const [layout, setLayout] = useState('2x2'); // '1x1' | '2x2' | '3x3' | 'zone-grouped'
+  const [layout, setLayout] = useState('all'); // 'all' | '1x1' | '2x2' | 'zone-grouped'
   const [streamFilter, setStreamFilter] = useState('all'); // 'all' | 'youtube' | 'webcam' | 'url' | 'demo'
   const [showMapHUD, setShowMapHUD] = useState(false);
   const [liveCounts, setLiveCounts] = useState({});
@@ -70,7 +69,7 @@ export default function LiveMonitorView() {
   const ytCount = cameras.filter((c) => c.streamType === 'youtube' || c.streamUrl?.includes('youtube')).length;
   const wbCount = cameras.filter((c) => c.streamType === 'webcam' || c.id === 'CAM-WEBCAM' || c.isWebcam).length;
   const rtspCount = cameras.filter((c) => c.streamType === 'url' || (c.streamUrl?.startsWith('http') && !c.streamUrl?.includes('youtube'))).length;
-  const demoCount = cameras.filter((c) => c.streamType === 'demo' || (!c.streamUrl?.includes('youtube') && c.id !== 'CAM-WEBCAM' && !c.streamUrl?.startsWith('http'))).length;
+  const demoCount = cameras.filter((c) => c.streamType === 'demo').length;
 
   const displayedCameras = layout === '1x1'
     ? [selectedCam]
@@ -125,18 +124,18 @@ export default function LiveMonitorView() {
         {/* 1. Header with live REC dot, source badge, name, capacity, and focus button */}
         <div className="tile-header">
           <div className="tile-header-left">
-            <span className="cctv-rec-dot" style={{ background: categoryAccent }} title="Live Stream Active" />
+            <span className={`status-dot ${cam.status === 'Live' ? 'green' : cam.status === 'Degraded' ? 'red' : 'amber'}`} title={cam.status || 'Pending'} />
             <span className="cctv-badge-id">{cam.id}</span>
-            {isYt && <span className="cctv-badge-yt">🔴 YouTube Live</span>}
+            {isYt && <span className="cctv-badge-yt">Video platform</span>}
             {isWb && <span className="cctv-badge-wb">📹 Laptop Webcam</span>}
-            {isNet && <span className="cctv-badge-rtsp">🌐 RTSP IP Feed</span>}
+            {isNet && <span className="cctv-badge-rtsp">🌐 Network source</span>}
             {!isYt && !isWb && !isNet && <span className="cctv-badge-demo">⚡ Edge Benchmark</span>}
             <span className="cctv-tile-name" title={cam.name}>{cam.name}</span>
           </div>
 
           <div className="tile-header-right">
-            <span className={`cctv-cap-badge ${isCritical ? 'crit' : isWarning ? 'warn' : 'ok'}`}>
-              <i className="status-dot" /> {aiConnected ? `${currentCapacity}% Cap` : '—% Cap'}
+            <span className={`cctv-cap-badge ${cam.status === 'Live' ? (isCritical ? 'crit' : isWarning ? 'warn' : 'ok') : ''}`}>
+              <i className="status-dot" /> {aiConnected && cam.status === 'Live' ? `${currentCapacity}% Cap` : cam.status || 'Pending'}
             </span>
             <button
               className="cctv-quick-focus"
@@ -169,9 +168,11 @@ export default function LiveMonitorView() {
             zoneId={cam.zoneId}
             height={layout === '1x1' ? 440 : layout === '2x2' ? 240 : 190}
             streamUrl={cam.streamUrl}
-            snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
-            lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
-            heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || (cam.id === 'CAM-01' ? latestDetection?.heatmapUrl : null)}
+            cameraStatus={cam.status}
+            modelType={cam.modelType}
+            snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || null}
+            lastSnapshot={cam.lastSnapshot || cam.lastDetection?.imageSrc || null}
+            heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || null}
             onSnapshot={handleSnapshot}
             onCountChange={(cnt) => handleCameraCountChange(cam.id, cnt)}
           />
@@ -190,25 +191,25 @@ export default function LiveMonitorView() {
           <div className="telemetry-chip">
             <span className="telemetry-label">👥 Headcount</span>
             <span className="telemetry-val headcount-val">
-              {aiConnected ? currentCount : '—'} <small>people</small>
+              {aiConnected && cam.status === 'Live' ? currentCount : '—'} <small>people</small>
             </span>
           </div>
           <div className="telemetry-chip">
             <span className="telemetry-label">⚡ AI Latency</span>
             <span className="telemetry-val">
-              {aiConnected ? <>{cam.latencyMs || 35} <small>ms</small></> : '— ms'}
+              {aiConnected && cam.status === 'Live' && cam.latencyMs > 0 ? <>{cam.latencyMs} <small>ms</small></> : '—'}
             </span>
           </div>
           <div className="telemetry-chip">
             <span className="telemetry-label">📐 Resolution</span>
             <span className="telemetry-val">
-              {cam.resolution || '1080p'} · {cam.fps || 30} FPS
+              {cam.resolution || 'Resolution unavailable'}{cam.fps ? ` · ${cam.fps} FPS configured` : ''}
             </span>
           </div>
           <div className="telemetry-chip">
             <span className="telemetry-label">🏢 Linked Zone</span>
             <span className="telemetry-val zone-val" title={cam.zoneName || cam.zone}>
-              {cam.zoneName || cam.zone || 'Concourse'}
+              {cam.zoneName || cam.zone || 'Unassigned'}
             </span>
           </div>
         </div>
@@ -218,16 +219,18 @@ export default function LiveMonitorView() {
           <div className="feed-status-indicator">
             <span className="status-ping" style={{ background: aiConnected ? categoryAccent : '#e05555' }} />
             <span style={{ color: aiConnected ? undefined : '#e05555' }}>
-              {aiConnected ? `${cam.streamType?.toUpperCase() || 'STREAM'} ACTIVE · CSRNET RUNNING` : '⚠ DETECTION PAUSED · AI SERVICE OFFLINE'}
+              {cam.status === 'Live' && aiConnected ? `${String(cam.modelType || 'model').toUpperCase()} · LAST SAMPLE SUCCEEDED` : aiConnected ? `${cam.status || 'PENDING'} · WAITING FOR SAMPLE` : 'AI SERVICE UNAVAILABLE'}
             </span>
           </div>
           <div className="tile-action-buttons">
             <button
               className="tile-action-btn"
               title="Send current frame to Crowd Search AI Sandbox"
+              disabled={!cam.lastSnapshot && !cam.snapshotUrl && !cam.lastDetection?.imageSrc}
               onClick={(e) => {
                 e.stopPropagation();
-                inspectInCrowdSearch(cam.lastSnapshot || cam.snapshotUrl || '/samples/mall_concourse.jpg', cam.zoneId);
+                const frame = cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc;
+                if (frame) inspectInCrowdSearch(frame, cam.zoneId);
               }}
             >
               📷 Inspect AI
@@ -252,9 +255,9 @@ export default function LiveMonitorView() {
       {/* Top Controls Toolbar with Category Filters & Structure Switchers */}
       <div className="monitor-toolbar" style={{ flexWrap: 'wrap', gap: '10px' }}>
         <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="live-badge">● LIVE MULTI-MONITOR</span>
+          <span className="live-badge">CAMERA MONITOR</span>
           <span className="toolbar-divider" />
-          <span className="active-count">{filteredCameras.length} active edge feeds</span>
+          <span className="active-count">{filteredCameras.filter((camera) => camera.status === 'Live').length} sampled · {filteredCameras.length} configured</span>
         </div>
 
         <div className="toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -299,6 +302,9 @@ export default function LiveMonitorView() {
 
           {/* Structural Layout Switches */}
           <div className="layout-picker">
+            <button className={`layout-btn ${layout === 'all' ? 'active' : ''}`} onClick={() => setLayout('all')}>
+              All cameras
+            </button>
             <button className={`layout-btn ${layout === '1x1' ? 'active' : ''}`} onClick={() => setLayout('1x1')}>
               1×1 Focus
             </button>
@@ -324,6 +330,7 @@ export default function LiveMonitorView() {
             className={`toggle-chip ${isWebcamLive ? 'selected' : ''}`}
             onClick={toggleWebcamFeed}
             title="Toggle laptop integrated webcam"
+            disabled={!zones.length && !isWebcamLive}
           >
             <Laptop size={13} /> Laptop Camera
             <span className={`switch ${isWebcamLive ? 'on' : ''}`}><i /></span>
@@ -450,9 +457,17 @@ export default function LiveMonitorView() {
           </div>
         ) : (
           /* STRUCTURAL VIEW MODE B: STANDARD GRID (1x1, 2x2, ALL) */
-          <div className={`monitor-grid grid-${layout}`}>
-            {displayedCameras.map((cam) => renderCameraTile(cam))}
-          </div>
+          displayedCameras.length ? (
+            <div className={`monitor-grid grid-${layout}`}>
+              {displayedCameras.map((cam) => renderCameraTile(cam))}
+            </div>
+          ) : (
+            <div className="panel" style={{ padding: 28, textAlign: 'center', color: 'var(--muted)' }}>
+              <h2>{cameras.length ? 'No cameras match this filter' : 'No camera sources yet'}</h2>
+              <p>Create a zone and capacity ceiling, then add a camera or laptop webcam.</p>
+              <button className="button primary" onClick={() => setShowAddCameraModal(true)}>Add camera source</button>
+            </div>
+          )
         )}
 
         {/* Telemetry Inspector Sidebar */}
@@ -479,13 +494,13 @@ export default function LiveMonitorView() {
                 <div className="metric-row">
                   <span>Current Headcount</span>
                   <b style={{ color: '#38bdf8', fontSize: '16px', fontWeight: 800 }}>
-                    {aiConnected ? `${selectedCount} persons` : '— (AI Offline)'}
+                    {aiConnected && selectedCam.status === 'Live' ? `${selectedCount} persons (camera)` : '—'}
                   </b>
                 </div>
                 <div className="metric-row">
                   <span>Zone Safety Capacity</span>
                   <b className={selectedCapacity > 85 ? 'text-red' : selectedCapacity > 70 ? 'text-amber' : 'text-green'}>
-                    {aiConnected ? `${selectedCapacity}% (${selectedCount}/${selMax})` : '—'}
+                    {aiConnected && selectedCam.status === 'Live' ? `${selectedCapacity}% (${selectedCount}/${selMax})` : '—'}
                   </b>
                 </div>
                 <div className="progress-track" style={{ marginTop: '8px', marginBottom: '14px' }}>
@@ -509,7 +524,7 @@ export default function LiveMonitorView() {
             </div>
             <div className="metric-row">
               <span>Resolution &amp; Rate</span>
-              <b>{selectedCam.resolution || '1080p'} @ {selectedCam.fps || 2.0} FPS</b>
+              <b>{selectedCam.resolution || 'Resolution unavailable'}{selectedCam.fps ? ` · ${selectedCam.fps} FPS configured` : ''}</b>
             </div>
             <div className="metric-row">
               <span>Spatial Map Pin</span>
@@ -531,16 +546,12 @@ export default function LiveMonitorView() {
             </div>
             <div className="metric-row">
               <span>Active DL Backbone</span>
-              <b>{aiConnected ? (aiModelInfo || 'CSRNet Dilated Conv') : '—'}</b>
+              <b>{aiConnected ? (selectedCam.modelType || 'No camera selected').toUpperCase() : '—'}</b>
             </div>
             <div className="metric-row">
               <span>Inference Time</span>
               <b>
-                {aiConnected && latestDetection
-                  ? `${latestDetection.latencyMs} ms`
-                  : aiConnected
-                  ? `${selectedCam.latencyMs || 38} ms`
-                  : '—'}
+                {aiConnected && selectedCam.status === 'Live' && selectedCam.latencyMs > 0 ? `${selectedCam.latencyMs} ms` : '—'}
               </b>
             </div>
           </div>

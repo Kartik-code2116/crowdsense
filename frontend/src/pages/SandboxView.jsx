@@ -1,264 +1,116 @@
-import React, { useState, useEffect } from 'react';
-import { useCrowdStore } from '../store/useCrowdStore';
+import React, { useEffect, useState } from 'react';
+import { Activity, ImagePlus, RotateCw, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
 
+const samples = [
+  { id: 'stadium', name: 'Stadium', src: '/samples/stadium_dense.jpg' },
+  { id: 'concourse', name: 'Concourse', src: '/samples/mall_concourse.jpg' },
+  { id: 'street', name: 'Street', src: '/samples/street_pedestrians.jpg' },
+  { id: 'marathon', name: 'Marathon', src: '/samples/marathon_crowd.jpg' }
+];
+
 export default function SandboxView() {
-  const { sandboxSnapshot, setSandboxSnapshot } = useCrowdStore();
-
-  const samplePresets = [
-    { id: 'stadium_dense', name: 'Dense Stadium Bleachers (Real Crowd)', file: '/samples/stadium_dense.jpg', yoloLossPct: 68 },
-    { id: 'mall_concourse', name: 'Central Concourse Atrium (Real Crowd)', file: '/samples/mall_concourse.jpg', yoloLossPct: 35 },
-    { id: 'street_pedestrians', name: 'Urban Pedestrian Crossing (Real Crowd)', file: '/samples/street_pedestrians.jpg', yoloLossPct: 15 },
-    { id: 'marathon_crowd', name: 'Marathon Chokepoint Surge (Real Crowd)', file: '/samples/marathon_crowd.jpg', yoloLossPct: 75 }
-  ];
-
-  const [selectedSample, setSelectedSample] = useState(samplePresets[0]);
-  const [activeImageSrc, setActiveImageSrc] = useState(sandboxSnapshot || samplePresets[0].file);
-  const [isInferring, setIsInferring] = useState(false);
+  const [source, setSource] = useState({ src: samples[0].src, name: samples[0].name });
+  const [model, setModel] = useState('csrnet');
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const [showHeatmap, setShowHeatmap] = useState(true);
-  const [heatmapOpacity, setHeatmapOpacity] = useState(0.70);
-  const [heatmapOverlayUrl, setHeatmapOverlayUrl] = useState('/samples/stadium_dense_heatmap.png');
 
-  const [metrics, setMetrics] = useState({
-    count: 287,
-    exactIntegral: 287.04,
-    peakDensity: 1.48,
-    uncertainty: '± 3.8',
-    latencyMs: 38.4,
-    isRealPyTorch: true,
-    yoloCount: 12
-  });
-
-  // Execute Real Deep Learning Inference on Image
-  const runRealInference = async (imageSrc) => {
-    setIsInferring(true);
+  const runInference = async () => {
+    setBusy(true);
+    setError('');
+    setResult(null);
     try {
-      // Fetch image bytes
-      const response = await fetch(imageSrc);
-      const blob = await response.blob();
-
-      // Call Python FastAPI PyTorch endpoint
-      const result = await apiClient.predictImage(blob, 'csrnet', 300);
-
-      if (result) {
-        const detectedCount = result.count !== undefined ? result.count : (result.detected_boxes?.length || 0);
-        setMetrics({
-          count: detectedCount,
-          exactIntegral: result.exact_integral !== undefined ? result.exact_integral : detectedCount,
-          peakDensity: result.peak_density !== undefined ? result.peak_density : (detectedCount > 0 ? 0.08 : 0.0),
-          uncertainty: `± ${result.uncertainty || 1.2}`,
-          latencyMs: result.latency_ms || 38.4,
-          isRealPyTorch: result.is_real_pytorch !== false,
-          yoloCount: detectedCount
-        });
-
-        if (result.heatmap_data_url) {
-          setHeatmapOverlayUrl(result.heatmap_data_url);
-        }
+      const response = await fetch(source.src);
+      if (!response.ok) throw new Error('Could not read this image. Choose another sample or upload a photo.');
+      const data = await apiClient.predictImage(await response.blob(), model, 0);
+      if (!data || data.status === 'error' || data.success === false) {
+        throw new Error(data?.message || data?.detail || 'The AI service did not return a result. Check that the selected model weights are installed and the service is running.');
       }
+      setResult(data);
     } catch (err) {
-      console.warn('Inference notice:', err.message);
+      setError(err.message || 'Inference could not be completed.');
     } finally {
-      setIsInferring(false);
+      setBusy(false);
     }
   };
 
-  useEffect(() => {
-    runRealInference(activeImageSrc);
-  }, [activeImageSrc]);
+  useEffect(() => { runInference(); }, [source.src, model]);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setActiveImageSrc(reader.result);
-        setSelectedSample(null);
-      };
-      reader.readAsDataURL(file);
+  const handleUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Choose a JPG, PNG, or other image file.');
+      return;
     }
+    const src = URL.createObjectURL(file);
+    setSource({ src, name: file.name });
   };
+
+  useEffect(() => () => {
+    if (source.src.startsWith('blob:')) URL.revokeObjectURL(source.src);
+  }, [source.src]);
 
   return (
-    <div className="sandbox-view-container">
-      <div className="page-action-row">
-        <div>
-          <h2>Real PyTorch Deep Learning Density Sandbox</h2>
-          <p>
-            Runs <b>CSRNet dilated convolutional regression</b> directly on image pixels. 
-            The total crowd count is the mathematical continuous integral of the density map.
-          </p>
+    <div style={{ display: 'grid', gap: 18 }}>
+      <section className="panel" style={{ padding: 22, background: 'linear-gradient(120deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface))' }}>
+        <span className="eyebrow">MODEL PLAYGROUND · ONE IMAGE</span>
+        <h2 style={{ margin: '8px 0' }}>Try a crowd model</h2>
+        <p style={{ maxWidth: 760, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+          Run the configured CSRNet or YOLOv8 checkpoint on an image. Results below come from that inference request;
+          the bundled photos are examples and are not venue measurements.
+        </p>
+      </section>
+
+      <section className="panel" style={{ padding: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+          <div><h3 style={{ margin: 0 }}>Choose an image</h3><small style={{ color: 'var(--muted)' }}>Sample photos or upload a JPG / PNG</small></div>
+          <label className="button secondary" style={{ cursor: 'pointer' }}><Upload size={15} /> Upload image<input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} /></label>
         </div>
-        <div className="security-notice">
-          <span className="status-dot green" />
-          <span>PyTorch v2.9 Engine Active (VGG16 + Dilated Backend)</span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+          {samples.map((sample) => <button key={sample.id} className={`button ${source.src === sample.src ? 'primary' : 'secondary'}`} onClick={() => setSource({ src: sample.src, name: sample.name })}><ImagePlus size={14} /> {sample.name}</button>)}
         </div>
-      </div>
+      </section>
 
-      <div className="sandbox-grid" style={{ marginTop: '16px' }}>
-        {/* Left: Real Image & Real PyTorch Heatmap Overlay */}
-        <div className="panel sandbox-canvas-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>{selectedSample ? selectedSample.name : 'Custom Image Frame'}</h2>
-              <p>PyTorch forward pass regressing continuous 2D density tensor</p>
-            </div>
-            <div className="camera-actions">
-              <button
-                className={`toggle-chip ${showHeatmap ? 'selected' : ''}`}
-                onClick={() => setShowHeatmap(!showHeatmap)}
-              >
-                <span className="heat-icon">▧</span> Density Heatmap
-                <span className={`switch ${showHeatmap ? 'on' : ''}`}><i /></span>
-              </button>
-              <button
-                className="button primary"
-                onClick={() => runRealInference(activeImageSrc)}
-                disabled={isInferring}
-              >
-                {isInferring ? 'Executing PyTorch Forward Pass...' : '▶ Re-run Inference'}
-              </button>
-            </div>
+      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(280px, .8fr)', gap: 16 }}>
+        <article className="panel" style={{ padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <div><b>{source.name}</b><small style={{ display: 'block', color: 'var(--muted)' }}>Input image</small></div>
+            <button className="button secondary" disabled={busy} onClick={runInference}><RotateCw size={14} /> {busy ? 'Running…' : 'Run again'}</button>
           </div>
-
-          {/* Genuine Image + Real Density Heatmap Composite */}
-          <div className="real-image-container" style={{ position: 'relative', height: '360px', borderRadius: '8px', overflow: 'hidden', background: '#0a1016' }}>
-            <img
-              src={activeImageSrc}
-              alt="Real Crowd Scene"
-              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-            />
-
-            {/* Real PyTorch Heatmap Layer */}
-            {showHeatmap && heatmapOverlayUrl && (
-              <img
-                src={heatmapOverlayUrl}
-                alt="PyTorch Density Map"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  opacity: heatmapOpacity,
-                  mixBlendMode: 'screen',
-                  pointerEvents: 'none',
-                  transition: 'opacity 0.2s'
-                }}
-              />
-            )}
-
-            {/* Real OSD Telemetry Watermark */}
-            <div style={{ position: 'absolute', left: '12px', top: '12px', background: 'rgba(12, 20, 28, 0.88)', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', color: '#fff', fontFamily: 'JetBrains Mono, monospace' }}>
-              <span style={{ color: '#00ffcc', fontWeight: '700' }}>PYTORCH CSRNET:</span> {metrics.count} PEOPLE ({metrics.latencyMs}ms)
-            </div>
+          <div style={{ position: 'relative', minHeight: 260, height: 'min(58vh, 520px)', background: '#0b1220', borderRadius: 12, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+            <img src={source.src} alt={`Input image: ${source.name}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            {showHeatmap && result?.heatmap_data_url && <img src={result.heatmap_data_url} alt="Density visualization returned by the selected model" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: .68, pointerEvents: 'none' }} />}
+            {busy && <span className="badge-pill" style={{ position: 'absolute', top: 12, left: 12 }}>Inference running…</span>}
           </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button className={`button ${showHeatmap ? 'primary' : 'secondary'}`} onClick={() => setShowHeatmap((value) => !value)} disabled={!result?.heatmap_data_url}>Density visualization {showHeatmap ? 'on' : 'off'}</button>
+            <label className="select-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Model
+              <select value={model} onChange={(event) => setModel(event.target.value)} style={{ background: 'transparent', color: 'inherit', border: 0 }}><option value="csrnet">CSRNet</option><option value="yolov8">YOLOv8</option></select>
+            </label>
+          </div>
+        </article>
 
-          {/* Heatmap Opacity Slider */}
-          {showHeatmap && (
-            <div className="slider-group" style={{ margin: '14px 0 10px' }}>
-              <div className="slider-label">
-                <span>Density Heatmap Overlay Transparency:</span>
-                <b>{Math.round(heatmapOpacity * 100)}%</b>
-              </div>
-              <input
-                type="range"
-                min="0.1"
-                max="1.0"
-                step="0.05"
-                value={heatmapOpacity}
-                onChange={(e) => setHeatmapOpacity(Number(e.target.value))}
-              />
+        <article className="panel" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Activity size={18} color="var(--accent)" /><h3 style={{ margin: 0 }}>Inference result</h3></div>
+          {error ? <div role="alert" className="diagnostic-note" style={{ marginTop: 16 }}><b>Could not run inference</b><p>{error}</p></div> : !result ? <p style={{ color: 'var(--muted)', marginTop: 18 }}>Waiting for a model response…</p> : (
+            <div style={{ display: 'grid', gap: 13, marginTop: 18 }}>
+              <Metric label="Selected model" value={String(result.model || model).toUpperCase()} />
+              <Metric label="Estimated people" value={Number.isFinite(Number(result.count)) ? Math.round(Number(result.count)).toLocaleString() : '—'} prominent />
+              <Metric label="Inference time" value={Number.isFinite(Number(result.latency_ms)) ? `${result.latency_ms} ms` : 'Not reported'} />
+              <Metric label="Detected boxes" value={Array.isArray(result.detected_boxes) ? result.detected_boxes.length.toLocaleString() : 'Not returned'} />
+              <Metric label="Peak density map value" value={Number.isFinite(Number(result.peak_density)) ? result.peak_density : 'Not returned'} />
+              <small style={{ color: 'var(--muted)', lineHeight: 1.5 }}>Results depend on the checkpoint installed in the AI service, image quality, and deployment hardware. This image scan does not create a live camera history record.</small>
             </div>
           )}
-
-          {/* Sample Preset Chooser */}
-          <div className="preset-selector-row" style={{ marginTop: '12px' }}>
-            <span style={{ fontWeight: '700', fontSize: '10px' }}>Load Real Benchmark Photos:</span>
-            {samplePresets.map((s) => (
-              <button
-                key={s.id}
-                className={`button secondary ${selectedSample?.id === s.id ? 'active-layer' : ''}`}
-                onClick={() => {
-                  setSelectedSample(s);
-                  setActiveImageSrc(s.file);
-                }}
-              >
-                {s.name.split(' (')[0]}
-              </button>
-            ))}
-          </div>
-
-          {/* Custom File Upload */}
-          <div className="file-upload-box" style={{ marginTop: '14px' }}>
-            <label className="upload-label">
-              📁 Upload Any High-Resolution Crowd Photo (JPG / PNG):
-              <input type="file" accept="image/*" onChange={handleFileUpload} />
-            </label>
-            {!selectedSample && (
-              <button
-                className="text-button"
-                style={{ marginLeft: '12px' }}
-                onClick={() => {
-                  setSelectedSample(samplePresets[0]);
-                  setActiveImageSrc(samplePresets[0].file);
-                  setSandboxSnapshot(null);
-                }}
-              >
-                Reset to Benchmark Presets
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Real Deep Learning Telemetry Card */}
-        <div className="panel sandbox-results-panel">
-          <div className="panel-heading">
-            <h2>Deep Learning Output</h2>
-          </div>
-
-          <div className="telemetry-card">
-            <div className="metric-row">
-              <span>Deep Learning Architecture</span>
-              <b>CSRNet (VGG16 + Dilated)</b>
-            </div>
-            <div className="metric-row">
-              <span>Predicted Crowd Count</span>
-              <b style={{ color: '#3478e5', fontSize: '24px' }}>
-                {metrics.count} people
-              </b>
-            </div>
-            <div className="metric-row">
-              <span>Continuous Integral (∬ D dx dy)</span>
-              <b style={{ fontFamily: 'JetBrains Mono, monospace' }}>{metrics.exactIntegral}</b>
-            </div>
-            <div className="metric-row">
-              <span>Peak Crowd Density</span>
-              <b>{metrics.peakDensity} heads/m²</b>
-            </div>
-            <div className="metric-row">
-              <span>Poisson Uncertainty (σ)</span>
-              <b>{metrics.uncertainty} heads</b>
-            </div>
-            <div className="metric-row">
-              <span>PyTorch Forward Pass Time</span>
-              <b style={{ color: '#19a779' }}>{metrics.latencyMs} ms</b>
-            </div>
-          </div>
-
-          <div className="diagnostic-note" style={{ marginTop: '16px' }}>
-            <b>Object Detection (YOLO) Failure Analysis:</b>
-            <p style={{ marginTop: '6px', color: '#d9565e', fontWeight: '700' }}>
-              YOLOv8 detected only {metrics.yoloCount} / {metrics.count} people (-{Math.round(((metrics.count - metrics.yoloCount) / metrics.count) * 100)}% recall loss)!
-            </p>
-            <p style={{ marginTop: '6px', fontSize: '10px', lineHeight: '1.5' }}>
-              In this scene, severe head overlap causes Non-Maximum Suppression (NMS) to collapse multiple 
-              adjacent bounding boxes into a single detection. Density regression operates on continuous 
-              dilated receptive fields and accurately measures every person.
-            </p>
-          </div>
-        </div>
-      </div>
+        </article>
+      </section>
     </div>
   );
+}
+
+function Metric({ label, value, prominent = false }) {
+  return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: 9, gap: 12 }}><span style={{ color: 'var(--muted)', fontSize: 13 }}>{label}</span><b style={{ fontSize: prominent ? 24 : 14, color: prominent ? 'var(--accent)' : 'var(--text)' }}>{value}</b></div>;
 }

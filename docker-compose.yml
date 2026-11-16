@@ -4,38 +4,35 @@ services:
     image: mongo:7.0
     container_name: crowdsense-mongodb
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     environment:
       MONGO_INITDB_DATABASE: crowdsense
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
     volumes:
       - mongo-data:/data/db
     networks:
       - crowdsense-net
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "mongosh --quiet --username \"$${MONGO_INITDB_ROOT_USERNAME}\" --password \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval 'db.adminCommand(\"ping\").ok'"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
-  # 2. Python FastAPI AI Service (PyTorch CSRNet, YOLOv8, Grad-CAM & LSTM)
+  # 2. Python FastAPI AI Service (CSRNet and YOLOv8 inference)
   ai-service:
     build:
       context: ./ai-service
       dockerfile: Dockerfile
     container_name: crowdsense-ai-service
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
       - DEFAULT_MODEL=csrnet
       - DEVICE=cpu
-      - SURGE_THRESHOLD_PERCENT=25.0
       - CSRNET_WEIGHTS_PATH=/app/weights/csrnet_shanghaitech.pth
     volumes:
       - ./ai-service/weights:/app/weights:ro
-      - ./ml/weights:/app/ml-weights:ro
+      - ./ml/weights:/app/ml/weights:ro
     networks:
       - crowdsense-net
 
@@ -46,15 +43,14 @@ services:
       dockerfile: Dockerfile
     container_name: crowdsense-backend
     restart: unless-stopped
-    ports:
-      - "5000:5000"
     environment:
       - PORT=5000
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongodb:27017/crowdsense
-      - JWT_SECRET=crowdsense-super-secure-production-secret-key-2026
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/crowdsense?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:?Set a unique 32+ character JWT_SECRET in .env}
+      - ADMIN_REGISTRATION_CODE=${ADMIN_REGISTRATION_CODE:?Set a unique 24+ character ADMIN_REGISTRATION_CODE in .env}
       - AI_SERVICE_URL=http://ai-service:8000
-      - CORS_ORIGIN=*
+      - CORS_ORIGIN=${CORS_ORIGIN:?Set CORS_ORIGIN to the public frontend origin in .env}
     depends_on:
       mongodb:
         condition: service_healthy

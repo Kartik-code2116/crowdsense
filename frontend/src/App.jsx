@@ -1,19 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { useCrowdStore } from './store/useCrowdStore';
-import LandingPageView from './pages/LandingPageView';
-import AuthView from './pages/AuthView';
-import DashboardView from './pages/DashboardView';
-import LiveMonitorView from './pages/LiveMonitorView';
-import AnalyticsView from './pages/AnalyticsView';
-import CamerasView from './pages/CamerasView';
-import ZonesView from './pages/ZonesView';
-import IncidentsView from './pages/IncidentsView';
-import ForecastView from './pages/ForecastView';
-import ModelLabView from './pages/ModelLabView';
-import ReportsView from './pages/ReportsView';
-import SandboxView from './pages/SandboxView';
-import SettingsView from './pages/SettingsView';
-import PhotoScannerView from './pages/PhotoScannerView';
+const LandingPageView = lazy(() => import('./pages/LandingPageView'));
+const AuthView = lazy(() => import('./pages/AuthView'));
+const DashboardView = lazy(() => import('./pages/DashboardView'));
+const LiveMonitorView = lazy(() => import('./pages/LiveMonitorView'));
+const AnalyticsView = lazy(() => import('./pages/AnalyticsView'));
+const CamerasView = lazy(() => import('./pages/CamerasView'));
+const ZonesView = lazy(() => import('./pages/ZonesView'));
+const IncidentsView = lazy(() => import('./pages/IncidentsView'));
+const ForecastView = lazy(() => import('./pages/ForecastView'));
+const ModelLabView = lazy(() => import('./pages/ModelLabView'));
+const ReportsView = lazy(() => import('./pages/ReportsView'));
+const SandboxView = lazy(() => import('./pages/SandboxView'));
+const SettingsView = lazy(() => import('./pages/SettingsView'));
+const PhotoScannerView = lazy(() => import('./pages/PhotoScannerView'));
+
+const PageLoading = () => <div role="status" style={{ padding: 32, color: 'var(--muted)' }}>Loading page…</div>;
 
 import AuthModal from './components/AuthModal';
 import ProfilePopover from './components/ProfilePopover';
@@ -60,7 +62,7 @@ const navGroups = [
     label: 'INSIGHTS',
     items: [
       { id: 'Analytics', label: 'Analytics', icon: BarChart3 },
-      { id: 'Forecast', label: 'LSTM Forecast', icon: TrendingUp }
+      { id: 'Forecast', label: 'Trend forecast', icon: TrendingUp }
     ]
   }
 ];
@@ -71,11 +73,11 @@ const menuTitles = {
   Analytics: 'Crowd Intelligence & Throughput Analytics',
   Cameras: 'Edge Camera Management & RTSP Feeds',
   Zones: 'Safety Zones & Capacity Ceiling Management',
-  Incidents: 'Incident Center & Forensic Replay Scrubber',
-  'Crowd search': 'Deep Learning Photo Crowd Scanner & Head Locator',
-  Forecast: 'CrowdFlowLSTM Predictive Early Warning',
-  'Model lab': 'Model Performance Lab (CSRNet vs MCNN vs YOLO)',
-  Reports: 'Operational Safety Reports & Compliance Audits',
+  Incidents: 'Incident and Alert Review',
+  'Crowd search': 'Camera and Image Crowd Scanner',
+  Forecast: 'Crowd Trend Projection',
+  'Model lab': 'Model Lab · CSRNet and YOLOv8',
+  Reports: 'Observed Crowd Reports',
   Sandbox: 'Direct AI Density Regression Playground',
   Settings: 'System Health, RBAC & Workspace Configuration'
 };
@@ -123,15 +125,20 @@ export default function App() {
 
   // Dedicated Full-Page Views (Landing, Login, Register)
   if (page === 'Landing' || page === 'Landing page') {
-    return <LandingPageView />;
+    return <Suspense fallback={<PageLoading />}><LandingPageView /></Suspense>;
   }
 
   if (page === 'Login') {
-    return <AuthView initialMode="login" />;
+    return <Suspense fallback={<PageLoading />}><AuthView initialMode="login" /></Suspense>;
   }
 
   if (page === 'Register') {
-    return <AuthView initialMode="register" />;
+    return <Suspense fallback={<PageLoading />}><AuthView initialMode="register" /></Suspense>;
+  }
+
+  // Every operations page is private, including a page restored from stale local state.
+  if (!isAuthenticated) {
+    return <Suspense fallback={<PageLoading />}><AuthView initialMode="login" /></Suspense>;
   }
 
   const renderActivePage = () => {
@@ -254,10 +261,10 @@ export default function App() {
                 borderColor: dbConnected ? undefined : '#e05555',
                 color: dbConnected ? undefined : '#e05555'
               }}
-              title={dbConnected ? 'Connected to MongoDB and CSRNet Deep Learning Model' : 'Services offline — running on static data'}
+              title={`Database: ${dbConnected ? 'connected' : 'unavailable'} · AI service: ${aiConnected ? 'available' : 'unavailable'}`}
             >
-              <i style={{ background: dbConnected ? undefined : '#e05555' }} />
-              {dbConnected ? 'MONGODB: 27017 LIVE' : 'SERVICES OFFLINE'}
+              <i style={{ background: dbConnected && aiConnected ? undefined : '#db9225' }} />
+              {dbConnected && aiConnected ? 'SERVICES READY' : 'SERVICE DEGRADED'}
             </div>
 
             {/* Bright / Light & Dark Theme Toggle Button */}
@@ -299,7 +306,7 @@ export default function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow">
-                {new Date().toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()} <span className="heading-dot">•</span> SHIFT 02
+                {new Date().toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()} <span className="heading-dot">•</span> OPERATIONS
               </div>
               <h1>
                 {page === 'Dashboard' && user ? `Welcome back, ${user.name}` : menuTitles[page] || page}
@@ -307,7 +314,7 @@ export default function App() {
               </h1>
               <p>
                 {page === 'Dashboard'
-                  ? 'Real-time density estimation, capacity thresholds, and proactive LSTM crowd forecasting.'
+                  ? 'Review configured zones, connected cameras, observed crowd counts, and threshold incidents.'
                   : `Monitor, inspect, and configure ${page.toLowerCase()} across your enterprise venue.`}
               </p>
             </div>
@@ -323,7 +330,7 @@ export default function App() {
           </div>
 
           {/* Render Active Page Content */}
-          {renderActivePage()}
+          <Suspense fallback={<PageLoading />}>{renderActivePage()}</Suspense>
         </div>
       </main>
 

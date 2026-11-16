@@ -19,16 +19,40 @@ function extractYouTubeId(url) {
   return null;
 }
 
+function getPublicEmbed(url) {
+  if (!url) return null;
+  let parsed;
+  try { parsed = new URL(url); } catch { return null; }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  const youtubeId = extractYouTubeId(url);
+  if (youtubeId && (host === 'youtube.com' || host === 'youtu.be' || host.endsWith('.youtube.com'))) {
+    return { provider: 'YouTube', src: `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1` };
+  }
+  if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
+    const videoId = parsed.pathname.match(/^\/videos\/(\d+)/)?.[1];
+    const channel = parsed.pathname.match(/^\/([a-zA-Z0-9_]+)\/?$/)?.[1];
+    if (!videoId && !channel) return null;
+    const params = new URLSearchParams({ parent: window.location.hostname, muted: 'true', autoplay: 'false' });
+    if (videoId) params.set('video', `v${videoId}`);
+    else params.set('channel', channel);
+    return { provider: 'Twitch', src: `https://player.twitch.tv/?${params}` };
+  }
+  if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) {
+    const id = parsed.pathname.match(/(?:^|\/)(\d+)(?:$|\/)/)?.[1];
+    if (id) return { provider: 'Vimeo', src: `https://player.vimeo.com/video/${id}?autoplay=0&muted=1` };
+  }
+  if (host === 'dailymotion.com' || host.endsWith('.dailymotion.com') || host === 'dai.ly') {
+    const id = parsed.pathname.match(/(?:video\/|^\/)([a-zA-Z0-9]+)/)?.[1];
+    if (id) return { provider: 'Dailymotion', src: `https://www.dailymotion.com/embed/video/${id}?autoplay=0&mute=1` };
+  }
+  return null;
+}
+
 /**
  * Enterprise CCTV Camera Player with Multi-Source Ingestion:
- * - Real YouTube Live Streams & Videos (Embedded iframe with live telemetry overlay)
- * - Laptop Integrated Camera / Hardware Webcams (Real WebRTC/getUserMedia with AI head tracking)
- * - Direct Video Streams (MP4 / WebM / RTSP URLs)
- * - High-Resolution Continuous Density Photography Presets
- * Renders authentic OSD timecodes, live density heatmaps, and Farneback optical flow vectors.
- *
- * IMPORTANT: When aiConnected is false, NO fake crowd counts are generated.
- * The canvas OSD shows "AI MODEL OFFLINE — Detection Suspended" instead.
+ * Shows browser-accessible video, permitted public provider embeds, webcam
+ * frames, saved snapshots, AI heatmaps, and measured motion vectors. RTSP links
+ * need a browser-ready gateway to preview; server-side sampling may still read them.
  */
 export default function CCTVCanvasStream({
   cameraId = 'CAM-01',
@@ -36,7 +60,7 @@ export default function CCTVCanvasStream({
   count = 0,
   resolution = '1920x1080',
   fps = 2.0,
-  latencyMs = 38,
+  latencyMs = 0,
   heatmap = true,
   flowVectors = false,
   sceneType = 'concourse',
@@ -49,14 +73,15 @@ export default function CCTVCanvasStream({
   heatmapUrl = null,
   onSnapshot = null,
   onCountChange = null,
-  zoneId = null
+  zoneId = null,
+  cameraStatus = 'Pending',
+  modelType = 'csrnet'
 }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [osdTime, setOsdTime] = useState('');
-  const [liveCount, setLiveCount] = useState(count || 0);
+  const [liveCount, setLiveCount] = useState(count ?? null);
 
   // Pull aiConnected from store — determines whether detection is active
   const { aiConnected, cameras: storeCameras } = useCrowdStore();
@@ -64,29 +89,14 @@ export default function CCTVCanvasStream({
   const motionVectors = cameraFlow?.available ? cameraFlow.vectors || [] : [];
 
   // Detect Stream Kind
-  const ytId = extractYouTubeId(streamUrl);
-  const isYouTube = Boolean(ytId) || streamType === 'youtube' || sceneType === 'youtube';
+  const embed = getPublicEmbed(streamUrl);
+  const isPublicEmbed = Boolean(embed);
   const isWebcam = streamType === 'webcam' || sceneType === 'webcam' || cameraId === 'CAM-WEBCAM' || (streamUrl && streamUrl.toLowerCase().includes('webcam'));
-  const isDirectVideo = Boolean(streamUrl && (streamUrl.endsWith('.mp4') || streamUrl.endsWith('.webm') || streamUrl.includes('sample_video')));
-
-  // Pre-configured Scene Background Photography Map
-  const scenePhotoMap = {
-    entrance: '/samples/street_pedestrians.jpg',
-    concourse: '/samples/mall_concourse.jpg',
-    walkway: '/samples/marathon_crowd.jpg',
-    stadium: '/samples/stadium_dense.jpg'
-  };
-
-  const sceneHeatmapMap = {
-    entrance: '/samples/street_pedestrians_heatmap.png',
-    concourse: '/samples/mall_concourse_heatmap.png',
-    walkway: '/samples/marathon_crowd_heatmap.png',
-    stadium: '/samples/stadium_dense_heatmap.png'
-  };
-
-  const realCapture = snapshotUrl || lastSnapshot || (streamUrl && !streamUrl.startsWith('mock') && !streamUrl.includes('youtube') && !isWebcam ? streamUrl : null);
-  const photoSrc = realCapture || scenePhotoMap[sceneType] || '/samples/mall_concourse.jpg';
-  const heatmapSrc = heatmapUrl || sceneHeatmapMap[sceneType] || '/samples/mall_concourse_heatmap.png';
+  const isDirectVideo = Boolean(streamUrl && /\.(mp4|webm|m3u8)(?:$|[?#])/i.test(streamUrl));
+  const imageUrl = /\.(jpe?g|png|webp|bmp)(?:$|[?#])/i.test(streamUrl || '');
+  const realCapture = snapshotUrl || lastSnapshot || (imageUrl ? streamUrl : null);
+  const photoSrc = realCapture || '';
+  const heatmapSrc = heatmapUrl || '';
 
   const imgRef = useRef(null);
   const heatmapImgRef = useRef(null);
@@ -95,7 +105,7 @@ export default function CCTVCanvasStream({
 
   // Sync count when external prop updates (from real AI detections)
   useEffect(() => {
-    if (count !== undefined && count !== null) {
+    if (count !== undefined) {
       setLiveCount(count);
     }
   }, [count]);
@@ -132,7 +142,7 @@ export default function CCTVCanvasStream({
       vid.src = streamUrl;
       videoRef.current = vid;
       vid.play().catch(() => {});
-    } else if (!isYouTube) {
+    } else if (!isPublicEmbed) {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.src = photoSrc;
@@ -147,7 +157,7 @@ export default function CCTVCanvasStream({
         heatmapImgRef.current = heatImg;
       };
     }
-  }, [photoSrc, heatmapSrc, sceneType, cameraId, isWebcam, isYouTube, isDirectVideo, streamUrl]);
+  }, [photoSrc, heatmapSrc, sceneType, cameraId, isWebcam, isPublicEmbed, isDirectVideo, streamUrl]);
 
   // NOTE: The fake crowd count simulation that previously existed here for YouTube/video streams
   // has been REMOVED. No synthetic detections are generated when AI service is offline.
@@ -163,12 +173,6 @@ export default function CCTVCanvasStream({
       const w = canvas.width;
       const h = canvas.height;
 
-      // Update OSD clock
-      const now = new Date();
-      const ms = String(now.getMilliseconds()).padStart(3, '0');
-      const timeStr = `${now.toTimeString().split(' ')[0]}.${ms}`;
-      setOsdTime(timeStr);
-
       ctx.clearRect(0, 0, w, h);
       ctx.save();
 
@@ -179,39 +183,12 @@ export default function CCTVCanvasStream({
       }
 
       // 1. Draw Video or Background Image if not YouTube
-      if (!isYouTube) {
+      if (!isPublicEmbed) {
         if ((isWebcam || isDirectVideo) && videoRef.current && videoRef.current.readyState >= 2) {
           ctx.drawImage(videoRef.current, 0, 0, w, h);
           ctx.fillStyle = 'rgba(10, 25, 40, 0.08)';
           ctx.fillRect(0, 0, w, h);
 
-          // If webcam, draw live face/head locator rings on detected targets
-          if (isWebcam) {
-            ctx.strokeStyle = '#00ffcc';
-            ctx.lineWidth = 2;
-            const targetX = w * 0.5;
-            const targetY = h * 0.42;
-            const radius = 34;
-            ctx.beginPath();
-            ctx.arc(targetX, targetY, radius, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Reticle markings
-            ctx.beginPath();
-            ctx.moveTo(targetX - radius - 6, targetY);
-            ctx.lineTo(targetX - radius + 4, targetY);
-            ctx.moveTo(targetX + radius - 4, targetY);
-            ctx.lineTo(targetX + radius + 6, targetY);
-            ctx.moveTo(targetX, targetY - radius - 6);
-            ctx.lineTo(targetX, targetY - radius + 4);
-            ctx.moveTo(targetX, targetY + radius - 4);
-            ctx.lineTo(targetX, targetY + radius + 6);
-            ctx.stroke();
-
-            ctx.fillStyle = '#00ffcc';
-            ctx.font = '700 8.5px "JetBrains Mono", monospace';
-            ctx.fillText('HEAD_01 [CONF: 94.2%]', targetX - 42, targetY - radius - 8);
-          }
         } else if (imgRef.current && imgRef.current.complete) {
           ctx.drawImage(imgRef.current, 0, 0, w, h);
           ctx.fillStyle = 'rgba(10, 25, 40, 0.15)';
@@ -226,36 +203,12 @@ export default function CCTVCanvasStream({
         }
       }
 
-      // 2. Real Continuous Density Heatmap Overlay (only when AI is connected)
-      if (heatmap && aiConnected) {
+      // 2. Draw only a heatmap returned by the selected inference model.
+      if (heatmap && heatmapUrl && heatmapImgRef.current?.complete) {
         ctx.save();
-        if (heatmapImgRef.current && heatmapImgRef.current.complete && !isYouTube && !isWebcam) {
-          ctx.globalAlpha = 0.65;
-          ctx.globalCompositeOperation = 'screen';
-          ctx.drawImage(heatmapImgRef.current, 0, 0, w, h);
-        } else {
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = isYouTube ? 0.45 : 0.6;
-          const heatCenters = isWebcam
-            ? [{ x: w * 0.5, y: h * 0.45, r: 65 }]
-            : [
-                { x: w * 0.45, y: h * 0.55, r: 85 },
-                { x: w * 0.68, y: h * 0.62, r: 95 }
-              ];
-
-          heatCenters.forEach((c) => {
-            const radial = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
-            radial.addColorStop(0, 'rgba(255, 30, 0, 0.85)');    // Red high density
-            radial.addColorStop(0.35, 'rgba(255, 180, 0, 0.6)'); // Yellow
-            radial.addColorStop(0.7, 'rgba(0, 220, 180, 0.35)'); // Cyan/Green
-            radial.addColorStop(1, 'rgba(0, 50, 255, 0)');        // Clear
-
-            ctx.fillStyle = radial;
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
+        ctx.globalAlpha = 0.65;
+        ctx.globalCompositeOperation = 'screen';
+        ctx.drawImage(heatmapImgRef.current, 0, 0, w, h);
         ctx.restore();
       }
 
@@ -292,63 +245,23 @@ export default function CCTVCanvasStream({
 
       ctx.restore();
 
-      // 4. CCTV On-Screen Display (OSD) Overlay
-      // Top Left: Camera ID & Stream Mode
-      const streamTag = isYouTube ? 'YOUTUBE LIVE' : isWebcam ? 'LAPTOP WEBCAM' : realCapture ? 'REAL CAPTURE' : 'EDGE RTSP';
+      // 4. Source and last-known inference status. No synthetic timecode or REC indicator.
+      const streamTag = embed?.provider.toUpperCase() || (isWebcam ? 'LAPTOP WEBCAM' : isDirectVideo ? 'NETWORK VIDEO' : realCapture ? 'SAVED FRAME' : 'NO PREVIEW');
       ctx.fillStyle = 'rgba(10, 18, 25, 0.82)';
       ctx.fillRect(8, 8, 185, 20);
-
-      // Blinking red recording circle
-      ctx.fillStyle = '#ff3344';
-      ctx.beginPath();
-      if (Math.floor(Date.now() / 600) % 2 === 0) {
-        ctx.arc(18, 18, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
       ctx.fillStyle = '#ffffff';
       ctx.font = '700 8.5px "JetBrains Mono", monospace';
-      ctx.fillText(`${cameraId} · ${streamTag}`, 26, 21);
-
-      // Top Right: Live ISO Timestamp
-      ctx.fillStyle = 'rgba(10, 18, 25, 0.82)';
-      ctx.fillRect(w - 148, 8, 140, 20);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 8.5px "JetBrains Mono", monospace';
-      const todayStr = new Date().toISOString().slice(0, 10);
-      ctx.fillText(`${todayStr} ${timeStr}`, w - 141, 21);
+      ctx.fillText(`${cameraId} · ${streamTag}`, 14, 21);
 
       // Bottom Left: AI Status / CSRNet Density Telemetry HUD
-      if (aiConnected) {
-        // AI is online — show real telemetry
-        ctx.fillStyle = 'rgba(10, 18, 25, 0.88)';
-        ctx.fillRect(8, h - 26, 260, 20);
-        ctx.fillStyle = '#3478e5';
-        ctx.font = '700 8.5px "JetBrains Mono", monospace';
-        ctx.fillText('CSRNet DENSITY:', 14, h - 13);
-        ctx.fillStyle = '#00ffcc';
-        ctx.font = '700 9.5px "JetBrains Mono", monospace';
-        ctx.fillText(`${liveCount} PEOPLE`, 112, h - 13);
-        ctx.fillStyle = '#8a96a5';
-        ctx.font = '500 7.5px "JetBrains Mono", monospace';
-        ctx.fillText(`[${latencyMs}ms · ${fps} FPS]`, 178, h - 13);
-      } else {
-        // AI is offline — show honest offline state
-        ctx.fillStyle = 'rgba(30, 10, 10, 0.92)';
-        ctx.fillRect(8, h - 26, 290, 20);
-        ctx.fillStyle = '#e05555';
-        ctx.font = '700 8px "JetBrains Mono", monospace';
-        ctx.fillText('⚠ AI MODEL OFFLINE — Detection Suspended', 14, h - 13);
-      }
-
-      // Center crosshairs
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(w / 2 - 8, h / 2);
-      ctx.lineTo(w / 2 + 8, h / 2);
-      ctx.moveTo(w / 2, h / 2 - 8);
-      ctx.lineTo(w / 2, h / 2 + 8);
-      ctx.stroke();
+      ctx.fillStyle = 'rgba(10, 18, 25, 0.88)';
+      ctx.fillRect(8, h - 26, Math.min(w - 16, 330), 20);
+      ctx.fillStyle = cameraStatus === 'Live' && aiConnected ? '#00ffcc' : '#f0b553';
+      ctx.font = '700 8px "JetBrains Mono", monospace';
+      const statusText = cameraStatus === 'Live' && aiConnected && liveCount !== null
+        ? `${String(modelType).toUpperCase()} · LAST SAMPLE ${liveCount} PEOPLE${Number(latencyMs) > 0 ? ` · ${latencyMs}MS` : ''}`
+        : `${String(cameraStatus || 'Pending').toUpperCase()} · ${aiConnected ? 'WAITING FOR SAMPLE' : 'AI UNAVAILABLE'}`;
+      ctx.fillText(statusText.slice(0, 56), 14, h - 13);
 
       if (isPlaying) {
         animFrameRef.current = requestAnimationFrame(render);
@@ -360,11 +273,11 @@ export default function CCTVCanvasStream({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, zoomLevel, heatmap, flowVectors, latencyMs, fps, liveCount, cameraId, isYouTube, isWebcam, isDirectVideo, aiConnected, motionVectors]);
+  }, [isPlaying, zoomLevel, heatmap, heatmapUrl, flowVectors, latencyMs, fps, liveCount, cameraId, isPublicEmbed, embed?.provider, isWebcam, isDirectVideo, aiConnected, motionVectors, cameraStatus, modelType]);
 
   const handleSnapshot = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || isPublicEmbed) return;
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     if (onSnapshot) {
       onSnapshot(dataUrl);
@@ -387,23 +300,13 @@ export default function CCTVCanvasStream({
         borderRadius: '6px'
       }}
     >
-      {/* 1. Real YouTube Live Stream Footage */}
-      {isYouTube && ytId && (
+      {/* Public provider embeds show video only; inference is performed by the server-side sampler. */}
+      {isPublicEmbed && (
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-          {/* Instant backdrop preview while YouTube buffers */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: `url(https://i.ytimg.com/vi/${ytId}/hqdefault.jpg)`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              filter: 'brightness(0.85)'
-            }}
-          />
           <iframe
-            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1`}
-            title={cameraName}
+            src={embed.src}
+            title={`${cameraName} · ${embed.provider} player`}
+            referrerPolicy="strict-origin-when-cross-origin"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             style={{
               position: 'absolute',
@@ -413,7 +316,7 @@ export default function CCTVCanvasStream({
               height: '128%',
               transform: 'translate(-50%, -50%)',
               border: 'none',
-              pointerEvents: 'none'
+              pointerEvents: 'auto'
             }}
           />
         </div>
@@ -432,7 +335,7 @@ export default function CCTVCanvasStream({
           height: '100%',
           display: 'block',
           objectFit: 'cover',
-          pointerEvents: isYouTube ? 'none' : 'auto'
+          pointerEvents: isPublicEmbed ? 'none' : 'auto'
         }}
       />
 
@@ -441,21 +344,24 @@ export default function CCTVCanvasStream({
         <div className="cctv-player-controls">
           <button
             className="cctv-ctrl-btn"
-            title={isPlaying ? 'Pause Feed' : 'Resume Feed'}
+            title={isPublicEmbed ? 'Use the provider playback controls' : isPlaying ? 'Pause Feed' : 'Resume Feed'}
+            disabled={isPublicEmbed}
             onClick={() => setIsPlaying(!isPlaying)}
           >
             {isPlaying ? '⏸' : '▶'}
           </button>
           <button
             className="cctv-ctrl-btn"
-            title="Capture Real Frame Snapshot & Send to AI Sandbox"
+            title={isPublicEmbed ? 'Provider video cannot be captured by the browser; use server inference results' : 'Capture frame and send to scanner'}
+            disabled={isPublicEmbed}
             onClick={handleSnapshot}
           >
             📷
           </button>
           <button
             className="cctv-ctrl-btn"
-            title="Toggle Digital Zoom"
+            title={isPublicEmbed ? 'Use the provider playback controls' : 'Toggle Digital Zoom'}
+            disabled={isPublicEmbed}
             onClick={() => setZoomLevel(zoomLevel === 1 ? 1.5 : 1)}
           >
             🔍 {zoomLevel > 1 ? '1×' : '1.5×'}

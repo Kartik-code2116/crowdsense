@@ -1,6 +1,6 @@
-// CrowdSense API Client connecting to CSRNet Deep Learning Model & Node.js Gateway
-const AI_SERVICE_URL = 'http://localhost:8000/api/v1';
-const API_BASE_URL = 'http://localhost:5000/api/v1';
+// CrowdSense API client. Same-origin paths are routed by Nginx or the Vite dev proxy.
+// Same-origin paths work behind Nginx in production and Vite proxies in development.
+const API_BASE_URL = '/api/v1';
 
 // Helper to construct request headers with JWT token authentication
 const getAuthHeaders = (isJson = true) => {
@@ -50,7 +50,8 @@ export const apiClient = {
       const res = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: getAuthHeaders(false)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('API getMe deferred:', e.message);
     }
@@ -58,92 +59,28 @@ export const apiClient = {
   },
 
   // Real PyTorch Deep Learning Inference
-  async predictImage(fileBlob, model = 'yolov8', capacity = 250) {
+  async predictImage(fileBlob, model = 'yolov8', capacity = 250, warningPct = 75, criticalPct = 90) {
     try {
+      if (!fileBlob || !fileBlob.size) return { success: false, message: 'Choose a non-empty image before running inference.' };
       const formData = new FormData();
-      if (fileBlob) {
-        formData.append('file', fileBlob, 'frame.jpg');
-      }
-      formData.append('model', model);
-      formData.append('zone_capacity', String(capacity));
-
-      // Attempt direct deep learning model inference
-      const res = await fetch(`${AI_SERVICE_URL}/predict`, {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (e) {
-      console.warn('Model direct call deferred, trying Node gateway proxy:', e.message);
-    }
-
-    try {
-      // Fallback via Node.js API Gateway with Auth
-      const formData = new FormData();
-      if (fileBlob) formData.append('frame', fileBlob);
+      formData.append('frame', fileBlob, 'frame.jpg');
       formData.append('model', model);
       formData.append('zoneCapacity', String(capacity));
+      formData.append('warningPct', String(warningPct));
+      formData.append('criticalPct', String(criticalPct));
 
-      const token = localStorage.getItem('crowdsense_token');
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`${API_BASE_URL}/analyze/frame`, {
+      const res = await fetch(`${API_BASE_URL}/inference/predict`, {
         method: 'POST',
-        headers,
+        headers: getAuthHeaders(false),
         body: formData
       });
-      if (res.ok) {
-        const data = await res.json();
-        return data.detection || data;
-      }
-    } catch (e) {}
-
-    return null;
-  },
-
-  // List system connected cameras (laptop webcam and any USB/external cameras)
-  async listConnectedCameras() {
-    try {
-      const res = await fetch(`${AI_SERVICE_URL}/camera/devices`);
-      if (res.ok) return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data;
+      return { success: false, message: data.detail || data.message || `Inference service returned HTTP ${res.status}.` };
     } catch (e) {
-      console.warn('Camera device listing deferred:', e.message);
+      console.warn('Model inference request failed:', e.message);
+      return { success: false, message: 'Could not reach the inference service. Check that the AI service is running and try again.' };
     }
-    return { status: 'fallback', devices: [] };
-  },
-
-  // Grab snapshot and detect from connected hardware camera (OpenCV)
-  async captureCameraFrame(deviceIndex = 0, model = 'yolov8', capacity = 200) {
-    try {
-      const res = await fetch(`${AI_SERVICE_URL}/camera/capture?device_index=${deviceIndex}&model=${model}&zone_capacity=${capacity}`);
-      if (res.ok) return await res.json();
-    } catch (e) {
-      console.warn('Camera frame capture failed:', e.message);
-    }
-    return null;
-  },
-
-  // Real PyTorch Density Grad-CAM Explainability
-  async explainGradCam(fileBlob, layer = 'backend_conv5_3') {
-    try {
-      const formData = new FormData();
-      if (fileBlob) formData.append('file', fileBlob, 'frame.jpg');
-      formData.append('layer', layer);
-
-      const res = await fetch(`${AI_SERVICE_URL}/explain/gradcam`, {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (e) {
-      console.warn('Grad-CAM API call failed:', e.message);
-    }
-    return null;
   },
 
   async getCameras() {
@@ -163,7 +100,8 @@ export const apiClient = {
         headers: getAuthHeaders(true),
         body: JSON.stringify(cameraData)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('createCamera error:', e.message);
     }
@@ -176,7 +114,8 @@ export const apiClient = {
         method: 'DELETE',
         headers: getAuthHeaders(false)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('deleteCamera error:', e.message);
     }
@@ -200,7 +139,8 @@ export const apiClient = {
         headers: getAuthHeaders(true),
         body: JSON.stringify(zoneData)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('createZone error:', e.message);
     }
@@ -214,7 +154,8 @@ export const apiClient = {
         headers: getAuthHeaders(true),
         body: JSON.stringify(updates)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('updateZone error:', e.message);
     }
@@ -227,23 +168,10 @@ export const apiClient = {
         method: 'DELETE',
         headers: getAuthHeaders(false)
       });
-      if (res.ok) return await res.json();
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
     } catch (e) {
       console.warn('deleteZone error:', e.message);
-    }
-    return null;
-  },
-
-  // Scan live streaming URL via AI service
-  async scanStreamUrl(streamUrl, model = 'yolov8', capacity = 200) {
-    try {
-      const url = `${AI_SERVICE_URL}/stream/scan-url?stream_url=${encodeURIComponent(streamUrl)}&model=${encodeURIComponent(model)}&zone_capacity=${encodeURIComponent(capacity)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (e) {
-      console.warn('AI microservice stream scan deferred, trying direct predict if image:', e.message);
     }
     return null;
   },
@@ -287,6 +215,18 @@ export const apiClient = {
     return null;
   },
 
+  async resolveIncident(incidentId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/alerts/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+        method: 'PUT', headers: getAuthHeaders(false)
+      });
+      const data = await res.json();
+      return res.ok ? data : { ...data, success: false, status: res.status };
+    } catch (e) {
+      return { success: false, message: e.message || 'Could not update the incident.' };
+    }
+  },
+
   async getAlerts() {
     try {
       const res = await fetch(`${API_BASE_URL}/alerts`, {
@@ -310,33 +250,22 @@ export const apiClient = {
 
   async getHealth() {
     try {
-      const res = await fetch('http://localhost:5000/health');
+      const res = await fetch(`${API_BASE_URL}/health`);
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
+  },
+
+  async getBackendHealth() {
+    return this.getHealth();
   },
 
   async getAiHealth() {
     try {
-      const res = await fetch('http://localhost:8000/health');
+      const res = await fetch('/ai/health');
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
   },
 
-  async getForecast(zoneId = 'z1', capacity = 250) {
-    try {
-      const res = await fetch(`${AI_SERVICE_URL}/forecast`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          zone_id: zoneId,
-          capacity: capacity,
-          historical_counts: [140, 160, 190, 220, 250, 280, 286]
-        })
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-    return null;
-  }
 };

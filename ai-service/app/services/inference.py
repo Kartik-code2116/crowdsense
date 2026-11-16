@@ -96,7 +96,7 @@ def generate_gaussian_density_map(heads_and_boxes, width, height, downsample_fac
 
 class InferenceEngine:
     @staticmethod
-    def process_image(image_bytes: bytes, model_name="yolov8", zone_capacity=200, source_key=None):
+    def process_image(image_bytes: bytes, model_name="yolov8", zone_capacity=200, source_key=None, warning_pct=75, critical_pct=90):
         start_time = time.time()
         
         # Load and parse image
@@ -110,17 +110,16 @@ class InferenceEngine:
             img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
             w, h = img.size
 
-        requested_model = (model_name or "yolov8").lower().strip()
-        norm_model = requested_model if requested_model in ("csrnet", "yolo", "yolov8") else "csrnet"
+        requested_model = (model_name or "").lower().strip()
+        if requested_model not in ("csrnet", "yolo", "yolov8"):
+            raise ValueError("Choose a supported model: csrnet or yolov8.")
+        norm_model = "yolov8" if requested_model in ("yolo", "yolov8") else "csrnet"
         yolo_model = model_loader.get_model('yolov8') or model_loader.get_model('yolo')
         csrnet_model = model_loader.get_model('csrnet')
 
-        if norm_model in ("yolo", "yolov8") and yolo_model is None and csrnet_model is not None:
-            norm_model = "csrnet"
-        elif norm_model == "csrnet" and csrnet_model is None and yolo_model is not None:
-            norm_model = "yolov8"
-        elif csrnet_model is None and yolo_model is None:
-            raise RuntimeError("No trained inference weights are available. Load CSRNet or YOLOv8 weights before running detection.")
+        selected_model = yolo_model if norm_model in ("yolo", "yolov8") else csrnet_model
+        if selected_model is None:
+            raise RuntimeError(f"Selected model '{norm_model}' is unavailable. Load its weights before running detection.")
 
         detected_boxes = []
         detected_heads = []
@@ -128,7 +127,7 @@ class InferenceEngine:
         count_val = 0.0
 
         # Primary real YOLOv8 detection branch (for exact bounding boxes and real person count)
-        use_yolo = norm_model in ['yolo', 'yolov8']
+        use_yolo = norm_model == 'yolov8'
 
         if use_yolo and yolo_model is not None:
             try:
@@ -173,7 +172,7 @@ class InferenceEngine:
                 count_val = float(len(detected_boxes))
                 density_grid = generate_gaussian_density_map(detected_boxes, w, h, downsample_factor=8)
             except Exception as ey:
-                print(f"YOLO inference error: {ey}")
+                raise RuntimeError(f"YOLOv8 inference failed: {ey}") from ey
 
         # CSRNet Density Regression Branch
         if norm_model == 'csrnet' and csrnet_model is not None:
@@ -194,7 +193,7 @@ class InferenceEngine:
                     density_grid = csr_density
                     detected_heads = find_density_peaks(csr_density, w, h)
             except Exception as ec:
-                print(f"CSRNet inference error: {ec}")
+                raise RuntimeError(f"CSRNet inference failed: {ec}") from ec
 
         if density_grid is None:
             density_grid = np.zeros((max(1, h // 8), max(1, w // 8)), dtype=np.float32)
@@ -218,15 +217,17 @@ class InferenceEngine:
         )
 
         occupancy_pct = round((round_count / max(1, zone_capacity)) * 100, 1)
+        warning_threshold = max(1.0, min(99.0, float(warning_pct)))
+        critical_threshold = max(warning_threshold + 1.0, min(100.0, float(critical_pct)))
 
         # Safety status categorization
-        if occupancy_pct >= 90:
+        if occupancy_pct >= critical_threshold:
             density_level = "Critical / Overcrowded"
             safety_badge = "CRITICAL"
-        elif occupancy_pct >= 75:
+        elif occupancy_pct >= warning_threshold:
             density_level = "High Density"
             safety_badge = "WARNING"
-        elif occupancy_pct >= 50:
+        elif occupancy_pct >= warning_threshold * 0.7:
             density_level = "Moderate Density"
             safety_badge = "MODERATE"
         else:

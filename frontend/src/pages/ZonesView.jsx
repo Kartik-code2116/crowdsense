@@ -6,7 +6,7 @@ import VenueSpatialMap from '../components/VenueSpatialMap';
 const emptyZone = (index = 1) => ({
   name: '', code: `ZONE-${String(index).padStart(2, '0')}`, floor: '',
   maxCapacity: 300, warningPct: 70, criticalPct: 85, egressCount: 2,
-  description: '', streamUrl: '/samples/mall_concourse.jpg',
+  description: '',
   mapLocation: { lat: 19.076, lng: 72.8777, areaSqM: 300, boundary: [{ x: 18, y: 22 }, { x: 62, y: 22 }, { x: 62, y: 65 }, { x: 18, y: 65 }] }
 });
 
@@ -17,6 +17,8 @@ export default function ZonesView() {
   const [form, setForm] = useState(emptyZone(zones.length + 1));
   const [cameraAssignments, setCameraAssignments] = useState({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
   const zoneCameras = useMemo(() => zones.map((zone) => ({ zone, cameras: cameras.filter((camera) => camera.zoneId === zone.id) })), [zones, cameras]);
   const totalCapacity = zones.reduce((sum, zone) => sum + Number(zone.maxCapacity || 0), 0);
   const people = zones.reduce((sum, zone) => sum + Number(zone.currentCount || 0), 0);
@@ -28,6 +30,7 @@ export default function ZonesView() {
   const saveZone = async (event) => {
     event.preventDefault();
     setSaving(true);
+    setSaveError('');
     try {
       const payload = {
         ...form,
@@ -35,12 +38,19 @@ export default function ZonesView() {
         criticalPct: Number(form.criticalPct), egressCount: Number(form.egressCount)
       };
       if (editing !== 'new') {
-        await updateZone(editing.id, payload);
-        cameras.forEach((camera) => {
+        const updated = await updateZone(editing.id, payload);
+        if (!updated?.success) { setSaveError(updated?.message || 'Could not save this zone.'); return; }
+        for (const camera of cameras) {
           const nextZoneId = cameraAssignments[camera.id];
-          if (nextZoneId && (nextZoneId !== camera.zoneId || nextZoneId === editing.id)) setCameraZone(camera.id, nextZoneId);
-        });
-      } else await addZone(payload);
+          if (nextZoneId && nextZoneId !== camera.zoneId) {
+            const assigned = await setCameraZone(camera.id, nextZoneId);
+            if (!assigned?.success) { setSaveError(assigned?.message || `Could not update ${camera.name}'s zone.`); return; }
+          }
+        }
+      } else {
+        const created = await addZone(payload);
+        if (!created?.success) { setSaveError(created?.message || 'Could not create this zone.'); return; }
+      }
       setEditing(null);
     } finally {
       setSaving(false);
@@ -52,7 +62,10 @@ export default function ZonesView() {
       window.alert(`Move the ${count} camera${count === 1 ? '' : 's'} to another zone before deleting this zone.`);
       return;
     }
-    if (window.confirm(`Delete ${zone.name}? This cannot be undone.`)) await deleteZone(zone.id);
+    if (window.confirm(`Delete ${zone.name}? This cannot be undone.`)) {
+      const result = await deleteZone(zone.id);
+      setActionMessage(result?.success ? `${zone.name} deleted.` : result?.message || 'Could not delete this zone.');
+    }
   };
 
   return (
@@ -78,6 +91,7 @@ export default function ZonesView() {
         <button className={`layout-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>Zone list</button>
         <button className={`layout-btn ${view === 'map' ? 'active' : ''}`} onClick={() => setView('map')}><Map size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />Venue map</button>
       </div>
+      {actionMessage && <div role="status" className="diagnostic-note">{actionMessage}</div>}
 
       {view === 'map' ? (
         <section className="panel" style={{ padding: 16 }}>
@@ -159,6 +173,7 @@ export default function ZonesView() {
                 </div>)}
               </div> : <small style={{ color: 'var(--muted)' }}>No cameras are registered yet. Add cameras from the Cameras page.</small>}
             </div>}
+            {saveError && <div role="alert" style={{ color: '#dc4455', fontSize: 12, marginTop: 10 }}>{saveError}</div>}
             {Number(form.warningPct) >= Number(form.criticalPct) && <div style={{ color: '#dc4455', fontSize: 12, marginTop: 10 }}><AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />Critical threshold must be above warning.</div>}
             <div className="modal-actions" style={{ marginTop: 18 }}><button type="button" className="button secondary" disabled={saving} onClick={() => setEditing(null)}>Cancel</button><button className="button primary" type="submit" disabled={saving || Number(form.warningPct) >= Number(form.criticalPct)}>{saving ? 'Saving…' : editing !== 'new' ? 'Save changes' : 'Create zone'}</button></div>
           </form>

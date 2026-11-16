@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { MONGODB_URI } = require('./env');
+const { MONGODB_URI, NODE_ENV } = require('./env');
 
 let isConnected = false;
 let memoryStore = {
@@ -23,6 +23,7 @@ const connectDB = async () => {
     console.log(`✓ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.warn(`! MongoDB Connection Warning (${error.message}).`);
+    if (NODE_ENV === 'production') throw new Error(`MongoDB is required in production: ${error.message}`);
     console.log(`ℹ Operating in Enterprise In-Memory Fallback Mode. All routes & queries fully active.`);
     isConnected = false;
   }

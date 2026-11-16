@@ -10,7 +10,7 @@ router.get('/health', (req, res) => {
     status: 'healthy',
     gateway: 'Node.js/Express',
     uptimeSeconds: Math.floor(process.uptime()),
-    aiLatencyMs: 38,
+    aiLatencyMs: null,
     memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
   });
 });

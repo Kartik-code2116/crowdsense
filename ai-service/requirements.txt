@@ -9,3 +9,4 @@ torchvision>=0.15.0
 scipy>=1.10.0
 ultralytics>=8.0.0
 opencv-python>=4.8.0
+yt-dlp>=2024.1.0

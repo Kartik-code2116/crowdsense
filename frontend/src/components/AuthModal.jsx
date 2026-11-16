@@ -3,8 +3,8 @@ import { useCrowdStore } from '../store/useCrowdStore';
 
 export default function AuthModal() {
   const { showAuthModal, setShowAuthModal, login } = useCrowdStore();
-  const [email, setEmail] = useState('admin@crowdsense.io');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -21,12 +21,6 @@ export default function AuthModal() {
     }
   };
 
-  const handleFillDemoAdmin = () => {
-    setEmail('admin@crowdsense.io');
-    setPassword('password123');
-    setErrorMsg('');
-  };
-
   return (
     <div className="modal-backdrop">
       <div className="modal-content auth-modal">
@@ -41,30 +35,8 @@ export default function AuthModal() {
         </div>
 
         <div className="auth-header-copy">
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 51, 68, 0.1)', color: '#ff3344', border: '1px solid rgba(255,51,68,0.25)', borderRadius: '12px', padding: '3px 10px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', marginBottom: '8px' }}>
-            <span>🛡️</span>
-            <span>ADMINISTRATOR CONSOLE CLEARANCE</span>
-          </div>
-          <h3 style={{ margin: '4px 0 6px' }}>Venue Administrator Authentication</h3>
-          <p>Access operations telemetry, zone thresholds, forensic incident logs, and deep learning dispatch.</p>
-        </div>
-
-        {/* 1-Click Admin Demo Preset */}
-        <div className="role-presets-grid" style={{ gridTemplateColumns: '1fr' }}>
-          <button
-            type="button"
-            className="role-preset-btn active"
-            onClick={handleFillDemoAdmin}
-            style={{ textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}
-          >
-            <div>
-              <b style={{ color: '#ff3344' }}>Lead Administrator Account</b>
-              <small style={{ display: 'block' }}>Alex Kumar · admin@crowdsense.io</small>
-            </div>
-            <span style={{ fontSize: '11px', background: 'rgba(255,51,68,0.15)', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>
-              Auto-Fill
-            </span>
-          </button>
+          <h3 style={{ margin: '4px 0 6px' }}>Sign in to CrowdSense</h3>
+          <p>Open your workspace to manage zones, camera streams, models, and crowd alerts.</p>
         </div>
 
         {errorMsg && (
@@ -81,12 +53,12 @@ export default function AuthModal() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@crowdsense.io"
+              placeholder="you@organization.com"
             />
           </div>
 
           <div className="form-group">
-            <label>Master Security Password</label>
+            <label>Password</label>
             <input
               type="password"
               required
@@ -98,7 +70,7 @@ export default function AuthModal() {
 
           <div className="security-notice">
             <span className="status-dot" style={{ width: '5px', height: '5px' }} />
-            <span>Secured via MongoDB bcrypt authentication & JWT RS256 token validation.</span>
+            <span>Use the account credentials created for this workspace.</span>
           </div>
 
           <div className="modal-actions" style={{ marginTop: '16px' }}>
@@ -114,7 +86,7 @@ export default function AuthModal() {
               className="button primary"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Authenticating...' : 'Sign In as Administrator'}
+              {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
         </form>

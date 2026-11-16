@@ -1,6 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
-import { apiClient } from '../api/client';
 import {
   Download,
   Printer,
@@ -19,219 +18,48 @@ import {
 } from 'lucide-react';
 
 export default function ReportsView() {
-  const { zones, cameras, incidents, latestDetection, detectionLog, user } = useCrowdStore();
+  const { zones, cameras, incidents, detectionLog, user, fetchLiveData } = useCrowdStore();
 
   const [activeTab, setActiveTab] = useState('density_audit'); // 'density_audit' | 'incidents_audit' | 'certificate'
   const [selectedRange, setSelectedRange] = useState('shift'); // 'shift' | '24h' | '7d' | '30d'
   const [selectedZone, setSelectedZone] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all'); // 'all' | 'safe' | 'warning' | 'critical'
   const [lastRefreshed, setLastRefreshed] = useState(new Date().toLocaleTimeString());
-  const [dbAuditLogs, setDbAuditLogs] = useState([]);
-
-  // Fetch real audit logs directly from local MongoDB (27017)
-  useEffect(() => {
-    let isMounted = true;
-    apiClient.getAuditLogs(50, selectedZone).then((res) => {
-      if (isMounted && res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        setDbAuditLogs(res.data);
-      }
-    });
-    return () => { isMounted = false; };
-  }, [selectedZone, lastRefreshed]);
-
-  // Generate dynamic, connected audit records based on real active venue zones & cameras
+  // Build this report from stored observations only; the date filters never invent samples.
   const auditRecords = useMemo(() => {
-    const records = [];
-    const now = new Date();
-    const seenIds = new Set();
-
-    // 1. Prepend authentic detection records stored in local MongoDB
-    if (dbAuditLogs && dbAuditLogs.length > 0) {
-      dbAuditLogs.forEach((dbLog) => {
-        seenIds.add(dbLog.id);
-        const occPct = dbLog.occupancyPct || 0;
-        const status = occPct >= 85 ? 'critical' : occPct >= 70 ? 'warning' : 'safe';
-        records.push({
-          id: dbLog.id,
-          timestamp: dbLog.timestamp ? new Date(dbLog.timestamp).toISOString() : new Date().toISOString(),
-          timeOnly: dbLog.timeStr || new Date().toLocaleTimeString(),
-          dateOnly: dbLog.dateStr || new Date().toLocaleDateString(),
-          intervalLabel: 'MongoDB Time-Series',
-          zoneId: dbLog.zoneId,
-          zoneName: dbLog.zoneName,
-          zoneCode: 'ZONE',
-          floor: 'Level 1',
-          cameraId: dbLog.cameraId,
-          cameraName: dbLog.cameraName || 'Arena Concourse Gate A',
-          count: dbLog.count,
-          maxCapacity: dbLog.capacity || 350,
-          occupancyPct: occPct,
-          status,
-          statusLabel: status === 'critical' ? 'Critical Threshold Breach' : status === 'warning' ? 'Ingress Surge Warning' : 'NFPA Compliant (Safe)',
-          statusBadgeClass: status,
-          modelUsed: dbLog.modelUsed ? `${dbLog.modelUsed.toUpperCase()} Deep Learning` : 'CSRNet Dilated Conv',
-          egressStatus: occPct > 80 ? 'Egress Restricted (0.34 m/s)' : 'Egress Free Flow (1.48 m/s)',
-          isLiveScan: true
-        });
-      });
-    }
-
-    // 2. Prepend live scans from active session (Crowd Scanner, Live Streams, Webcam)
-    if (detectionLog && detectionLog.length > 0) {
-      detectionLog.slice().reverse().forEach((d, idx) => {
-        const zone = zones.find(z => z.id === d.zoneId) || { name: d.zoneName || 'Arena Main Concourse', maxCapacity: d.capacity || 350, code: 'ARENA-CONCOURSE-01', floor: 'Level 1 Ingress' };
-        const matchingCam = cameras.find(c => c.zoneId === d.zoneId) || cameras[0] || { id: 'CAM-01', name: 'Arena Concourse Gate A' };
-        const maxCap = d.capacity || zone.maxCapacity || 350;
-        const occPct = d.occupancyPct !== undefined ? d.occupancyPct : Math.round((d.count / maxCap) * 100);
-        const isCritical = occPct >= (zone.criticalPct || 85);
-        const isWarning = occPct >= (zone.warningPct || 70);
-        const status = isCritical ? 'critical' : isWarning ? 'warning' : 'safe';
-        const statusLabel = isCritical ? 'Critical Threshold Breach' : isWarning ? 'Ingress Surge Warning' : 'NFPA Compliant (Safe)';
-        const dateObj = new Date(d.timestamp || (Date.now() - idx * 60000));
-        const dateStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-        const timeStr = d.time || dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const auditId = `AUD-SCAN-${d.timestamp || Date.now()}-${idx}`;
-
-        if (!seenIds.has(auditId)) {
-          seenIds.add(auditId);
-          records.push({
-            id: auditId,
-            timestamp: `${dateStr} ${timeStr}`,
-            timeOnly: timeStr,
-            dateOnly: dateStr,
-            intervalLabel: 'Live AI Scan',
-            zoneId: d.zoneId,
-            zoneName: d.zoneName || zone.name,
-            zoneCode: zone.code || 'ZONE-01',
-            floor: zone.floor || 'Level 1',
-            cameraId: d.cameraId || matchingCam.id,
-            cameraName: matchingCam.name,
-            count: d.count,
-            maxCapacity: maxCap,
-            occupancyPct: occPct,
-            status,
-            statusLabel,
-            statusBadgeClass: status,
-            modelUsed: d.modelName ? `${d.modelName.toUpperCase()} Deep Learning` : 'CSRNet Dilated Conv',
-            egressStatus: occPct > 80 ? 'Egress Restricted (0.34 m/s)' : 'Egress Free Flow (1.48 m/s)',
-            isLiveScan: true
-          });
-        }
-      });
-    }
-
-    // Map time intervals based on selected range
-    const intervalConfigs = {
-      shift: [
-        { label: 'Live Now', minsAgo: 0, mult: 1.0 },
-        { label: '15m ago', minsAgo: 15, mult: 0.96 },
-        { label: '45m ago', minsAgo: 45, mult: 0.92 },
-        { label: '1h 30m ago', minsAgo: 90, mult: 0.88 },
-        { label: '2h 15m ago', minsAgo: 135, mult: 0.82 },
-        { label: '3h 00m ago', minsAgo: 180, mult: 0.74 },
-        { label: '4h 30m ago', minsAgo: 270, mult: 0.65 },
-        { label: '6h 00m ago', minsAgo: 360, mult: 0.50 }
-      ],
-      '24h': [
-        { label: 'Live Now', minsAgo: 0, mult: 1.0 },
-        { label: '2h ago', minsAgo: 120, mult: 0.85 },
-        { label: '4h ago', minsAgo: 240, mult: 0.72 },
-        { label: '8h ago', minsAgo: 480, mult: 0.60 },
-        { label: '12h ago', minsAgo: 720, mult: 0.95 },
-        { label: '16h ago', minsAgo: 960, mult: 0.40 },
-        { label: '20h ago', minsAgo: 1200, mult: 0.30 },
-        { label: '24h ago', minsAgo: 1440, mult: 0.25 }
-      ],
-      '7d': [
-        { label: 'Today', minsAgo: 0, mult: 1.0 },
-        { label: 'Yesterday', minsAgo: 1440, mult: 0.94 },
-        { label: '2 days ago', minsAgo: 2880, mult: 0.88 },
-        { label: '3 days ago', minsAgo: 4320, mult: 0.91 },
-        { label: '4 days ago', minsAgo: 5760, mult: 0.82 },
-        { label: '5 days ago', minsAgo: 7200, mult: 0.76 },
-        { label: '6 days ago', minsAgo: 8640, mult: 0.68 },
-        { label: '7 days ago', minsAgo: 10080, mult: 0.84 }
-      ],
-      '30d': [
-        { label: 'Current Week', minsAgo: 0, mult: 1.0 },
-        { label: 'Week 1 Audit', minsAgo: 10080, mult: 0.92 },
-        { label: 'Week 2 Audit', minsAgo: 20160, mult: 0.89 },
-        { label: 'Week 3 Audit', minsAgo: 30240, mult: 0.95 },
-        { label: 'Week 4 Audit', minsAgo: 40320, mult: 0.84 }
-      ]
-    };
-
-    const intervals = intervalConfigs[selectedRange] || intervalConfigs.shift;
-
-    // Build real time-series records per active zone
-    intervals.forEach((interval, intIdx) => {
-      const recordDate = new Date(now.getTime() - interval.minsAgo * 60000);
-      const timeStr = recordDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const dateStr = recordDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-
-      zones.forEach((zone, zIdx) => {
-        const matchingCam = cameras.find(c => c.zoneId === zone.id) || cameras[0] || { id: 'CAM-01', name: 'Arena Concourse Gate A' };
-        const maxCap = zone.maxCapacity || 350;
-
-        // Base live count
-        let baseCount = zone.currentCount || matchingCam?.count || (latestDetection?.count || 0);
-        if (baseCount === 0) {
-          baseCount = 0;
-        } else if (intIdx > 0) {
-          // Deterministic realistic variance over time
-          const variance = Math.sin((intIdx + 1) * (zIdx + 2)) * 0.18;
-          baseCount = Math.max(0, Math.round(baseCount * interval.mult * (1 + variance)));
-        }
-
-        const occupancyPct = maxCap > 0 ? Math.round((baseCount / maxCap) * 100) : 0;
-
-        let status = 'safe';
-        let statusLabel = 'NFPA Compliant (Safe)';
-        let statusBadgeClass = 'safe';
-
-        if (occupancyPct >= (zone.criticalPct || 85)) {
-          status = 'critical';
-          statusLabel = 'Critical Surge (>85%)';
-          statusBadgeClass = 'critical';
-        } else if (occupancyPct >= (zone.warningPct || 70)) {
-          status = 'warning';
-          statusLabel = 'Warning Threshold (70-85%)';
-          statusBadgeClass = 'warning';
-        }
-
-        let egressStatus = 'Unimpeded Egress (Clear)';
-        if (occupancyPct >= 85) {
-          egressStatus = 'Corridors Metered · Secondary Egress Open';
-        } else if (occupancyPct >= 70) {
-          egressStatus = 'Monitored Flow (1.4 m/s)';
-        }
-
-        records.push({
-          id: `AUD-${selectedRange.toUpperCase()}-${intIdx}-${zone.id}`,
-          timestamp: `${dateStr} ${timeStr}`,
-          timeOnly: timeStr,
-          dateOnly: dateStr,
-          intervalLabel: interval.label,
-          zoneId: zone.id,
-          zoneName: zone.name,
-          zoneCode: zone.code || 'ZONE-01',
-          floor: zone.floor || 'Level 1',
-          cameraId: matchingCam.id,
-          cameraName: matchingCam.name,
-          count: baseCount,
-          maxCapacity: maxCap,
-          occupancyPct,
-          status,
-          statusLabel,
-          statusBadgeClass,
-          modelUsed: 'CSRNet Dilated Conv',
-          egressStatus
-        });
-      });
-    });
-
-    return records;
-  }, [zones, cameras, detectionLog, dbAuditLogs, selectedRange, lastRefreshed]);
+    const duration = { shift: 8, '24h': 24, '7d': 168, '30d': 720 }[selectedRange] * 60 * 60 * 1000;
+    const cutoff = Date.now() - duration;
+    return (detectionLog || []).filter((entry) => Number(entry.timestamp) >= cutoff).map((entry, index) => {
+      const zone = zones.find((item) => item.id === entry.zoneId);
+      const camera = cameras.find((item) => item.id === entry.cameraId);
+      const maxCapacity = Number(entry.capacity || zone?.maxCapacity) || 0;
+      const count = Number(entry.zoneCount ?? entry.count) || 0;
+      const occupancyPct = maxCapacity ? Math.round((count / maxCapacity) * 100) : 0;
+      const status = occupancyPct >= (zone?.criticalPct || 85) ? 'critical' : occupancyPct >= (zone?.warningPct || 70) ? 'warning' : 'safe';
+      const date = new Date(Number(entry.timestamp));
+      const statusLabel = status === 'critical' ? 'Critical threshold' : status === 'warning' ? 'Warning threshold' : 'Within configured limits';
+      return {
+        id: entry.id || `scan-${entry.timestamp}-${index}`,
+        timestamp: date.toISOString(),
+        timeOnly: date.toLocaleTimeString(),
+        dateOnly: date.toLocaleDateString(),
+        intervalLabel: 'Observed camera scan',
+        zoneId: entry.zoneId,
+        zoneName: entry.zoneName || zone?.name || 'Unknown zone',
+        zoneCode: zone?.code || '—',
+        floor: zone?.floor || '—',
+        cameraId: entry.cameraId || '—',
+        cameraName: camera?.name || entry.cameraId || 'Unknown camera',
+        count,
+        maxCapacity,
+        occupancyPct,
+        status,
+        statusLabel,
+        statusBadgeClass: status,
+        modelUsed: entry.modelName || 'Unknown model'
+      };
+    }).reverse();
+  }, [zones, cameras, detectionLog, selectedRange]);
 
   // Filter records based on UI selections
   const filteredRecords = useMemo(() => {
@@ -244,73 +72,72 @@ export default function ReportsView() {
 
   // Aggregate KPI summary metrics dynamically
   const kpis = useMemo(() => {
-    if (!auditRecords.length) {
-      return { totalFootfall: 0, peakCrowd: 0, peakZone: 'N/A', compliancePct: 100, breaches: 0 };
+    if (!filteredRecords.length) {
+      return { samples: 0, peakCrowd: 0, peakZone: '—', breaches: 0, warnings: 0 };
     }
 
-    const counts = auditRecords.map(r => r.count);
+    const counts = filteredRecords.map(r => r.count);
     const peakCrowd = Math.max(...counts);
-    const peakRec = auditRecords.find(r => r.count === peakCrowd) || auditRecords[0];
-    const totalFootfall = Math.round(counts.reduce((sum, c) => sum + c, 0) * 1.8);
-    const breaches = auditRecords.filter(r => r.status === 'critical').length;
-    const warnings = auditRecords.filter(r => r.status === 'warning').length;
-    const safeCount = auditRecords.filter(r => r.status === 'safe').length;
-    const compliancePct = Math.round(((safeCount + warnings * 0.7) / auditRecords.length) * 100);
+    const peakRec = filteredRecords.find(r => r.count === peakCrowd) || filteredRecords[0];
+    const breaches = filteredRecords.filter(r => r.status === 'critical').length;
+    const warnings = filteredRecords.filter(r => r.status === 'warning').length;
 
     return {
-      totalFootfall,
+      samples: filteredRecords.length,
       peakCrowd,
       peakZone: `${peakRec.zoneName} (${peakRec.occupancyPct}%)`,
-      compliancePct,
       breaches,
       warnings
     };
-  }, [auditRecords]);
+  }, [filteredRecords]);
 
   // Export filtered audit data as genuine CSV
   const handleDownloadCSV = () => {
     const headers = [
-      'Audit_ID',
+      'Detection_ID',
       'Timestamp',
       'Venue_Zone',
       'Zone_Code',
       'Camera_ID',
       'Camera_Name',
-      'Headcount_Integral',
+      'Observed_Zone_Count',
       'Capacity_Ceiling',
       'Occupancy_Pct',
-      'Compliance_Status',
+      'Capacity_Threshold_Status',
       'Deep_Learning_Model',
-      'Egress_Status'
+      'Threshold_Status'
     ];
 
+    const cell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = filteredRecords.map((r) => [
       r.id,
-      `"${r.timestamp}"`,
-      `"${r.zoneName}"`,
+      r.timestamp,
+      r.zoneName,
       r.zoneCode,
       r.cameraId,
-      `"${r.cameraName}"`,
+      r.cameraName,
       r.count,
       r.maxCapacity,
       `${r.occupancyPct}%`,
-      `"${r.statusLabel}"`,
-      `"${r.modelUsed}"`,
-      `"${r.egressStatus}"`
-    ]);
+      r.statusLabel,
+      r.modelUsed,
+      r.statusLabel
+    ].map(cell));
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `crowdsense_safety_audit_${selectedRange}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(encodedUri), 0);
   };
 
   const handleRefresh = () => {
     setLastRefreshed(new Date().toLocaleTimeString());
+    fetchLiveData();
   };
 
   return (
@@ -320,12 +147,12 @@ export default function ReportsView() {
         <div className="print-brand-bar">
           <div>
             <h1>CROWDSENSE SAFETY INTELLIGENCE PLATFORM</h1>
-            <h2>OFFICIAL VENUE AUDIT & NFPA-101 LIFE SAFETY DOSSIER</h2>
+            <h2>OBSERVED CROWD DETECTION REPORT</h2>
           </div>
           <div className="print-meta-right">
-            <b>CERTIFICATION REF: CS-AUD-{Date.now().toString().slice(-6)}</b>
+            <b>REPORT REF: CS-{Date.now().toString().slice(-6)}</b>
             <small>Generated: {new Date().toLocaleString()}</small>
-            <small>Certifying Officer: {user ? `${user.name} (${user.role})` : 'Operations Command Lead'}</small>
+            <small>Generated by: {user ? `${user.name} (${user.role})` : 'CrowdSense operator'}</small>
           </div>
         </div>
         <div className="print-divider-line" />
@@ -334,8 +161,8 @@ export default function ReportsView() {
       {/* Screen Page Header & Action Bar */}
       <div className="page-action-row no-print">
         <div>
-          <h2>Operational Safety Reports & Compliance Audits</h2>
-          <p>Time-series compliance audit logs, capacity certification, and regulatory NFPA-101 safety dossiers.</p>
+          <h2>Detection reports</h2>
+          <p>Review recorded camera observations, capacity thresholds, and incident history.</p>
         </div>
         <div className="heading-actions">
           <button className="button secondary" onClick={handleRefresh} title="Sync with latest time-series records">
@@ -344,7 +171,7 @@ export default function ReportsView() {
           <button className="button secondary" onClick={handleDownloadCSV} title="Export filtered records as CSV">
             <Download size={14} /> Export CSV Data
           </button>
-          <button className="button primary" onClick={() => window.print()} title="Print or save as official PDF dossier">
+          <button className="button primary" onClick={() => window.print()} title="Print or save this report as PDF">
             <Printer size={14} /> Print / Save as PDF
           </button>
         </div>
@@ -375,8 +202,8 @@ export default function ReportsView() {
           onClick={() => setActiveTab('certificate')}
         >
           <Award size={15} />
-          <span>NFPA-101 Regulatory Certificate</span>
-          <span className="tab-pill-badge green">✓ Certified</span>
+          <span>Project summary</span>
+          <span className="tab-pill-badge">Overview</span>
         </button>
       </div>
 
@@ -384,16 +211,16 @@ export default function ReportsView() {
       <div className="stat-grid" style={{ marginTop: '16px' }}>
         <div className="stat-card">
           <div className="stat-top">
-            <span>TOTAL ESTIMATED FOOTFALL</span>
+            <span>RECORDED DETECTIONS</span>
             <Users size={16} className="stat-icon-lucide blue" />
           </div>
-          <div className="stat-value">{kpis.totalFootfall.toLocaleString()}</div>
-          <div className="stat-foot">Continuous spatial density integral sum</div>
+          <div className="stat-value">{kpis.samples.toLocaleString()}</div>
+          <div className="stat-foot">Scans in selected date range</div>
         </div>
 
         <div className="stat-card">
           <div className="stat-top">
-            <span>MAX PEAK CONCURRENT</span>
+            <span>PEAK OBSERVED ZONE COUNT</span>
             <Activity size={16} className="stat-icon-lucide amber" />
           </div>
           <div className="stat-value text-amber">{kpis.peakCrowd.toLocaleString()}</div>
@@ -402,11 +229,11 @@ export default function ReportsView() {
 
         <div className="stat-card">
           <div className="stat-top">
-            <span>SAFETY COMPLIANCE RATE</span>
-            <ShieldCheck size={16} className="stat-icon-lucide green" />
+            <span>WARNING READINGS</span>
+            <ShieldCheck size={16} className="stat-icon-lucide amber" />
           </div>
-          <div className="stat-value text-green">{kpis.compliancePct}%</div>
-          <div className="stat-foot">NFPA 101 Life Safety Code Verified</div>
+          <div className="stat-value text-amber">{kpis.warnings}</div>
+          <div className="stat-foot">At or above each zone’s warning limit</div>
         </div>
 
         <div className="stat-card">
@@ -414,10 +241,10 @@ export default function ReportsView() {
             <span>CRITICAL CAPACITY SURGES</span>
             <AlertTriangle size={16} className={`stat-icon-lucide ${kpis.breaches > 0 ? 'red' : 'green'}`} />
           </div>
-          <div className={`stat-value ${kpis.breaches > 0 ? 'text-red' : 'text-green'}`}>
-            {kpis.breaches} <small>{kpis.breaches === 1 ? 'Surge' : 'Surges'}</small>
+          <div className={`stat-value ${kpis.breaches > 0 ? 'text-red' : ''}`}>
+            {kpis.breaches} <small>{kpis.breaches === 1 ? 'Reading' : 'Readings'}</small>
           </div>
-          <div className="stat-foot">Mean operator response SLA: &lt; 48s</div>
+          <div className="stat-foot">At or above each zone’s critical limit</div>
         </div>
       </div>
 
@@ -449,20 +276,20 @@ export default function ReportsView() {
             </div>
 
             <div className="filter-group">
-              <label>Compliance Status:</label>
+          <label>Capacity Threshold:</label>
               <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
                 <option value="all">All Status Levels</option>
-                <option value="safe">Compliant (Safe &lt; 70%)</option>
-                <option value="warning">Warning Threshold (70% - 85%)</option>
-                <option value="critical">Critical Surges (&gt; 85%)</option>
+                <option value="safe">Below warning threshold</option>
+                <option value="warning">Warning threshold</option>
+                <option value="critical">Critical threshold</option>
               </select>
             </div>
 
             <div className="compliance-tag">
               <span className={`status-dot ${kpis.breaches > 0 ? 'amber' : 'green'}`} />
               <span>
-                Audit Status:{' '}
-                <b>{kpis.breaches > 0 ? `${kpis.breaches} Surge Alerts Logged` : 'Certified NFPA-101 Compliant'}</b>
+                Readings:{' '}
+                <b>{kpis.breaches} critical · {kpis.warnings} warning</b>
               </span>
             </div>
           </div>
@@ -470,8 +297,8 @@ export default function ReportsView() {
           {/* Table Header Details */}
           <div className="panel-heading" style={{ borderBottom: '1px solid var(--line)', padding: '16px 20px' }}>
             <div>
-              <h2>Zone Spatial Density Compliance Log ({filteredRecords.length} Records)</h2>
-              <p>Retrieved from MongoDB time-series collection with compound index on (cameraId, timestamp).</p>
+              <h2>Observed detection log ({filteredRecords.length} records)</h2>
+              <p>Recorded camera estimates compared with each zone’s configured capacity and thresholds.</p>
             </div>
             <div className="no-print" style={{ fontSize: '12px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Clock size={13} />
@@ -487,11 +314,11 @@ export default function ReportsView() {
                   <th>TIMESTAMP</th>
                   <th>VENUE ZONE</th>
                   <th>ACTIVE CAMERA</th>
-                  <th>HEADCOUNT (INTEGRAL)</th>
+                  <th>OBSERVED ZONE COUNT</th>
                   <th>CAPACITY CEILING</th>
                   <th>OCCUPANCY</th>
                   <th>MODEL ENGINE</th>
-                  <th>EGRESS STATUS</th>
+                  <th>THRESHOLD RESULT</th>
                 </tr>
               </thead>
               <tbody>
@@ -512,7 +339,6 @@ export default function ReportsView() {
                       </td>
                       <td>
                         <b style={{ fontSize: '14px' }}>{r.count}</b>
-                        <span className="integral-symbol" title="Calculated via continuous ∬ D(x, y) dx dy">∬</span>
                       </td>
                       <td>{r.maxCapacity}</td>
                       <td>
@@ -524,7 +350,7 @@ export default function ReportsView() {
                         <span className="model-chip-tag">{r.modelUsed}</span>
                       </td>
                       <td>
-                        <span className="egress-cell-text">{r.egressStatus}</span>
+                        <span className="egress-cell-text">{r.statusLabel}</span>
                       </td>
                     </tr>
                   ))
@@ -554,7 +380,7 @@ export default function ReportsView() {
           <div className="panel-heading" style={{ borderBottom: '1px solid var(--line)', padding: '16px 20px' }}>
             <div>
               <h2>Forensic Safety Incidents & Operator Alarm Log ({incidents.length} Events)</h2>
-              <p>Auditable incident logs with peak recorded headcounts, safety levels, and mean response times.</p>
+              <p>Incident records created when a zone’s combined camera estimate crosses its configured warning threshold.</p>
             </div>
             <div className="no-print" style={{ fontSize: '12px', color: 'var(--muted)' }}>
               Total Resolved: {incidents.filter(i => i.status === 'Resolved').length} / {incidents.length}
@@ -607,7 +433,7 @@ export default function ReportsView() {
                 ) : (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
-                      No safety incidents recorded in current period. Venue operations operating 100% all-clear.
+                      No incidents are recorded for this account.
                     </td>
                   </tr>
                 )}
@@ -626,9 +452,9 @@ export default function ReportsView() {
                 <ShieldCheck size={36} color="#159b6f" />
               </div>
               <div className="cert-title-block">
-                <span className="cert-eyebrow">REGULATORY FIRE SAFETY & CROWD COMPLIANCE CERTIFICATION</span>
-                <h2>VENUE CENTRAL SAFETY DOSSIER</h2>
-                <p>Issued pursuant to NFPA 101 Life Safety Code (§ 12.1.7) and International Building Code (IBC) Section 1004</p>
+                <span className="cert-eyebrow">PROJECT CONFIGURATION SUMMARY</span>
+                <h2>CrowdSense overview</h2>
+                <p>This report summarizes recorded model output and configured capacity alerts. It does not certify legal or fire-code compliance.</p>
               </div>
             </div>
 
@@ -640,48 +466,47 @@ export default function ReportsView() {
               </div>
 
               <div className="cert-spec-box">
-                <span className="cert-spec-title">INTEGRAL MATHEMATICAL ASSURANCE</span>
-                <strong>Continuous Density Spatial Integral: ∬ D(p) dp</strong>
-                <small>Eliminates 80% Non-Maximum Suppression (NMS) occlusion failure inherent to bounding box detectors</small>
+                <span className="cert-spec-title">MODEL OUTPUTS</span>
+                <strong>CSRNet density estimate · YOLOv8 person boxes</strong>
+                <small>CSRNet sums a density map; YOLOv8 returns individual person detections. Results need validation on labeled venue footage.</small>
               </div>
 
               <div className="cert-spec-box">
-                <span className="cert-spec-title">PREDICTIVE BOTTLENECK LEAD TIME</span>
-                <strong>CrowdFlowLSTM Multi-Horizon Forecaster</strong>
-                <small>Provides 8 to 15 minute advance warning before critical egress corridor saturation</small>
+                <span className="cert-spec-title">FORECAST METHOD</span>
+                <strong>Time-aware linear trend baseline</strong>
+                <small>A trained LSTM checkpoint is not currently connected to inference.</small>
               </div>
 
               <div className="cert-spec-box">
-                <span className="cert-spec-title">ACTIVE COMPLIANCE RATING</span>
-                <strong style={{ color: '#159b6f' }}>98.2% Certified Compliant</strong>
-                <small>Sliding window audit verified with automated MongoDB TTL 7-day retention logging</small>
+                <span className="cert-spec-title">CURRENT CONFIGURATION</span>
+                <strong>{zones.length} zones · {cameras.length} cameras · {incidents.length} incidents</strong>
+                <small>Threshold alerts are estimates. Overlapping camera views can count some people more than once.</small>
               </div>
             </div>
 
             <div className="cert-signatures-row">
               <div className="cert-sign-block">
                 <div className="sign-line" />
-                <b>Alex Kumar</b>
-                <small>Lead Venue Safety Director</small>
+                <b>{user?.name || 'CrowdSense operator'}</b>
+                <small>Report generated by</small>
               </div>
 
               <div className="cert-sign-block">
                 <div className="sign-line" />
-                <b>Shift 02 Compliance Officer</b>
-                <small>Control Room Operations Lead</small>
+                <b>{kpis.samples} observations</b>
+                <small>In selected date range</small>
               </div>
 
               <div className="cert-sign-block">
                 <div className="sign-line" />
                 <b>{new Date().toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</b>
-                <small>Official Certification Date</small>
+                <small>Report date</small>
               </div>
             </div>
 
             <div className="cert-footer-notice no-print">
               <p>
-                This compliance dossier is mathematically verified by CrowdSense continuous spatial telemetry.
-                Click <b>Print / Save as PDF</b> above to produce the official signed certification document.
+                Click <b>Print / Save as PDF</b> to export this observational project summary.
               </p>
             </div>
           </div>

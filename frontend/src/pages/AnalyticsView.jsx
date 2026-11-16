@@ -1,6 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
+function observedCount(matches, selectedCamera) {
+  if (!matches.length) return 0;
+  const latestByKey = new Map();
+  for (const item of matches) {
+    const key = selectedCamera ? (item.cameraId || selectedCamera.id) : (item.zoneId || 'unassigned');
+    const previous = latestByKey.get(key);
+    if (!previous || Number(item.timestamp) >= Number(previous.timestamp)) latestByKey.set(key, item);
+  }
+  return [...latestByKey.values()].reduce((sum, item) => sum + (Number(selectedCamera ? item.count : (item.zoneCount ?? item.count)) || 0), 0);
+}
+
 export default function AnalyticsView() {
   const { zones, cameras, latestDetection, detectionLog, setPage, aiConnected } = useCrowdStore();
   const [timeRange, setTimeRange] = useState('24h'); // '1h' | '6h' | '24h' | '7d' | '30d'
@@ -22,23 +33,21 @@ export default function AnalyticsView() {
   // Dynamic live base total across active cameras / selected stream
   const baseLiveTotal = useMemo(() => {
     if (selectedCamera) return selectedCamera.count || 0;
-    const camSum = cameras.reduce((sum, c) => sum + (c.count || 0), 0);
-    return camSum > 0 ? camSum : (latestDetection?.count || 0);
-  }, [cameras, selectedCamera, latestDetection]);
+    return zones.reduce((sum, zone) => sum + (Number(zone.currentCount) || 0), 0);
+  }, [zones, selectedCamera]);
 
   // Filter detection log by selected camera or zone if scoped
   const relevantLog = useMemo(() => {
     if (!detectionLog || detectionLog.length === 0) return [];
     if (selectedCamera) {
-      return detectionLog.filter(
-        (d) => d.cameraId === selectedCamera.id || d.zoneId === selectedCamera.zoneId
-      );
+      return detectionLog.filter((d) => d.cameraId === selectedCamera.id);
     }
     return detectionLog;
   }, [detectionLog, selectedCamera]);
 
   // True offline: AI is down AND no detection data at all
-  const isOfflineNoData = !aiConnected && baseLiveTotal === 0 && relevantLog.length === 0;
+  const hasNoData = baseLiveTotal === 0 && relevantLog.length === 0;
+  const isOfflineNoData = !aiConnected && hasNoData;
 
   // Max capacity ceiling for active scope
   const activeMaxCapacity = useMemo(() => {
@@ -71,8 +80,8 @@ export default function AnalyticsView() {
       rangeLabel = 'PAST 60 MINUTES';
       const dStart = new Date(now.getTime() - 50 * 60000);
       dateSpan = `${fmtShortDate(now)} • ${fmtHM(dStart)} - ${fmtHM(now)}`;
-      rangeTitle = 'High-Frequency 10-Minute Telemetry Windows (Past 60 Minutes)';
-      rangeSubtitle = `Instantaneous micro-corridor density fluctuation • ${dateSpan}`;
+      rangeTitle = 'Observed crowd counts · past 60 minutes';
+      rangeSubtitle = `Recorded camera samples • ${dateSpan}`;
       durationMultiplier = 0.25;
       durationUnit = 'minutes';
 
@@ -85,23 +94,13 @@ export default function AnalyticsView() {
 
         // Check if any real detections fall in this window
         const matches = relevantLog.filter((d) => d.timestamp >= tStart && d.timestamp <= tEnd);
-        let total = 0;
-
-        if (matches.length > 0) {
-          total = Math.round(matches.reduce((sum, item) => sum + item.count, 0) / matches.length);
-        } else if (isZero) {
-          total = 0;
-        } else if (baseLiveTotal <= 5) {
-          total = isLatest ? baseLiveTotal : (idx >= 5 ? baseLiveTotal : 0);
-        } else {
-          const curveFactor = 0.82 + (idx / 6) * 0.18;
-          total = isLatest ? baseLiveTotal : Math.max(0, Math.round(baseLiveTotal * curveFactor));
-        }
+        const total = observedCount(matches, selectedCamera);
 
         return {
           label: isLatest ? `Now (${fmtHM(t)})` : fmtHM(t),
           dateTag: fmtShortDate(t),
           total,
+          observed: matches.length > 0,
           rawTime: t
         };
       });
@@ -113,8 +112,8 @@ export default function AnalyticsView() {
       const dStart = new Date(now.getTime() - 6 * 3600000);
       const isStartToday = dStart.toDateString() === now.toDateString();
       dateSpan = `${isStartToday ? fmtShortDate(now) : `${fmtShortDate(dStart)} → ${fmtShortDate(now)}`} • ${fmtHM(dStart)} - ${fmtHM(now)}`;
-      rangeTitle = 'Hourly Venue Throughput & Density Accumulation (Past 6 Hours)';
-      rangeSubtitle = `Ingress acceleration and transit accumulation curves • ${dateSpan}`;
+      rangeTitle = 'Observed crowd counts · past 6 hours';
+      rangeSubtitle = `Recorded camera samples • ${dateSpan}`;
       durationMultiplier = 0.65;
       durationUnit = 'minutes';
 
@@ -126,24 +125,14 @@ export default function AnalyticsView() {
         const isLatest = h === 0;
 
         const matches = relevantLog.filter((d) => d.timestamp >= tStart && d.timestamp <= tEnd);
-        let total = 0;
-
-        if (matches.length > 0) {
-          total = Math.round(matches.reduce((sum, item) => sum + item.count, 0) / matches.length);
-        } else if (isZero) {
-          total = 0;
-        } else if (baseLiveTotal <= 5) {
-          total = isLatest ? baseLiveTotal : (idx >= 5 ? baseLiveTotal : 0);
-        } else {
-          const factors = [0.55, 0.68, 0.82, 0.94, 1.02, 0.96, 1.0];
-          total = isLatest ? baseLiveTotal : Math.max(0, Math.round(baseLiveTotal * factors[idx]));
-        }
+        const total = observedCount(matches, selectedCamera);
 
         const isToday = t.toDateString() === now.toDateString();
         return {
           label: isLatest ? `Now (${fmtHM(t)})` : fmtHM(t),
           dateTag: isLatest ? 'Today' : (isToday ? 'Today' : 'Yesterday'),
           total,
+          observed: matches.length > 0,
           rawTime: t
         };
       });
@@ -154,8 +143,8 @@ export default function AnalyticsView() {
       rangeLabel = 'PAST 24 HOURS';
       const dStart = new Date(now.getTime() - 21 * 3600000);
       dateSpan = `${fmtDayName(dStart)} ${fmtHM(dStart)} → ${fmtDayName(now)} ${fmtHM(now)}`;
-      rangeTitle = '24-Hour Operations Cycle & Day-Night Accumulation (Past 24 Hours)';
-      rangeSubtitle = `Complete diurnal venue cycle • ${dateSpan}`;
+      rangeTitle = 'Observed crowd counts · past 24 hours';
+      rangeSubtitle = `Recorded camera samples • ${dateSpan}`;
       durationMultiplier = 1.0;
       durationUnit = 'minutes';
 
@@ -167,21 +156,7 @@ export default function AnalyticsView() {
         const isLatest = i === 0;
 
         const matches = relevantLog.filter((d) => d.timestamp >= tStart && d.timestamp <= tEnd);
-        let total = 0;
-
-        if (matches.length > 0) {
-          total = Math.round(matches.reduce((sum, item) => sum + item.count, 0) / matches.length);
-        } else if (isZero) {
-          total = 0;
-        } else if (baseLiveTotal <= 5) {
-          // Small count (e.g. 2 individuals in room): true ingress event occurs recently
-          total = isLatest ? baseLiveTotal : (i <= 1 ? baseLiveTotal : 0);
-        } else {
-          const h = t.getHours();
-          const diurnalFactor =
-            h < 6 ? 0.08 : h < 9 ? 0.45 : h < 13 ? 0.85 : h < 17 ? 1.05 : h < 20 ? 0.92 : 0.45;
-          total = isLatest ? baseLiveTotal : Math.max(0, Math.round(baseLiveTotal * diurnalFactor));
-        }
+        const total = observedCount(matches, selectedCamera);
 
         const isToday = t.toDateString() === now.toDateString();
         const dateTag = isLatest ? 'Today' : (isToday ? fmtShortDate(t) : 'Yesterday');
@@ -190,6 +165,7 @@ export default function AnalyticsView() {
           label: isLatest ? `Now (${fmtHM(t)})` : fmtHM(t),
           dateTag,
           total,
+          observed: matches.length > 0,
           rawTime: t
         });
       }
@@ -200,8 +176,8 @@ export default function AnalyticsView() {
       rangeLabel = 'PAST 7 DAYS';
       const dStart = new Date(now.getTime() - 6 * 86400000);
       dateSpan = `${fmtDayName(dStart)} → ${fmtDayName(now)}`;
-      rangeTitle = '7-Day Weekly Longitudinal Footfall & Flow Cycles';
-      rangeSubtitle = `Multi-day accumulation across weekday events • ${dateSpan}`;
+      rangeTitle = 'Observed crowd counts · past 7 days';
+      rangeSubtitle = `Recorded camera samples • ${dateSpan}`;
       durationMultiplier = 5.5;
       durationUnit = 'hours';
 
@@ -212,18 +188,7 @@ export default function AnalyticsView() {
         const isLatest = i === 0;
 
         const matches = relevantLog.filter((d) => d.timestamp >= tStart && d.timestamp <= tEnd);
-        let total = 0;
-
-        if (matches.length > 0) {
-          total = Math.round(matches.reduce((sum, item) => sum + item.count, 0) / matches.length);
-        } else if (isZero) {
-          total = 0;
-        } else if (baseLiveTotal <= 5) {
-          total = isLatest ? baseLiveTotal : 0;
-        } else {
-          const factors = [0.84, 0.90, 0.96, 1.15, 1.24, 1.02, 1.0];
-          total = isLatest ? baseLiveTotal : Math.max(0, Math.round(baseLiveTotal * factors[6 - i]));
-        }
+        const total = observedCount(matches, selectedCamera);
 
         const weekdayLabel = isLatest
           ? 'Today'
@@ -235,6 +200,7 @@ export default function AnalyticsView() {
           label: weekdayLabel,
           dateTag: fmtShortDate(t),
           total,
+          observed: matches.length > 0,
           rawTime: t
         });
       }
@@ -245,8 +211,8 @@ export default function AnalyticsView() {
       rangeLabel = 'PAST 30 DAYS';
       const dStart = new Date(now.getTime() - 28 * 86400000);
       dateSpan = `${fmtShortDate(dStart)} to ${fmtShortDate(now)}`;
-      rangeTitle = '30-Day Monthly Longitudinal Safety Trend & Capacity Headroom';
-      rangeSubtitle = `Multi-week longitudinal analysis verifying code compliance from ${dateSpan}`;
+      rangeTitle = 'Observed crowd counts · past 30 days';
+      rangeSubtitle = `Recorded camera samples • ${dateSpan}`;
       durationMultiplier = 22.0;
       durationUnit = 'hours';
 
@@ -256,24 +222,20 @@ export default function AnalyticsView() {
         const tStart = new Date(now.getTime() - (w + 7) * 86400000);
         const tEnd = new Date(now.getTime() - w * 86400000);
 
-        let total = 0;
-        if (isZero) total = 0;
-        else if (baseLiveTotal <= 5) total = isLatest ? baseLiveTotal : 0;
-        else {
-          const factors = [0.88, 0.94, 1.12, 1.18, 1.0];
-          total = isLatest ? baseLiveTotal : Math.max(0, Math.round(baseLiveTotal * factors[idx]));
-        }
+        const matches = relevantLog.filter((d) => d.timestamp >= tStart.getTime() && d.timestamp <= tEnd.getTime());
+        const total = observedCount(matches, selectedCamera);
 
         return {
           label: isLatest ? 'Current Wk' : `Wk ${idx + 1}`,
           dateTag: `${fmtShortDate(tStart)} - ${isLatest ? 'Today' : fmtShortDate(tEnd)}`,
           total,
+          observed: matches.length > 0,
           rawTime: tEnd
         };
       });
     }
 
-    // Derive physically accurate Influx & Outflux from true population deltas
+    // Use only observed occupancy deltas; camera counts do not provide true ingress/egress totals.
     const computedData = rawPoints.map((d, idx, arr) => {
       if (d.total === 0) {
         return { ...d, influx: 0, outflux: 0 };
@@ -282,25 +244,10 @@ export default function AnalyticsView() {
       const prevTotal = idx > 0 ? arr[idx - 1].total : 0;
       const delta = d.total - prevTotal;
 
-      // When crowd count is small (e.g. 1 to 5 people), strictly show true ingress/egress
-      // Never synthesize artificial +1 / -1 turnover when people are simply seated/stationary
-      if (d.total <= 5) {
-        return {
-          ...d,
-          influx: delta > 0 ? delta : 0,
-          outflux: delta < 0 ? Math.abs(delta) : 0
-        };
-      }
-
-      // For larger venue crowds, account for natural rotational ingress/egress
-      const turnoverFactor =
-        timeRange === '7d' ? 8.5 : timeRange === '30d' ? 62 : 0.06;
-      const turnover = Math.max(1, Math.round(d.total * turnoverFactor));
-
       return {
         ...d,
-        influx: delta > 0 ? delta + turnover : turnover,
-        outflux: delta < 0 ? Math.abs(delta) + turnover : turnover
+        influx: delta > 0 ? delta : 0,
+        outflux: delta < 0 ? Math.abs(delta) : 0
       };
     });
 
@@ -313,16 +260,15 @@ export default function AnalyticsView() {
 
     const summary = {
       netTurnover: isZero
-        ? '0 In / 0 Out'
-        : `+${sumIn.toLocaleString()} In / -${sumOut.toLocaleString()} Out`,
+        ? '0 Increase / 0 Decrease'
+        : `+${sumIn.toLocaleString()} Occupancy / -${sumOut.toLocaleString()} Occupancy`,
       peakWindow: isZero
         ? 'Awaiting Data (0 Count)'
         : `${peak.label} (${peak.total.toLocaleString()} ${peak.total === 1 ? 'person' : 'people'})`,
-      meanVelocity: isZero
-        ? '0.00 m/s (Idle)'
-        : baseLiveTotal > 250
-        ? '0.94 m/s (Restricted)'
-        : '1.42 m/s (Free Flow)',
+      meanVelocity: (() => {
+        const samples = relevantLog.map((entry) => entry.flow?.average_speed_px_per_frame).filter(Number.isFinite);
+        return samples.length ? `${(samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(2)} px/frame` : 'Unavailable (no motion samples)';
+      })(),
       samplingRate:
         timeRange === '1h'
           ? '10-Minute Granularity'
@@ -374,11 +320,9 @@ export default function AnalyticsView() {
         >
           <span style={{ fontSize: '22px' }}>⚠</span>
           <div>
-            <b style={{ color: '#e05555', fontSize: '14px' }}>No Detection Data — AI Service Offline</b>
+            <b style={{ color: '#e05555', fontSize: '14px' }}>No detection data · AI service offline</b>
             <p style={{ color: 'var(--muted)', fontSize: '12px', margin: '4px 0 0', lineHeight: '1.5' }}>
-              The AI service (localhost:8000) is not running and no cached detection data is available.
-              Start the AI service and run crowd scans via <b>Crowd Search</b> to populate analytics with real data.
-              Charts below show zero-state placeholders.
+              No saved readings are available, and the AI service has not reported a loaded model. Start the services and run a camera scan to begin collecting observations.
             </p>
           </div>
           <button
@@ -412,11 +356,12 @@ export default function AnalyticsView() {
               className="live-pill"
               style={{ background: '#276de0', color: '#fff', borderColor: '#276de0', fontWeight: '800' }}
             >
-              ● REAL-TIME AI TELEMETRY CONNECTED
+              Latest recorded observation
             </span>
             <div style={{ marginTop: '4px', fontSize: '13px' }}>
               Latest scan: <b>{latestDetection.count} {latestDetection.count === 1 ? 'person' : 'people'}</b> in{' '}
-              <b>{latestDetection.zoneName || 'Venue Zone'}</b> ({latestDetection.latencyMs || 38}ms inference latency)
+              <b>{latestDetection.zoneName || 'Zone'}</b>
+              {Number(latestDetection.latencyMs) > 0 && <> ({latestDetection.latencyMs} ms measured inference time)</>}
               {latestDetection.time && (
                 <span style={{ color: 'var(--muted)', marginLeft: '6px' }}>at {latestDetection.time}</span>
               )}
@@ -444,11 +389,11 @@ export default function AnalyticsView() {
         }}
       >
         <div>
-          <h2>Historical Crowd Intelligence &amp; Flow Distribution</h2>
+              <h2>Observed Occupancy History</h2>
           <p>
-            {isOfflineNoData
-              ? 'Run crowd scans with AI service active to populate this section with real detection time-series'
-              : 'Longitudinal analysis based on continuous deep learning detection time-series'}
+            {hasNoData
+              ? 'Run a camera scan to start building a real detection history.'
+              : 'Time buckets show the latest recorded count for each selected camera or zone.'}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -472,7 +417,7 @@ export default function AnalyticsView() {
               aria-label="Filter longitudinal stream"
             >
               <option value="all">
-                All Edge Cameras ({cameras.length} Active · {baseLiveTotal} People)
+                All Cameras ({cameras.length} configured · {baseLiveTotal} people)
               </option>
               {cameras.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -511,34 +456,34 @@ export default function AnalyticsView() {
         <div className="analytics-kpi-item">
           <small>MONITORED CAMERA SCOPE</small>
           <b style={{ color: 'var(--text)' }}>
-            {selectedCamera ? `${selectedCamera.id} · ${selectedCamera.name}` : `All Streams (${cameras.length} Active)`}
+            {selectedCamera ? `${selectedCamera.id} · ${selectedCamera.name}` : `All Cameras (${cameras.length} configured)`}
           </b>
           <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
             {selectedCamera ? `${selectedCamera.zone}` : 'Venue-wide integration'}
           </span>
         </div>
         <div className="analytics-kpi-item">
-          <small>NET TURNOVER IN RANGE</small>
-          <b>{isOfflineNoData ? '— (No Data)' : currentRange.summary.netTurnover}</b>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Cumulative ingress/egress</span>
+          <small>COUNT CHANGE IN RANGE</small>
+          <b>{hasNoData ? '—' : currentRange.summary.netTurnover}</b>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Change between observed samples</span>
         </div>
         <div className="analytics-kpi-item">
           <small>PEAK OBSERVED INTERVAL</small>
           <b className={isOfflineNoData ? '' : 'text-amber'}>
-            {isOfflineNoData ? '— (AI Offline)' : currentRange.summary.peakWindow}
+            {hasNoData ? '—' : currentRange.summary.peakWindow}
           </b>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Maximum instantaneous density</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Highest observed count in this range</span>
         </div>
         <div className="analytics-kpi-item">
-          <small>MEAN INGRESS VELOCITY</small>
+          <small>MEAN IMAGE MOTION</small>
           <b className={isOfflineNoData ? '' : 'text-green'}>
-            {isOfflineNoData ? '— (AI Offline)' : currentRange.summary.meanVelocity}
+            {hasNoData ? '—' : currentRange.summary.meanVelocity}
           </b>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Farneback optical flow velocity</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Pixels per frame; not people-per-second flow</span>
         </div>
       </div>
 
-      {/* Influx / Outflux Throughput Chart */}
+          {/* Observed occupancy and count changes */}
       <div className="analytics-grid" style={{ marginTop: '16px' }}>
         <section className="panel" style={{ gridColumn: 'span 2' }}>
           <div className="panel-heading">
@@ -548,13 +493,13 @@ export default function AnalyticsView() {
             </div>
             <div className="chart-legend" style={{ margin: 0 }}>
               <span><i className="legend-blue" style={{ background: '#276de0' }} /> Total Occupants</span>
-              <span><i className="legend-blue" style={{ background: '#159b6f' }} /> Influx (+Entered)</span>
-              <span><i className="legend-blue" style={{ background: '#cf4b54' }} /> Outflux (-Exited)</span>
+              <span><i className="legend-blue" style={{ background: '#159b6f' }} /> Occupancy increase</span>
+              <span><i className="legend-blue" style={{ background: '#cf4b54' }} /> Occupancy decrease</span>
             </div>
           </div>
 
           {/* Empty state when offline and no data */}
-          {isOfflineNoData ? (
+          {!chartData.some((point) => point.observed) ? (
             <div
               style={{
                 display: 'flex',
@@ -570,10 +515,9 @@ export default function AnalyticsView() {
               }}
             >
               <div style={{ fontSize: '36px', marginBottom: '10px' }}>📊</div>
-              <b style={{ color: '#e05555', fontSize: '14px' }}>No Detection Data Available</b>
+              <b style={{ color: 'var(--text)', fontSize: '14px' }}>No readings in this time range</b>
               <p style={{ color: 'var(--muted)', fontSize: '12px', maxWidth: '420px', margin: '8px 0 16px', lineHeight: '1.6' }}>
-                Run a Crowd Scan to see analytics. Start the AI service and use the Crowd Search page
-                to analyze crowd images — detection results will populate this chart automatically.
+                Recorded scans are shown in their actual time buckets. Empty buckets are left blank rather than estimated.
               </p>
               <button
                 className="button primary"
@@ -603,7 +547,7 @@ export default function AnalyticsView() {
                           height: `${barHeightPct}%`,
                           background: barColor
                         }}
-                        title={`${d.label} (${d.dateTag}): ${d.total.toLocaleString()} Occupants (+${d.influx} Influx / -${d.outflux} Outflux)`}
+                        title={`${d.label} (${d.dateTag}): ${d.total.toLocaleString()} observed occupants (+${d.influx} / -${d.outflux} count change)`}
                       />
                     </div>
                     <div className="bar-sub-values">
@@ -640,19 +584,16 @@ export default function AnalyticsView() {
             </div>
           </div>
 
-          {isOfflineNoData ? (
+          {hasNoData ? (
             <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>
               <div style={{ fontSize: '28px', marginBottom: '8px' }}>🏢</div>
               <b style={{ color: '#e05555', display: 'block', marginBottom: '4px' }}>No zone data</b>
-              Start AI detection to populate zone occupancy data.
+              Create zones, connect cameras, and collect readings to populate occupancy data.
             </div>
           ) : (
             <div className="zone-share-list">
               {zones.map((z) => {
-                const count =
-                  z.currentCount !== undefined && z.currentCount !== null && z.currentCount > 0
-                    ? z.currentCount
-                    : (zones.length === 1 && baseLiveTotal > 0 ? baseLiveTotal : (z.currentCount || 0));
+                const count = Number(z.currentCount) || 0;
                 const maxCap = z.maxCapacity || 350;
                 const pct = Math.min(100, Math.round((count / maxCap) * 100));
                 const precisePct = ((count / maxCap) * 100).toFixed(1);
@@ -740,52 +681,43 @@ export default function AnalyticsView() {
         </section>
       </div>
 
-      {/* Bottleneck Duration & Safety Compliance Table */}
+      {/* Current capacity status by zone */}
       <section className="panel" style={{ marginTop: '16px' }}>
         <div className="panel-heading">
           <div>
-            <h2>Congestion &amp; Bottleneck Duration Log ({currentRange.label})</h2>
-            <p>Calculated egress chokepoints and duration monitored during selected timeframe</p>
+            <h2>Zone capacity status</h2>
+            <p>Latest camera-derived estimate compared with each zone’s configured limits.</p>
           </div>
-          <span className="badge-pill">NFPA-101 Standard Monitored</span>
+          <span className="badge-pill">Camera counts only</span>
         </div>
 
-        {isOfflineNoData ? (
+        {hasNoData ? (
           <div style={{ padding: '28px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
-            <span style={{ color: '#e05555', fontWeight: '700', fontSize: '14px' }}>⚠ No Bottleneck Data</span>
+            <span style={{ fontWeight: '700', fontSize: '14px' }}>No zone readings</span>
             <p style={{ margin: '6px 0 0', fontSize: '12px' }}>
-              Bottleneck detection requires active crowd scanning. Start the AI service to generate egress flow data.
+              Collect camera readings to compare occupancy against configured zone limits.
             </p>
           </div>
         ) : (
           <div className="incident-table">
             <div className="table-head">
               <span>ZONE</span>
-              <span>MONITORED TIMEFRAME</span>
+              <span>LATEST MODEL SAMPLE</span>
               <span>CURRENT OCCUPANCY</span>
-              <span>FLOW IMPEDANCE</span>
+              <span>CAMERA COVERAGE</span>
               <span>SAFETY STATUS</span>
             </div>
 
             {zones.map((zone) => {
-              const count =
-                zone.currentCount !== undefined && zone.currentCount !== null && zone.currentCount > 0
-                  ? zone.currentCount
-                  : (zones.length === 1 && baseLiveTotal > 0 ? baseLiveTotal : (zone.currentCount || 0));
+              const count = Number(zone.currentCount) || 0;
               const maxCap = zone.maxCapacity || 350;
               const occ = Math.round((count / maxCap) * 100);
               const isCritical = occ >= (zone.criticalPct || 85);
               const isWarning = occ >= (zone.warningPct || 70);
 
               const statusClass = isCritical ? 'red' : isWarning ? 'amber' : 'green';
-              const statusLabel = isCritical ? 'Active Bottleneck' : isWarning ? 'Clearing Flow' : 'Safe Transit';
-              const flowText = isCritical
-                ? 'Low egress velocity (0.28 m/s)'
-                : isWarning
-                ? 'Metered flow (1.12 m/s)'
-                : count > 0
-                ? 'Free egress (1.54 m/s)'
-                : 'Clear / Unoccupied';
+              const statusLabel = isCritical ? 'Critical capacity' : isWarning ? 'Warning threshold' : 'Within configured limits';
+              const latestForZone = relevantLog.filter((entry) => entry.zoneId === zone.id).slice(-1)[0];
 
               return (
                 <div key={zone.id} className="incident-row">
@@ -796,12 +728,12 @@ export default function AnalyticsView() {
                     </span>
                   </b>
                   <span>
-                    {currentRange.label} ({currentRange.dateSpan})
+                    {latestForZone?.time || 'No scan recorded'}
                   </span>
                   <span className={isCritical ? 'text-red' : isWarning ? 'text-amber' : 'text-green'}>
                     {count} {count === 1 ? 'person' : 'people'} ({occ}%)
                   </span>
-                  <span>{flowText}</span>
+                  <span>{cameras.filter((camera) => camera.zoneId === zone.id).length} configured camera(s)</span>
                   <span><em className={`incident-status ${statusClass}`}>{statusLabel}</em></span>
                 </div>
               );

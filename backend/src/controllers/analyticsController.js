@@ -1,116 +1,74 @@
 const aiClient = require('../services/aiClient');
 const Detection = require('../models/Detection');
 const Zone = require('../models/Zone');
-const Camera = require('../models/Camera');
 const { getIsConnected } = require('../config/db');
 
-exports.getTrendAnalytics = async (req, res) => {
+const emptyAnalytics = (range) => ({
+  success: true, source: 'No recorded detections', totalSamples: 0, range,
+  currentCount: null, peakPredicted: null, peakPredictedTime: null,
+  trendPct: null, points: []
+});
+
+exports.getTrendAnalytics = async (req, res, next) => {
   const { range = 'Today', zoneId } = req.query;
-  const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+  const userId = req.user.id;
+  if (!getIsConnected()) return res.json(emptyAnalytics(range));
 
   try {
-    if (getIsConnected()) {
-      const matchQuery = { userId };
-      if (zoneId) matchQuery.zoneId = zoneId;
+    const duration = range === 'Last hour' ? 60 * 60 * 1000 : range === '7 days' ? 7 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+    const query = { userId, timestamp: { $gte: new Date(Date.now() - duration) } };
+    if (zoneId) query.zoneId = zoneId;
+    const detections = await Detection.find(query).sort({ timestamp: 1 }).lean();
+    if (!detections.length) return res.json(emptyAnalytics(range));
 
-      // Slices past 12 hours from real MongoDB time-series collection for this user
-      const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000);
-      matchQuery.timestamp = { $gte: twelveHoursAgo };
-
-      const detections = await Detection.find(matchQuery).sort({ timestamp: 1 });
-
-      if (detections && detections.length > 0) {
-        // Aggregate counts by 30-min time buckets
-        const bucketMap = new Map();
-        for (const d of detections) {
-          const dDate = new Date(d.timestamp);
-          const hours = String(dDate.getHours()).padStart(2, '0');
-          const minutes = dDate.getMinutes() < 30 ? '00' : '30';
-          const timeKey = `${hours}:${minutes}`;
-
-          if (!bucketMap.has(timeKey)) {
-            bucketMap.set(timeKey, { count: 0, sampleCount: 0 });
-          }
-          const item = bucketMap.get(timeKey);
-          item.count += d.count;
-          item.sampleCount += 1;
-        }
-
-        const points = [];
-        for (const [timeKey, val] of bucketMap.entries()) {
-          points.push({
-            time: timeKey,
-            count: Math.round(val.count / Math.max(1, val.sampleCount)),
-            forecast: null
-          });
-        }
-
-        const latestCount = points[points.length - 1]?.count || 2;
-        const initialCount = points[0]?.count || latestCount;
-        const trendCalc = initialCount > 0 
-          ? (((latestCount - initialCount) / initialCount) * 100).toFixed(1)
-          : '0.0';
-        const trendPct = `${trendCalc >= 0 ? '+' : ''}${trendCalc}%`;
-
-        // Project 3 future horizons using trend estimation
-        const lastTime = points[points.length - 1]?.time || '11:00';
-        points[points.length - 1].forecast = latestCount;
-
-        const nextHour = (parseInt(lastTime.split(':')[0], 10) + 1) % 24;
-        points.push({ time: `${String(nextHour).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.05)) });
-        points.push({ time: `${String(nextHour).padStart(2, '0')}:30`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.10)) });
-        points.push({ time: `${String((nextHour + 1) % 24).padStart(2, '0')}:00`, count: null, forecast: Math.max(1, Math.round(latestCount * 1.02)) });
-
-        return res.json({
-          success: true,
-          source: 'MongoDB-Real-TimeSeries',
-          totalSamples: detections.length,
-          range,
-          currentCount: latestCount,
-          peakPredicted: Math.max(2, Math.round(latestCount * 1.10)),
-          peakPredictedTime: `${String(nextHour).padStart(2, '0')}:30`,
-          trendPct,
-          points
-        });
+    const buckets = new Map();
+    for (const detection of detections) {
+      const date = new Date(detection.timestamp);
+      const key = `${date.toISOString().slice(0, 13)}:${date.getMinutes() < 30 ? '00' : '30'}`;
+      const observedCount = Number(detection.zoneCount ?? detection.count) || 0;
+      const bucket = buckets.get(key);
+      // A camera writes a detection row each sample. Use the latest zone total
+      // for the bucket instead of summing/averaging duplicate camera views.
+      if (!bucket || new Date(detection.timestamp) > bucket.timestamp) {
+        buckets.set(key, { count: observedCount, timestamp: new Date(detection.timestamp) });
       }
     }
-  } catch (err) {
-    console.warn('Analytics MongoDB query fallback:', err.message);
+    const points = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([time, bucket]) => ({
+      time: time.slice(11), count: bucket.count, forecast: null
+    }));
+    const counts = points.map((point) => point.count);
+    const currentCount = counts[counts.length - 1];
+    const first = counts[0];
+    const trendPct = first ? `${(((currentCount - first) / first) * 100 >= 0 ? '+' : '')}${(((currentCount - first) / first) * 100).toFixed(1)}%` : '0.0%';
+    return res.json({ success: true, source: 'Recorded detections', totalSamples: detections.length, range, currentCount, peakPredicted: null, peakPredictedTime: null, trendPct, points });
+  } catch (error) {
+    next(error);
   }
-
-  // Authentic baseline derived from active camera streams scoped to this user
-  let baseCount = 0;
-  try {
-    const liveCams = await Camera.find({ userId, status: 'Live' }).lean();
-    if (liveCams && liveCams.length > 0) {
-      baseCount = liveCams.reduce((sum, c) => sum + (c.lastCount || 0), 0);
-    }
-  } catch (e) {}
-
-  const points = [
-    { time: '08:00', count: Math.round(baseCount * 0.48), forecast: null },
-    { time: '09:00', count: Math.round(baseCount * 0.65), forecast: null },
-    { time: '10:00', count: Math.round(baseCount * 0.82), forecast: null },
-    { time: '11:00', count: baseCount, forecast: baseCount },
-    { time: '11:30', count: null, forecast: Math.round(baseCount * 1.08) },
-    { time: '12:00', count: null, forecast: Math.round(baseCount * 1.15) }
-  ];
-
-  res.json({
-    success: true,
-    source: 'Real-Camera-Baseline',
-    range,
-    currentCount: baseCount,
-    peakPredicted: Math.round(baseCount * 1.15),
-    peakPredictedTime: '12:00',
-    trendPct: baseCount > 0 ? '+15.2%' : '0%',
-    points
-  });
 };
 
-exports.getZoneForecast = async (req, res) => {
-  const { zoneId = 'z1', capacity = 250 } = req.query;
-  const history = [120, 135, 142, 160, 178, 195, 210];
-  const forecast = await aiClient.getForecast(zoneId, history, Number(capacity));
-  res.json({ success: true, data: forecast });
+exports.getZoneForecast = async (req, res, next) => {
+  const { zoneId } = req.query;
+  const userId = req.user.id;
+  if (!zoneId) return res.status(400).json({ success: false, message: 'zoneId is required.' });
+  if (!getIsConnected()) return res.status(503).json({ success: false, message: 'Forecasting needs persisted detection history.' });
+  try {
+    const zone = await Zone.findOne({ $or: [{ _id: zoneId }, { id: zoneId }], userId }).lean();
+    if (!zone) return res.status(404).json({ success: false, message: 'Zone not found.' });
+    const history = await Detection.find({ userId, zoneId, timestamp: { $gte: new Date(Date.now() - 48 * 60000) } }).sort({ timestamp: 1 }).select({ count: 1, zoneCount: 1, timestamp: 1, _id: 0 }).lean();
+    const buckets = new Map();
+    for (const item of history) {
+      const bucket = Math.floor(new Date(item.timestamp).getTime() / 120000);
+      const current = buckets.get(bucket);
+      const count = Number(item.zoneCount ?? item.count) || 0;
+      if (current === undefined || new Date(item.timestamp).getTime() > current.timestamp) {
+        buckets.set(bucket, { count, timestamp: new Date(item.timestamp).getTime() });
+      }
+    }
+    const counts = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([, item]) => item.count);
+    if (counts.length < 3) return res.status(200).json({ success: true, data: { available: false, message: 'At least three two-minute detection buckets are required for a trend baseline.', observations: counts.length } });
+    const result = await aiClient.getForecast(zone.id || zone._id, counts, zone.maxCapacity, zone.warningThresholdPct, zone.criticalThresholdPct);
+    return res.json({ success: true, data: { ...result, observations: counts.length } });
+  } catch (error) {
+    next(error);
+  }
 };

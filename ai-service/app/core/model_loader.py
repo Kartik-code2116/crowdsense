@@ -1,7 +1,7 @@
 """
 Model Manager Singleton
-Loads PyTorch CSRNet with real ShanghaiTech weights.
-Auto-initializes on first access to guarantee 100% availability.
+Loads configured CSRNet and YOLOv8 checkpoints when available. Missing weights
+leave the service degraded and cause inference requests to return an error.
 """
 
 import os

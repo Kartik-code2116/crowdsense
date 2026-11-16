@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Microservice providing CSRNet/MCNN density regression, LSTM forecasting, and Grad-CAM explainability.",
+    description="Crowd counting inference using configured CSRNet or YOLOv8 weights, stream sampling, and a transparent linear trend baseline.",
     lifespan=lifespan
 )
 
@@ -43,7 +43,7 @@ async def health_check():
     available_models = sorted(set(model_loader.models.keys()))
     return {
         "status": "online" if available_models else "degraded",
-        "service": "CSRNet Deep Learning Model",
+        "service": "CrowdSense Inference Service",
         "version": settings.VERSION,
         "active_model": model_loader.active_model_name,
         "available_models": available_models,

@@ -1,9 +1,7 @@
 const jwt = require('jsonwebtoken');
-const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/env');
+const bcrypt = require('bcryptjs');
+const { JWT_SECRET, JWT_EXPIRES_IN, ADMIN_REGISTRATION_CODE, NODE_ENV } = require('../config/env');
 const User = require('../models/User');
-const Zone = require('../models/Zone');
-const Camera = require('../models/Camera');
-const Alert = require('../models/Alert');
 const { getIsConnected, getMemoryStore } = require('../config/db');
 
 // Helper to compute 2-character avatar initials
@@ -22,7 +20,18 @@ const getInitials = (name) => {
  */
 exports.register = async (req, res) => {
   try {
+    if (!getIsConnected() && NODE_ENV === 'production') {
+      return res.status(503).json({ success: false, message: 'Account registration is unavailable until the database is connected.' });
+    }
     const { name, email, password, department, organization } = req.body;
+
+    if (NODE_ENV === 'production') {
+      const supplied = Buffer.from(String(req.body.inviteCode || ''));
+      const expected = Buffer.from(ADMIN_REGISTRATION_CODE);
+      if (supplied.length !== expected.length || !require('crypto').timingSafeEqual(supplied, expected)) {
+        return res.status(403).json({ success: false, message: 'A valid administrator invitation code is required.' });
+      }
+    }
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -31,10 +40,10 @@ exports.register = async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 12) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters long.'
+        message: 'Password must be at least 12 characters long.'
       });
     }
 
@@ -63,58 +72,6 @@ exports.register = async (req, res) => {
       });
 
       const newUserId = newUser._id.toString();
-
-      // Automatically provision dedicated starter workspace data for this new admin
-      // This guarantees each user's cameras, zones, and alerts are completely separate and distinct!
-      const starterZoneId = `zone_${Date.now()}`;
-      await Zone.create({
-        _id: starterZoneId,
-        userId: newUserId,
-        name: `${cleanName.split(' ')[0]}'s Main Concourse`,
-        code: `ZONE-${cleanName.substring(0, 3).toUpperCase()}-01`,
-        floor: 'Level 1 Ingress',
-        maxCapacity: 350,
-        warningThresholdPct: 70,
-        criticalThresholdPct: 85,
-        currentCount: 0,
-        currentOccupancyPct: 0,
-        evacuationRoutes: ['Primary Egress North Gate', 'Emergency Corridors A & B'],
-        description: `Dedicated safety operations sector provisioned for Administrator ${cleanName}.`,
-        streamUrl: '/samples/mall_concourse.jpg',
-        streamType: 'demo',
-        createdAt: new Date()
-      });
-
-      await Camera.create({
-        _id: `CAM-${Date.now().toString().slice(-4)}`,
-        userId: newUserId,
-        name: `${cleanName.split(' ')[0]} Sector Cam 01`,
-        zoneId: starterZoneId,
-        zoneName: `${cleanName.split(' ')[0]}'s Main Concourse`,
-        streamUrl: '/samples/mall_concourse.jpg',
-        resolution: '1920x1080',
-        sampleFps: 2.0,
-        status: 'Live',
-        sceneType: 'concourse',
-        lastCount: 0,
-        lastLatencyMs: 38,
-        lastActive: new Date()
-      });
-
-      await Alert.create({
-        userId: newUserId,
-        title: 'Safety Command Workspace Active',
-        message: `Welcome Administrator ${cleanName}. Continuous density regression & edge streams initialized.`,
-        level: 'Info',
-        zoneId: starterZoneId,
-        zoneName: `${cleanName.split(' ')[0]}'s Main Concourse`,
-        cameraId: `CAM-01`,
-        count: 0,
-        capacity: 350,
-        occupancyPct: 0,
-        status: 'Resolved',
-        createdAt: new Date()
-      });
 
       const token = jwt.sign(
         { id: newUserId, role: 'admin', name: newUser.name, email: newUser.email },
@@ -149,6 +106,7 @@ exports.register = async (req, res) => {
       _id: fallbackId,
       name: cleanName,
       email: cleanEmail,
+      passwordHash: await bcrypt.hash(password, 10),
       role: 'admin',
       department: userDept,
       avatar
@@ -199,6 +157,10 @@ exports.login = async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
+    if (!getIsConnected() && NODE_ENV === 'production') {
+      return res.status(503).json({ success: false, message: 'Sign in is unavailable until the database is connected.' });
+    }
+
     // Check if real Mongo
     if (getIsConnected()) {
       const user = await User.findOne({ email: cleanEmail });
@@ -231,11 +193,14 @@ exports.login = async (req, res) => {
       });
     }
 
-    // In-memory fallback
+    // Development-only in-memory accounts created by the registration flow.
     const store = getMemoryStore();
     const memUser = store.users.find(u => u.email === cleanEmail);
-    const userId = memUser ? memUser._id : '6ade4cd5c5d2c1c0ec4762e5';
-    const userName = memUser ? memUser.name : 'Alex Kumar';
+    if (!memUser || !memUser.passwordHash || !(await bcrypt.compare(password, memUser.passwordHash))) {
+      return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
+    }
+    const userId = memUser._id;
+    const userName = memUser.name;
 
     const token = jwt.sign(
       { id: userId, role: 'admin', name: userName, email: cleanEmail },
@@ -288,17 +253,18 @@ exports.getMe = async (req, res) => {
           }
         });
       }
+      return res.status(401).json({ success: false, message: 'This account is no longer available.' });
     }
 
     return res.json({
       success: true,
       user: {
         id: req.user.id,
-        name: req.user.name || 'Alex Kumar',
-        email: req.user.email || 'admin@crowdsense.io',
+        name: req.user.name || 'Workspace user',
+        email: req.user.email || '',
         role: 'admin',
-        department: 'Venue Operations Lead',
-        avatar: getInitials(req.user.name || 'Alex Kumar')
+        department: req.user.department || '',
+        avatar: getInitials(req.user.name || 'Workspace user')
       }
     });
   } catch (error) {

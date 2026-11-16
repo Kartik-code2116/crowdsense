@@ -4,14 +4,16 @@ import VenueSpatialMap from './VenueSpatialMap';
 import { Video, MapPin, Compass, Shield, CheckCircle2, Globe, Laptop, Radio } from 'lucide-react';
 
 export default function AddCameraModal() {
-  const { showAddCameraModal, setShowAddCameraModal, addCamera, zones } = useCrowdStore();
-  const [streamType, setStreamType] = useState('youtube'); // 'youtube', 'webcam', 'url', 'demo'
+  const { showAddCameraModal, setShowAddCameraModal, addCamera, zones, setPage } = useCrowdStore();
+  const [streamType, setStreamType] = useState('url'); // 'youtube', 'webcam', 'url', 'demo'
   const [activeTab, setActiveTab] = useState('config'); // 'config' | 'location'
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: 'Shibuya Crossing Live Feed',
-    zoneId: zones[0]?.id || 'zone-arena-01',
-    streamUrl: 'https://www.youtube.com/watch?v=1-iS7LArMPA',
+    name: '',
+    zoneId: zones[0]?.id || '',
+    streamUrl: '',
     resolution: '1920x1080',
     fps: '2.0',
     sceneType: 'entrance',
@@ -20,21 +22,31 @@ export default function AddCameraModal() {
 
   if (!showAddCameraModal) return null;
 
+  if (!zones.length) return (
+    <div className="modal-backdrop">
+      <div className="modal-content" style={{ maxWidth: 460, padding: 24 }}>
+        <div className="modal-header"><div><h3 style={{ margin: 0 }}>Create a zone first</h3><small style={{ color: 'var(--muted)' }}>A camera needs a zone capacity so CrowdSense can evaluate safety thresholds.</small></div><button className="close-btn" onClick={() => setShowAddCameraModal(false)}>×</button></div>
+        <div className="modal-actions" style={{ marginTop: 18 }}><button className="button secondary" onClick={() => setShowAddCameraModal(false)}>Cancel</button><button className="button primary" onClick={() => { setShowAddCameraModal(false); setPage('Zones'); }}>Set up zones →</button></div>
+      </div>
+    </div>
+  );
+
   const selectedZone = zones.find((z) => z.id === formData.zoneId) || zones[0];
 
   const handleSelectType = (type) => {
     setStreamType(type);
+    setFormError('');
     if (type === 'youtube') {
       setFormData((prev) => ({
         ...prev,
-        name: 'Tokyo Pedestrian Stream (Live)',
-        streamUrl: 'https://www.youtube.com/watch?v=1-iS7LArMPA',
+        name: prev.name || 'Public video platform stream',
+        streamUrl: '',
         sceneType: 'entrance'
       }));
     } else if (type === 'webcam') {
       setFormData((prev) => ({
         ...prev,
-        name: 'Laptop Camera Feed (Live Integrated)',
+        name: 'Laptop camera',
         streamUrl: 'webcam',
         sceneType: 'webcam',
         fps: '15.0'
@@ -42,14 +54,14 @@ export default function AddCameraModal() {
     } else if (type === 'url') {
       setFormData((prev) => ({
         ...prev,
-        name: 'External RTSP Stream 01',
-        streamUrl: 'rtsp://edge.venue.lan/live/stream_01',
+        name: prev.name || 'Network camera',
+        streamUrl: '',
         sceneType: 'concourse'
       }));
     } else if (type === 'demo') {
       setFormData((prev) => ({
         ...prev,
-        name: 'Arena Concourse High Density',
+        name: 'Sample image',
         streamUrl: '/samples/mall_concourse.jpg',
         sceneType: 'concourse'
       }));
@@ -65,10 +77,24 @@ export default function AddCameraModal() {
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    if (!zones.length) {
+      setFormError('Create a zone and capacity ceiling before adding a camera.');
+      return;
+    }
+    if (streamType !== 'webcam' && streamType !== 'demo') {
+      try {
+        const parsed = new URL(formData.streamUrl);
+        if (!['http:', 'https:', 'rtsp:'].includes(parsed.protocol)) throw new Error('Unsupported protocol');
+      } catch {
+        setFormError('Enter a valid HTTP, HTTPS, or RTSP stream URL.');
+        return;
+      }
+    }
     const targetZone = zones.find((z) => z.id === formData.zoneId) || zones[0];
 
-    await addCamera({
-      name: formData.name || (streamType === 'youtube' ? 'YouTube Stream' : 'Live Camera'),
+    setSaving(true);
+    const result = await addCamera({
+      name: formData.name,
       zone: `${targetZone?.code || 'ZONE-01'}`,
       zoneId: targetZone?.id,
       zoneName: targetZone?.name,
@@ -80,7 +106,14 @@ export default function AddCameraModal() {
       mapPin: formData.mapPin
     });
 
+    if (!result?.success) {
+      setFormError(result?.message || 'Could not add this camera.');
+      setSaving(false);
+      return;
+    }
     setShowAddCameraModal(false);
+    setFormError('');
+    setSaving(false);
   };
 
   return (
@@ -93,7 +126,7 @@ export default function AddCameraModal() {
               Register New Camera &amp; Link to Spatial Zone
             </h3>
             <small style={{ color: 'var(--muted)' }}>
-              Supports YouTube Live, laptop webcams, RTSP IP cameras, and real map pin positioning
+              Add a supported public video link or a direct HTTP/HTTPS/RTSP feed. The server samples frames and runs the selected model; sign-in protected, DRM, and unsupported platform links cannot be read.
             </small>
           </div>
           <button className="close-btn" onClick={() => setShowAddCameraModal(false)}>✕</button>
@@ -102,10 +135,10 @@ export default function AddCameraModal() {
         {/* Source Type Selector */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', margin: '14px 0' }}>
           {[
-            { id: 'youtube', label: 'YouTube Stream', icon: '🔴', desc: 'Live Web Stream' },
+            { id: 'youtube', label: 'Video platform', icon: '🔴', desc: 'Public URL' },
             { id: 'webcam', label: 'Laptop Camera', icon: '📹', desc: 'Local WebRTC' },
-            { id: 'url', label: 'RTSP / Video URL', icon: '🌐', desc: 'IP Network Feed' },
-            { id: 'demo', label: 'Demo Benchmark', icon: '⚡', desc: 'Deep Learning Dataset' }
+            { id: 'url', label: 'Stream URL', icon: '🌐', desc: 'HTTP / RTSP' },
+            { id: 'demo', label: 'Still image', icon: '🖼️', desc: 'One-shot scan' }
           ].map((t) => (
             <button
               key={t.id}
@@ -164,7 +197,7 @@ export default function AddCameraModal() {
               {/* Stream URL Input based on source type */}
               {streamType === 'youtube' && (
                 <div className="form-group">
-                  <label>YouTube Video or Live Stream URL</label>
+                  <label>Public video stream URL</label>
                   <input
                     type="text"
                     required
@@ -172,51 +205,7 @@ export default function AddCameraModal() {
                     value={formData.streamUrl}
                     onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
                   />
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--muted)', alignSelf: 'center' }}>Presets:</span>
-                    <button
-                      type="button"
-                      className="button secondary"
-                      style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: 'Tokyo Shibuya Crossing Live',
-                          streamUrl: 'https://www.youtube.com/watch?v=1-iS7LArMPA'
-                        }))
-                      }
-                    >
-                      Shibuya Crossing
-                    </button>
-                    <button
-                      type="button"
-                      className="button secondary"
-                      style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: 'Times Square Pedestrian Live',
-                          streamUrl: 'https://www.youtube.com/watch?v=1b-b4_4oU9M'
-                        }))
-                      }
-                    >
-                      Times Square
-                    </button>
-                    <button
-                      type="button"
-                      className="button secondary"
-                      style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: 'Venice Beach Boardwalk Live',
-                          streamUrl: 'https://www.youtube.com/watch?v=gFRtAAmiFbE'
-                        }))
-                      }
-                    >
-                      Venice Beach
-                    </button>
-                  </div>
+                  <small style={{ display: 'block', marginTop: 6, color: 'var(--muted)' }}>Supported public extractors include YouTube, Twitch, Vimeo, and Dailymotion. The source must allow server-side playback.</small>
                 </div>
               )}
 
@@ -246,14 +235,15 @@ export default function AddCameraModal() {
 
               {streamType === 'url' && (
                 <div className="form-group">
-                  <label>RTSP / Network Video Stream URL (.mp4, .m3u8, rtsp://)</label>
+                  <label>Direct live stream or snapshot URL</label>
                   <input
                     type="text"
                     required
-                    placeholder="rtsp://192.168.1.100:554/live or https://domain.com/video.mp4"
+                    placeholder="rtsp://camera.local/live or https://host.example/live.m3u8"
                     value={formData.streamUrl}
                     onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
                   />
+                  <small style={{ display: 'block', marginTop: 6, color: 'var(--muted)' }}>Use a direct HTTP/HTTPS image, HLS, or video URL, or an RTSP camera reachable from the server. Web browsers cannot preview RTSP directly.</small>
                 </div>
               )}
 
@@ -401,8 +391,10 @@ export default function AddCameraModal() {
             </div>
           )}
 
+          {formError && <div role="alert" style={{ marginTop: 12, border: '1px solid rgba(217,86,94,.4)', background: 'rgba(217,86,94,.08)', color: '#c83f4b', padding: '9px 12px', borderRadius: 7, fontSize: 12 }}>{formError}</div>}
+
           <div className="modal-actions" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between' }}>
-            <button type="button" className="button secondary" onClick={() => setShowAddCameraModal(false)}>
+            <button type="button" className="button secondary" disabled={saving} onClick={() => setShowAddCameraModal(false)}>
               Cancel
             </button>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -415,8 +407,8 @@ export default function AddCameraModal() {
                   ← Back to Config
                 </button>
               )}
-              <button type="submit" className="button primary">
-                ✓ Save Camera &amp; Launch Feed →
+              <button type="submit" className="button primary" disabled={saving}>
+                {saving ? 'Saving…' : 'Save Camera & Start Monitoring →'}
               </button>
             </div>
           </div>

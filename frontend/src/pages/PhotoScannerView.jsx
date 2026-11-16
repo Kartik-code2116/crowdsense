@@ -26,10 +26,10 @@ export default function PhotoScannerView() {
 
   // Benchmark library presets
   const sampleLibrary = [
-    { id: 'stadium', name: 'Dense Stadium Bleachers (Real Crowd)', src: '/samples/stadium_dense.jpg' },
-    { id: 'mall', name: 'Central Concourse Atrium (Real Crowd)', src: '/samples/mall_concourse.jpg' },
-    { id: 'pedestrian', name: 'Urban Pedestrian Crossing (Real Crowd)', src: '/samples/street_pedestrians.jpg' },
-    { id: 'marathon', name: 'Marathon Chokepoint Surge (Real Crowd)', src: '/samples/marathon_crowd.jpg' }
+    { id: 'stadium', name: 'Example stadium frame', src: '/samples/stadium_dense.jpg' },
+    { id: 'mall', name: 'Example concourse frame', src: '/samples/mall_concourse.jpg' },
+    { id: 'pedestrian', name: 'Example crossing frame', src: '/samples/street_pedestrians.jpg' },
+    { id: 'marathon', name: 'Example event frame', src: '/samples/marathon_crowd.jpg' }
   ];
 
   // Active input mode: 'camera' | 'upload' | 'benchmark'
@@ -39,14 +39,17 @@ export default function PhotoScannerView() {
   const [isScanning, setIsScanning] = useState(false);
   const selectedCamera = cameras.find((camera) => camera.id === activeCameraId) || cameras[0];
   const [modelType, setModelType] = useState(selectedCamera?.modelType || 'csrnet');
+  const [modelSaveError, setModelSaveError] = useState('');
+  const [savingModel, setSavingModel] = useState(false);
 
   // Selected Venue Zone
-  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || 'zone-arena-01');
-  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || { maxCapacity: 350, name: 'Arena Main Concourse', code: 'ARENA-CONCOURSE-01' };
-  const [zoneCapacity, setZoneCapacity] = useState(currentZone.maxCapacity || 200);
+  const [selectedZoneId, setSelectedZoneId] = useState(scannerTargetZoneId || zones[0]?.id || '');
+  const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0] || null;
+  const [zoneCapacity, setZoneCapacity] = useState(currentZone?.maxCapacity || 200);
 
   // When zone selection changes, sync capacity
   const handleZoneChange = (zId) => {
+    if (activeTab === 'camera' && selectedCamera?.zoneId && selectedCamera.zoneId !== zId) return;
     setSelectedZoneId(zId);
     setScannerTargetZoneId(zId);
     const zObj = zones.find((z) => z.id === zId);
@@ -73,7 +76,8 @@ export default function PhotoScannerView() {
   const [heatmapAlpha, setHeatmapAlpha] = useState(0.65);
   const [selectedPerson, setSelectedPerson] = useState(null);
 
-  // Deep Learning scan results (100% Real PyTorch & YOLOv8 data)
+  // Results are empty until the inference service returns an observation.
+  const [scanError, setScanError] = useState('');
   const [scanResult, setScanResult] = useState({
     count: 0,
     exactIntegral: 0.0,
@@ -111,25 +115,11 @@ export default function PhotoScannerView() {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoInputs = devices.filter((d) => d.kind === 'videoinput');
 
-      // Also query hardware backend cameras
-      const backendCameras = await apiClient.listConnectedCameras();
-
       const combined = videoInputs.map((d, idx) => ({
         deviceId: d.deviceId,
         label: d.label || (idx === 0 ? 'Laptop Integrated Webcam' : `External Camera #${idx + 1}`),
         isLaptop: idx === 0 || d.label.toLowerCase().includes('integrated') || d.label.toLowerCase().includes('front')
       }));
-
-      // If no browser labels found, fallback to generic list
-      if (combined.length === 0 && backendCameras?.devices?.length > 0) {
-        backendCameras.devices.forEach((dev) => {
-          combined.push({
-            deviceId: String(dev.index),
-            label: dev.name,
-            isLaptop: dev.is_laptop_webcam
-          });
-        });
-      }
 
       setCameraDevices(combined);
       if (combined.length > 0 && !selectedDeviceId) {
@@ -143,6 +133,17 @@ export default function PhotoScannerView() {
   useEffect(() => {
     enumerateCameras();
   }, []);
+
+  useEffect(() => {
+    const cameraZone = activeTab === 'camera' ? selectedCamera?.zoneId : '';
+    const nextZoneId = cameraZone || (zones.some((zone) => zone.id === selectedZoneId) ? selectedZoneId : zones[0]?.id);
+    const nextZone = zones.find((zone) => zone.id === nextZoneId);
+    if (nextZoneId && nextZoneId !== selectedZoneId) {
+      setSelectedZoneId(nextZoneId);
+      setScannerTargetZoneId(nextZoneId);
+    }
+    if (nextZone && Number(nextZone.maxCapacity) !== Number(zoneCapacity)) setZoneCapacity(nextZone.maxCapacity);
+  }, [activeTab, selectedCamera?.id, selectedCamera?.zoneId, selectedZoneId, zones, zoneCapacity, setScannerTargetZoneId]);
 
   // 2. Start webcam stream for the selected device
   const startCamera = async (devId) => {
@@ -241,7 +242,7 @@ export default function PhotoScannerView() {
     setImgNaturalSize({ width: frameData.width, height: frameData.height });
     setActiveTab('upload');
     stopCamera(false);
-    executeDeepScanBlob(frameData.blob);
+    executeDeepScanBlob(frameData.blob, true, frameData.dataUrl);
   };
 
   // 6. Toggle Live AI Continuous Scanning
@@ -258,7 +259,6 @@ export default function PhotoScannerView() {
       // Run immediately then keep running in background across pages
       runSingleLiveAiTick();
       liveIntervalRef.current = setInterval(runSingleLiveAiTick, 1400);
-      webcamManager.startBackgroundAiScanning(selectedZoneId, zoneCapacity, modelType);
     }
   };
 
@@ -268,9 +268,9 @@ export default function PhotoScannerView() {
       const frameData = await captureVideoFrameBlob();
       if (!frameData || !frameData.blob) return;
 
-      const result = await apiClient.predictImage(frameData.blob, modelType, zoneCapacity);
+      const result = await apiClient.predictImage(frameData.blob, modelType, zoneCapacity, currentZone?.warningPct, currentZone?.criticalPct);
       if (result) {
-        applyScanResult(result, frameData.width, frameData.height);
+        applyScanResult(result, frameData.width, frameData.height, true, frameData.dataUrl);
       }
     } catch (e) {
       console.warn('Live AI tick error:', e.message);
@@ -287,30 +287,37 @@ export default function PhotoScannerView() {
       await executeDeepScanBlob(blob);
     } catch (err) {
       console.warn('Scanner network error:', err.message);
+      setScanError(err.message || 'Could not load this sample image.');
     } finally {
       setIsScanning(false);
     }
   };
 
-  const executeDeepScanBlob = async (blob) => {
+  const executeDeepScanBlob = async (blob, recordObservation = false, sourceImage = activeImage) => {
     setIsScanning(true);
     setSelectedPerson(null);
+    setScanError('');
     try {
-      const result = await apiClient.predictImage(blob, modelType, zoneCapacity);
-      if (result) {
+      const result = await apiClient.predictImage(blob, modelType, zoneCapacity, currentZone?.warningPct, currentZone?.criticalPct);
+      if (result?.success === false) {
+        setScanError(result.message || 'Inference failed. Check the model service and try again.');
+      } else if (result) {
         const w = result.resolution?.width || 640;
         const h = result.resolution?.height || 480;
         setImgNaturalSize({ width: w, height: h });
-        applyScanResult(result, w, h);
+        applyScanResult(result, w, h, recordObservation, sourceImage);
+      } else {
+        setScanError('The inference service returned no result.');
       }
     } catch (err) {
       console.warn('Scanner inference error:', err.message);
+      setScanError(err.message || 'Inference failed. Check the model service and try again.');
     } finally {
       setIsScanning(false);
     }
   };
 
-  const applyScanResult = (result, w, h) => {
+  const applyScanResult = (result, w, h, recordObservation = false, sourceImage = activeImage) => {
     const boxes = result.detected_boxes || [];
     const heads = result.detected_heads || [];
     const count = result.count !== undefined ? result.count : boxes.length;
@@ -318,34 +325,37 @@ export default function PhotoScannerView() {
     setScanResult({
       count: count,
       exactIntegral: result.exact_integral !== undefined ? result.exact_integral : count,
-      peakDensity: result.peak_density || (count > 0 ? 0.08 : 0.0),
-      latencyMs: result.latency_ms || 38.2,
+      peakDensity: Number(result.peak_density) || 0,
+      latencyMs: Number(result.latency_ms) || 0,
       heads: heads,
       boxes: boxes,
       heatmapUrl: result.heatmap_data_url || null,
-      safetyBadge: result.safety_badge || (count > zoneCapacity * 0.9 ? 'CRITICAL' : count > zoneCapacity * 0.75 ? 'WARNING' : count > zoneCapacity * 0.5 ? 'MODERATE' : 'SAFE'),
+      safetyBadge: result.safety_badge || (count / Math.max(1, zoneCapacity) * 100 >= (currentZone?.criticalPct || 90) ? 'CRITICAL' : count / Math.max(1, zoneCapacity) * 100 >= (currentZone?.warningPct || 70) ? 'WARNING' : count / Math.max(1, zoneCapacity) * 100 >= (currentZone?.warningPct || 70) * 0.7 ? 'MODERATE' : 'SAFE'),
       densityLevel: result.density_level || 'Safe & Normal',
       occupancyPct: result.occupancy_pct !== undefined ? result.occupancy_pct : Math.round((count / Math.max(1, zoneCapacity)) * 100),
       hotspots: result.hotspots || [],
-      avgConfidence: result.avg_confidence ? Math.round(result.avg_confidence * 100) : 89,
+      avgConfidence: Number.isFinite(Number(result.avg_confidence)) ? Math.round(Number(result.avg_confidence) * 100) : 0,
       resolution: { width: w, height: h }
     });
 
-    // Synchronize detection event globally across Dashboard, Live Monitor, Analytics, and Incident Center
-    recordRealDetection({
-      count,
-      boxes,
-      heads,
-      heatmapUrl: result.heatmap_data_url || null,
-      latencyMs: result.latency_ms || 38.2,
-      resolution: { width: w, height: h },
-      zoneId: selectedZoneId,
-      cameraId: selectedCamera?.id,
-      modelName: modelType,
-      flow: result.flow || null,
-      imageSrc: activeImage,
-      isWebcam: activeTab === 'camera'
-    });
+    // Uploaded photos and bundled examples stay one-shot analyses. Only frames
+    // captured from the selected, zone-assigned camera affect live operations.
+    if (recordObservation && selectedCamera && selectedCamera.zoneId === selectedZoneId) {
+      recordRealDetection({
+        count,
+        boxes,
+        heads,
+        heatmapUrl: result.heatmap_data_url || null,
+        latencyMs: Number(result.latency_ms) || 0,
+        resolution: { width: w, height: h },
+        zoneId: selectedCamera.zoneId,
+        cameraId: selectedCamera.id,
+        modelName: modelType,
+        flow: result.flow || null,
+        imageSrc: sourceImage,
+        isWebcam: activeTab === 'camera'
+      });
+    }
   };
 
   useEffect(() => {
@@ -510,9 +520,9 @@ export default function PhotoScannerView() {
       {/* Page Header */}
       <div className="page-action-row">
         <div>
-          <h2>Real-Time Crowd Detection & Individual Count Intelligence</h2>
+          <h2>Camera &amp; Image Crowd Scanner</h2>
           <p>
-            Real deep learning person localization, continuous spatial density mapping, and safety threshold telemetry.
+            Run the model assigned to your camera, inspect its returned count and overlays, and review capacity thresholds.
           </p>
         </div>
         <div className="heading-actions">
@@ -528,14 +538,16 @@ export default function PhotoScannerView() {
         </div>
       </div>
 
+      {scanError && <div role="alert" style={{ marginBottom: 16, padding: 12, borderRadius: 8, color: '#9f2727', background: '#fff0ef', border: '1px solid #efc2be' }}>{scanError}</div>}
+
       {/* Live Venue Cross-Feature Sync Bar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-soft)', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--line)', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="live-pill" style={{ background: '#ecf8f2', color: '#19a779', borderColor: '#19a779' }}>
-            ● CONNECTED TO VENUE
+            ● CAMERA OBSERVATIONS
           </span>
           <span style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
-            Detections actively sync with <b>Dashboard</b>, <b>Live Monitor</b>, <b>Analytics</b>, and <b>Incident Center</b>.
+            Samples from a configured camera can update <b>Dashboard</b>, <b>Live Monitor</b>, <b>Analytics</b>, and <b>Incidents</b>. Uploaded photos stay one-shot scans.
           </span>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1052,10 +1064,11 @@ export default function PhotoScannerView() {
               <select
                 className="select-input"
                 value={selectedZoneId}
+                disabled={activeTab === 'camera' && Boolean(selectedCamera?.zoneId)}
                 onChange={(e) => handleZoneChange(e.target.value)}
                 style={{ width: '100%', padding: '6px', fontSize: '12px', marginTop: '4px' }}
               >
-                {zones.map((z) => (
+                {zones.filter((zone) => activeTab !== 'camera' || !selectedCamera?.zoneId || zone.id === selectedCamera.zoneId).map((z) => (
                   <option key={z.id} value={z.id}>
                     {z.name} ({z.code}) · Max: {z.maxCapacity}
                   </option>
@@ -1069,15 +1082,27 @@ export default function PhotoScannerView() {
                 <select
                   className="select-input"
                   value={modelType}
-                  onChange={(e) => {
-                    setModelType(e.target.value);
-                    if (selectedCamera) setCameraModel(selectedCamera.id, e.target.value);
+                  disabled={savingModel}
+                  onChange={async (e) => {
+                    const requestedModel = e.target.value;
+                    setModelSaveError('');
+                    if (selectedCamera) {
+                      setSavingModel(true);
+                      const result = await setCameraModel(selectedCamera.id, requestedModel);
+                      setSavingModel(false);
+                      if (!result?.success) {
+                        setModelSaveError(result?.message || 'Could not save the camera model.');
+                        return;
+                      }
+                    }
+                    setModelType(requestedModel);
                   }}
                   style={{ width: '100%', padding: '6px', fontSize: '12px', marginTop: '4px' }}
                 >
                   <option value="yolov8">YOLOv8 Person Detector</option>
                   <option value="csrnet">CSRNet Dilated Conv</option>
                 </select>
+                {modelSaveError && <small role="alert" style={{ display: 'block', color: '#dc4455', marginTop: 4 }}>{modelSaveError}</small>}
               </div>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)' }}>ZONE CAPACITY</label>

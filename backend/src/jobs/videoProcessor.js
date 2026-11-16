@@ -56,22 +56,29 @@ class VideoProcessorWorker {
       const zone = await Zone.findOne({ $or: [{ _id: camera.zoneId }, { id: camera.zoneId }], userId: camera.userId }).lean();
       if (!zone) throw new Error(`Zone ${camera.zoneId} is missing`);
       const model = camera.modelType === 'yolov8' ? 'yolov8' : 'csrnet';
-      const scan = await aiClient.scanStream(camera.streamUrl, model, zone.maxCapacity);
+      const scan = await aiClient.scanStream(camera.streamUrl, model, zone.maxCapacity, zone.warningThresholdPct, zone.criticalThresholdPct);
       const result = scan.telemetry;
       if (scan.status !== 'success' || !result || !Number.isFinite(Number(result.count))) throw new Error('AI service returned no crowd count');
 
       const count = Math.max(0, Math.round(Number(result.count)));
-      const occupancyPct = Math.round((count / Math.max(1, zone.maxCapacity)) * 100);
       const modelUsed = result.model || model.toUpperCase();
+      await Camera.findOneAndUpdate({ _id: camera._id, userId: camera.userId }, {
+        $set: { lastCount: count, lastActive: new Date(), lastLatencyMs: result.latency_ms || 0, status: 'Live' }
+      });
+      // A zone may have several views. Use the latest count from each live camera in that zone.
+      const activeCameras = await Camera.find({ userId: camera.userId, zoneId: String(camera.zoneId), status: 'Live' }).select('lastCount lastActive').lean();
+      const freshAfter = Date.now() - 120000;
+      const zoneCount = activeCameras.reduce((sum, item) => {
+        const fresh = item.lastActive && new Date(item.lastActive).getTime() >= freshAfter;
+        return sum + (fresh ? Math.max(0, Number(item.lastCount) || 0) : 0);
+      }, 0);
+      const occupancyPct = Math.round((zoneCount / Math.max(1, zone.maxCapacity)) * 100);
       await Promise.all([
-        Camera.findOneAndUpdate({ _id: camera._id, userId: camera.userId }, {
-          $set: { lastCount: count, lastActive: new Date(), lastLatencyMs: result.latency_ms || 0, status: 'Live' }
-        }),
         Zone.findOneAndUpdate({ $or: [{ _id: zone._id }, { id: zone.id }], userId: camera.userId }, {
-          $set: { currentCount: count, currentOccupancyPct: occupancyPct }
+          $set: { currentCount: zoneCount, currentOccupancyPct: occupancyPct }
         }),
         Detection.create({
-          userId: camera.userId, cameraId: String(camera._id), zoneId: String(camera.zoneId), count,
+          userId: camera.userId, cameraId: String(camera._id), zoneId: String(camera.zoneId), count, zoneCount,
           peakDensity: Number(result.peak_density) || 0, latencyMs: Number(result.latency_ms) || 0,
           modelUsed, flowVector: result.flow?.available ? {
             speed: Number(result.flow.average_speed_px_per_frame) || 0,
@@ -82,7 +89,10 @@ class VideoProcessorWorker {
         })
       ]);
       this.failures.delete(camera._id);
-      await alertEngine.evaluateThresholds(camera, zone, count);
+      await alertEngine.evaluateThresholds(camera, zone, zoneCount, {
+        snapshotBase64: scan.frame_base64 || null,
+        heatmapUrl: result.heatmap_data_url || null
+      });
     } catch (error) {
       const failures = (this.failures.get(camera._id) || 0) + 1;
       this.failures.set(camera._id, failures);

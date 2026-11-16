@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCrowdStore } from '../store/useCrowdStore';
 
 // A transparent trend baseline. It is not presented as an LSTM prediction.
@@ -35,8 +35,8 @@ function generateForecast(log, horizonSteps = 8) {
   }
 
   // Mark the peak forecast point
-  let peakIdx = 0;
-  points.forEach((p, i) => { if (p.forecast > points[peakIdx].forecast) peakIdx = i; });
+  let peakIdx = points.length > 1 ? 1 : 0;
+  points.forEach((p, i) => { if (i > 0 && p.forecast > points[peakIdx].forecast) peakIdx = i; });
   if (peakIdx > 0) points[peakIdx].isPeak = true;
 
   return points;
@@ -155,23 +155,30 @@ export default function ForecastView() {
     return list;
   }, [zones, detectionLog]);
 
-  // Generate forecast from effective log
-  const forecastPoints = useMemo(() => generateForecast(effectiveLog, 8), [effectiveLog]);
+  useEffect(() => {
+    if (scannedZones.length && !scannedZones.some((zone) => zone.id === selectedZoneFilter)) {
+      setSelectedZoneFilter(scannedZones[0].id);
+    }
+  }, [scannedZones, selectedZoneFilter]);
+
+  // For a zone projection, use its combined camera estimate when available.
+  const zoneObservations = useMemo(() => effectiveLog.map((entry) => ({ ...entry, count: Number(entry.zoneCount ?? entry.count) || 0 })), [effectiveLog]);
+  const forecastPoints = useMemo(() => generateForecast(zoneObservations, 8), [zoneObservations]);
 
   // Stats from real data
-  const latestEntry = effectiveLog[effectiveLog.length - 1] || null;
-  const peakEntry = effectiveLog.reduce((a, b) => (b.count > (a?.count || 0) ? b : a), null);
-  const avgCount = effectiveLog.length > 0
-    ? Math.round(effectiveLog.reduce((s, d) => s + d.count, 0) / effectiveLog.length)
+  const latestEntry = zoneObservations[zoneObservations.length - 1] || null;
+  const peakEntry = zoneObservations.reduce((a, b) => (b.count > (a?.count || 0) ? b : a), null);
+  const avgCount = zoneObservations.length > 0
+    ? Math.round(zoneObservations.reduce((s, d) => s + d.count, 0) / zoneObservations.length)
     : 0;
   const peakForecast = forecastPoints.find(p => p.isPeak);
   const forecastZone = zones.find((zone) => zone.id === selectedZoneFilter) || zones[0];
-  const ceiling = forecastZone?.maxCapacity || latestEntry?.capacity || 350;
-  const warningThreshold = forecastZone?.warningPct || 70;
-  const criticalThreshold = forecastZone?.criticalPct || 85;
-  const peakPct = peakForecast && ceiling > 0 ? Math.round((peakForecast.forecast / ceiling) * 100) : 0;
-  const isCritical = peakPct >= criticalThreshold;
-  const isWarning = peakPct >= warningThreshold && !isCritical;
+  const ceiling = Number(forecastZone?.maxCapacity || latestEntry?.capacity) || null;
+  const warningThreshold = Number(forecastZone?.warningPct) || null;
+  const criticalThreshold = Number(forecastZone?.criticalPct) || null;
+  const peakPct = peakForecast && ceiling ? Math.round((peakForecast.forecast / ceiling) * 100) : null;
+  const isCritical = peakPct !== null && criticalThreshold !== null && peakPct >= criticalThreshold;
+  const isWarning = peakPct !== null && warningThreshold !== null && peakPct >= warningThreshold && !isCritical;
 
   return (
     <div className="forecast-container">
@@ -185,7 +192,7 @@ export default function ForecastView() {
               {isCritical ? 'OVERCROWDING PREDICTED' : 'ELEVATED CROWD LEVELS FORECAST'} IN {peakForecast.label}
             </h3>
             <p>
-              Based on <b>{filteredLog.length} real AI scan{filteredLog.length !== 1 ? 's' : ''}</b> from Crowd Search —
+              Based on <b>{filteredLog.length} recorded observation{filteredLog.length !== 1 ? 's' : ''}</b> —
               forecast peak at <b>{peakForecast.forecast} people / {ceiling} limit</b> ({peakPct}% capacity).
               {latestDetection && (
                 <span style={{ display: 'block', marginTop: '4px', fontSize: '11.5px', color: '#ffdd88' }}>
@@ -215,11 +222,11 @@ export default function ForecastView() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span className="live-pill" style={{ background: '#276de0', color: '#fff', borderColor: '#276de0' }}>
-            ● LIVE DATA
+            OBSERVATIONS
           </span>
           <span style={{ fontSize: '13px', color: 'var(--text)' }}>
-            Powered by <b>{filteredLog.length}</b> real Crowd Search scan{filteredLog.length !== 1 ? 's' : ''} ·
-            Latest: <b>{latestEntry ? `${latestEntry.count} people in ${latestEntry.zoneName || 'Zone'}` : '0 people (Ready for live scan)'}</b> {latestEntry?.time ? `at ${latestEntry.time}` : ''}
+            Based on <b>{filteredLog.length}</b> recorded camera sample{filteredLog.length !== 1 ? 's' : ''} ·
+            Latest zone estimate: <b>{latestEntry ? `${latestEntry.count} people in ${latestEntry.zoneName || 'Zone'}` : 'No readings yet'}</b> {latestEntry?.time ? `at ${latestEntry.time}` : ''}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -230,7 +237,6 @@ export default function ForecastView() {
               onChange={e => setSelectedZoneFilter(e.target.value)}
               style={{ fontSize: '12px', padding: '4px 8px' }}
             >
-              <option value="all">All Zones</option>
               {scannedZones.map(z => (
                 <option key={z.id} value={z.id}>{z.name}</option>
               ))}
@@ -270,7 +276,7 @@ export default function ForecastView() {
               {peakForecast ? (isCritical ? 'Over Capacity' : isWarning ? 'Near Limit' : 'Safe') : 'Need 3 scans'}
             </span>
           </div>
-          <div className="stat-foot">{peakForecast?.label} · {peakPct}% of {ceiling} limit</div>
+          <div className="stat-foot">{peakForecast ? `${peakForecast.label} · ${peakPct !== null ? `${peakPct}% of ${ceiling} limit` : 'set a zone capacity to compare'}` : 'Collect at least 3 observations'}</div>
         </article>
       </div>
 
@@ -290,7 +296,7 @@ export default function ForecastView() {
               </p>
             </div>
             <div className="chart-legend" style={{ margin: 0 }}>
-              <span><i className="legend-blue" style={{ background: '#3478e5' }} /> Observed (Crowd Search)</span>
+              <span><i className="legend-blue" style={{ background: '#3478e5' }} /> Observed zone count</span>
               <span><i className="legend-dash" style={{ borderColor: '#db9225' }} /> Trend projection</span>
               <span><i className="legend-blue" style={{ background: 'rgba(219,146,37,0.2)' }} /> Residual range</span>
             </div>
@@ -350,14 +356,14 @@ export default function ForecastView() {
               <div className="metric-row"><span>Total Scans Fed</span><b>{filteredLog.length} detections</b></div>
               <div className="metric-row">
                 <span>Avg Inference</span>
-                <b>{filteredLog.length > 0 ? Math.round(filteredLog.reduce((s, d) => s + d.latencyMs, 0) / filteredLog.length) : '—'} ms</b>
+                <b>{(() => { const samples = filteredLog.map((d) => Number(d.latencyMs)).filter(Number.isFinite); return samples.length ? `${Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length)} ms` : 'Unavailable'; })()}</b>
               </div>
             </div>
             <div className="diagnostic-note" style={{ marginTop: '12px' }}>
               <b>How this works:</b>
               <p>
-                Every scan from <b>Crowd Search</b> appends a real detection to this forecast.
-                This page uses timestamped observations and a transparent linear baseline. A trained LSTM checkpoint is not currently connected to inference.
+                Every camera sample appends a real detection to this view.
+                  This page fits a transparent linear trend to timestamped zone estimates. Treat the result as an exploratory baseline, not a safety guarantee; an LSTM checkpoint is not connected to inference.
               </p>
             </div>
           </div>

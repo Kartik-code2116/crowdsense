@@ -3,29 +3,16 @@ import { useCrowdStore } from '../store/useCrowdStore';
 import CCTVCanvasStream from '../components/CCTVCanvasStream';
 
 function TrendLineChart({ totalCount = 0, range = 'Today', detectionLog = [] }) {
-  // Use real counts directly from detectionLog
-  const realCounts = detectionLog.length > 0
-    ? detectionLog.map((d) => d.count)
-    : (totalCount > 0 ? [totalCount] : [0]);
-
-  const maxVal = Math.max(10, Math.round(Math.max(...realCounts, totalCount) * 1.3));
+  const observations = detectionLog.slice(-7).map((entry) => Number(entry.count) || 0);
+  if (!observations.length && totalCount > 0) observations.push(totalCount);
+  const maxVal = Math.max(10, Math.round(Math.max(...observations, totalCount) * 1.3));
   const getY = (val) => Math.round(102 - (Math.max(0, val) / maxVal) * 82);
-
-  // Take the most recent 5 points, padded with 0 if fewer exist
-  const padded = [...realCounts];
-  while (padded.length < 5) {
-    padded.unshift(0);
-  }
-  const slice = padded.slice(-5);
-  const p0 = slice[0];
-  const p1 = slice[1];
-  const p2 = slice[2];
-  const p3 = slice[3];
-  const p4 = totalCount > 0 ? totalCount : slice[4];
-  const p5 = p4 > 0 ? Math.round(p4 * 1.08) : 0;
-
-  const actualPoints = `0,${getY(p0)} 70,${getY(p1)} 140,${getY(p2)} 210,${getY(p3)} 280,${getY(p4)} 330,${getY(p4)}`;
-  const forecastPoints = `330,${getY(p4)} 370,${getY(p5)} 410,${getY(p5)} 450,${getY(p4)}`;
+  const coords = observations.map((value, index) => ({
+    x: observations.length === 1 ? 430 : 20 + (index / (observations.length - 1)) * 410,
+    y: getY(value)
+  }));
+  const linePoints = coords.map(({ x, y }) => `${x},${y}`).join(' ');
+  const areaPoints = coords.length ? `${coords[0].x},116 ${linePoints} ${coords[coords.length - 1].x},116` : '';
 
   return (
     <svg className="line-chart" viewBox="0 0 460 116" preserveAspectRatio="none" role="img" aria-label="Occupancy trend chart">
@@ -38,10 +25,9 @@ function TrendLineChart({ totalCount = 0, range = 'Today', detectionLog = [] }) 
       {[20, 46, 72, 98].map((y) => (
         <line key={y} x1="0" y1={y} x2="460" y2={y} className="chart-grid" />
       ))}
-      <polygon points={`0,116 0,${getY(p1)} ${actualPoints} 330,116`} fill="url(#areaGradient)" />
-      <polyline points={actualPoints} fill="none" className="chart-line" />
-      <polyline points={forecastPoints} fill="none" className="forecast-line" />
-      <circle cx="330" cy={getY(p4)} r="4" fill="#3478e5" stroke="#fff" strokeWidth="2" />
+      {coords.length > 1 && <polygon points={areaPoints} fill="url(#areaGradient)" />}
+      {coords.length > 1 && <polyline points={linePoints} fill="none" className="chart-line" />}
+      {coords.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r={index === coords.length - 1 ? 4 : 3} fill="#3478e5" stroke="#fff" strokeWidth="2" />)}
     </svg>
   );
 }
@@ -67,9 +53,9 @@ export default function DashboardView() {
     aiConnected
   } = useCrowdStore();
 
-  const totalPeople = latestDetection
-    ? latestDetection.count
-    : cameras.reduce((sum, c) => sum + (c.count || 0), 0);
+  const totalPeople = zones.length
+    ? zones.reduce((sum, zone) => sum + (Number(zone.currentCount) || 0), 0)
+    : Number(latestDetection?.zoneCount) || 0;
 
   const avgCapacity = zones.length > 0
     ? Math.round(zones.reduce((sum, z) => sum + (z.occupancyPct || 0), 0) / zones.length)
@@ -105,9 +91,9 @@ export default function DashboardView() {
         }}>
           <span style={{ fontSize: '18px' }}>⚠</span>
           <div>
-            <b style={{ fontSize: '13px', color: '#e05555' }}>AI Detection Service Offline</b>
+            <b style={{ fontSize: '13px', color: '#e05555' }}>AI Inference Service Unavailable</b>
             <small style={{ display: 'block', color: 'var(--muted)', marginTop: '2px' }}>
-              The CSRNet model server (localhost:8000) is not running. Camera streams are active but crowd detection is suspended. Start the AI service to enable live detection.
+              Camera scans cannot run until the AI service is available. Existing recorded observations remain visible.
             </small>
           </div>
         </div>
@@ -147,14 +133,14 @@ export default function DashboardView() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span className="live-pill" style={{ background: '#276de0', color: '#fff', borderColor: '#276de0', fontWeight: '800' }}>
-              ● LIVE AI SCAN ACTIVE
+              LATEST OBSERVATION
             </span>
             <div>
               <b style={{ fontSize: '14px', color: 'var(--text)' }}>
-                {latestDetection.count} {latestDetection.count === 1 ? 'person' : 'people'} detected in {latestDetection.zoneName || 'Venue Zone'}
+                {latestDetection.count} {latestDetection.count === 1 ? 'person' : 'people'} observed in {latestDetection.zoneName || 'Venue Zone'}
               </b>
               <small style={{ display: 'block', color: 'var(--muted)', marginTop: '2px' }}>
-                Via {latestDetection.modelName?.toUpperCase() || 'YOLOv8'} · Latency: {latestDetection.latencyMs}ms · Synced at {latestDetection.timestamp}
+                Via {latestDetection.modelName?.toUpperCase() || 'model unavailable'}{Number(latestDetection.latencyMs) > 0 ? ` · ${latestDetection.latencyMs}ms` : ''} · {latestDetection.timestamp}
               </small>
             </div>
           </div>
@@ -181,16 +167,16 @@ export default function DashboardView() {
               {isOfflineNoData
                 ? '⚠ AI Model Offline'
                 : latestDetection
-                  ? '● Live AI Sync'
-                  : 'Real-time'}
+                ? 'Recorded reading'
+                  : 'No reading yet'}
             </span>
           </div>
           <div className="stat-foot">
             {isOfflineNoData
               ? 'Start AI service to enable crowd detection'
               : latestDetection
-                ? `Real-time detection: ${latestDetection.modelName || 'YOLOv8'} (${latestDetection.latencyMs}ms)`
-                : 'Live edge streams monitored'}
+                ? `Latest camera reading: ${latestDetection.modelName || 'unknown model'} in ${latestDetection.zoneName || 'configured zone'}`
+                : `${cameras.filter((camera) => camera.status === 'Live').length} camera(s) have a recent AI sample`}
           </div>
         </article>
 
@@ -201,13 +187,13 @@ export default function DashboardView() {
           </div>
           <div className="stat-value">
             {cameras.filter((c) => c.status === 'Live').length} <small>/ {cameras.length}</small>
-            <span className="trend stable">All online</span>
+            <span className="trend stable">Live status</span>
           </div>
           <div className="stat-foot">
             {!aiConnected ? (
               <span style={{ color: '#db9225' }}>⚠ AI Detection Paused — streams active without detection</span>
             ) : (
-              <><span className="mini-live" /> All edge &amp; local camera streams healthy</>
+              <>{cameras.filter((camera) => camera.status === 'Live').length} camera(s) have a recent successful sample</>
             )}
           </div>
         </article>
@@ -247,12 +233,12 @@ export default function DashboardView() {
 
       {/* Main Trends & Zone Capacity Grid */}
       <div className="dashboard-grid">
-        {/* Trend Panel with LSTM dotted line */}
+        {/* Observed trend panel */}
         <section className="panel trend-panel">
           <div className="panel-heading">
             <div>
-              <h2>People in Venue Trend &amp; Influx</h2>
-              <p>Continuous density regression integration across all camera zones</p>
+              <h2>Observed zone occupancy trend</h2>
+              <p>Latest recorded estimates; camera views in the same zone are combined</p>
             </div>
             <select value={range} onChange={(e) => setRange(e.target.value)} aria-label="Chart range">
               <option value="Today">Today</option>
@@ -286,7 +272,7 @@ export default function DashboardView() {
               <div className="chart-summary">
                 <strong>{totalPeople.toLocaleString()} people</strong>
                 <span className={`trend ${totalPeople > 0 ? 'positive' : 'stable'}`}>
-                  {totalPeople > 0 ? (latestDetection ? '● Live AI Detection' : '● Live Stream') : '○ Ready for Live Stream'}
+                  {totalPeople > 0 ? 'Recorded zone estimate' : 'No reading yet'}
                 </span>
                 <small>
                   {totalPeople > 0
@@ -303,25 +289,12 @@ export default function DashboardView() {
                   <span>0</span>
                 </div>
                 <TrendLineChart totalCount={totalPeople} range={range} detectionLog={detectionLog} />
-                <div className="x-labels">
-                  <span>-30m</span>
-                  <span>-20m</span>
-                  <span>-15m</span>
-                  <span>-10m</span>
-                  <span>-5m</span>
-                  <span>Now</span>
-                  <span>+15m</span>
-                </div>
+                <div className="x-labels"><span>{detectionLog.length ? 'Earlier detections' : 'Latest available reading'}</span><span>Most recent</span></div>
               </div>
 
               <div className="chart-legend">
-                <span><i className="legend-blue" /> Actual Occupancy (YOLOv8 / CSRNet)</span>
-                <span><i className="legend-dash" /> LSTM Forecast (+15m)</span>
-                <span className="forecast-note">
-                  {totalPeople > 0
-                    ? `◷ Predicted peak: ${Math.round(totalPeople * 1.15)} people · Safe Operations`
-                    : '◷ Awaiting camera ingress data to project LSTM forecast'}
-                </span>
+                <span><i className="legend-blue" /> Observed detections</span>
+                <button className="text-button" onClick={() => setPage('Forecast')}>Open trend projection →</button>
               </div>
             </>
           )}
@@ -390,11 +363,11 @@ export default function DashboardView() {
       <section className="panel camera-panel">
         <div className="panel-heading">
           <div>
-            <h2>Live CCTV Edge Feeds <span className="feed-count">{cameras.length} Active Streams</span></h2>
+            <h2>Camera sources <span className="feed-count">{cameras.length} configured</span></h2>
             <p>
               {aiConnected
-                ? '1-2 FPS sampled frames regressed via CSRNet Deep Learning Model'
-                : '⚠ Camera streams active — AI detection suspended until service restarts'}
+                ? 'Each network camera is sampled by its assigned model when the source is reachable.'
+                : 'AI inference is unavailable. Camera preview availability depends on the source type.'}
             </p>
           </div>
           <div className="camera-actions">
@@ -441,9 +414,11 @@ export default function DashboardView() {
                   streamUrl={cam.streamUrl}
                   isWebcam={cam.isWebcam || cam.id === 'CAM-WEBCAM' || cam.streamType === 'webcam'}
                   zoneId={cam.zoneId}
-                  snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
-                  lastSnapshot={cam.lastSnapshot || (cam.id === 'CAM-01' ? latestDetection?.imageSrc : null)}
-                  heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || (cam.id === 'CAM-01' ? latestDetection?.heatmapUrl : null)}
+                  cameraStatus={cam.status}
+                  modelType={cam.modelType}
+                  snapshotUrl={cam.lastSnapshot || cam.snapshotUrl || cam.lastDetection?.imageSrc || null}
+                  lastSnapshot={cam.lastSnapshot || cam.lastDetection?.imageSrc || null}
+                  heatmapUrl={cam.heatmapUrl || cam.lastDetection?.heatmapUrl || null}
                   onSnapshot={handleCameraSnapshot}
                 />
               </div>
@@ -544,11 +519,10 @@ export default function DashboardView() {
       </section>
 
       <footer className="page-footer">
-        <span>© 2026 CrowdSense <b>·</b> Production Crowd Safety Architecture</span>
+        <span>© 2026 CrowdSense <b>·</b> Crowd monitoring workspace</span>
         <span>
-          Active Backbone: <b>{aiConnected ? 'CSRNet v1.2.0' : 'AI Service Offline'}</b> <b>·</b>
-          Mean Latency: <b>{aiConnected ? '38.4ms' : '—'}</b> <b>·</b>
-          {aiConnected ? 'Synchronized' : 'Detection Suspended'}
+          AI service: <b>{aiConnected ? 'Available' : 'Offline'}</b> <b>·</b>
+          {aiConnected ? 'Model and latency are reported for each camera sample.' : 'New inference is unavailable.'}
         </span>
       </footer>
     </div>

@@ -22,7 +22,7 @@ class ReportService {
 
   generateSummaryMetrics(detections) {
     if (!detections.length) {
-      return { totalDetections: 0, peakCrowd: 0, avgCrowd: 0, complianceRate: '100%' };
+      return { totalDetections: 0, peakCrowd: 0, avgCrowd: 0, complianceRate: null };
     }
     const counts = detections.map(d => d.count);
     const peak = Math.max(...counts);
@@ -31,7 +31,7 @@ class ReportService {
       totalDetections: detections.length,
       peakCrowd: peak,
       avgCrowd: avg,
-      complianceRate: '98.4%'
+      complianceRate: null
     };
   }
 }

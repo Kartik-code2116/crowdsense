@@ -1,346 +1,117 @@
-# CrowdSense · AI-Powered Crowd Safety & Density Intelligence Platform
+# CrowdSense
 
-CrowdSense is an enterprise crowd safety and venue intelligence platform. Unlike conventional object detection pipelines that fail under severe crowd occlusion and perspective distortion, CrowdSense uses **dilated convolutional density regression (CSRNet / MCNN)** to predict continuous spatial density maps, where the mathematical integral over the scene yields the exact crowd count.
+CrowdSense is a crowd-monitoring project that connects camera sources to venue zones, estimates occupancy with a selected vision model, and records threshold alerts for operator review. Its setup flow is:
 
-The system translates live crowd counts into **Zone Capacity Percentages**, predicts bottlenecks **8 to 15 minutes in advance** using an **LSTM sequence forecaster**, and streams real-time telemetry to operators via WebSockets.
+1. Create **zones and capacity ceilings**.
+2. Add one or more cameras to each zone.
+3. Choose **CSRNet** or **YOLOv8** for each camera.
+4. Review live samples, dashboard overview, incidents, analytics, reports, and a recent-count trend projection.
 
----
+CrowdSense is a decision-support prototype. Its counts and threshold alerts need validation against the venue’s own cameras and labeled data before operational use. It is not a certified life-safety system.
 
-## 🏛 System Architecture
+## What the application does
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│  React Dashboard (Vite + CSS Variables + Zustand + Lucide)             │
-│  Live Multi-Monitor · Heatmaps · Analytics · Alerts · Admin · ModelLab │
-└───────────────────────┬─────────────────────────┬──────────────────────┘
-                        │ REST (JWT + RBAC)       │ WebSocket (Socket.io)
-┌───────────────────────▼─────────────────────────▼──────────────────────┐
-│  Node.js + Express API Gateway                                         │
-│  Auth/RBAC · Camera Registry · Alert Engine · Reports · Ingestion      │
-└───────────────┬───────────────────────────┬────────────────────────────┘
-                │ Mongoose                  │ HTTP Stream / Worker
-┌───────────────▼────────┐        ┌─────────▼────────────────────────────┐
-│ Local MongoDB          │        │ Python FastAPI AI Microservice       │
-│ (Time-series + TTL)    │        │ PyTorch/ONNX · CSRNet/MCNN Density   │
-└────────────────────────┘        │ Forecasting LSTM · Flow · Grad-CAM   │
-                                  └──────────────────────────────────────┘
-```
+- **Zones:** store people capacity, warning and critical thresholds, floor, and camera assignments.
+- **Cameras:** register a reachable stream URL or a browser-local webcam. Direct network streams are sampled by the backend worker; the laptop webcam uses browser camera permission in the operator’s browser.
+- **Model Lab:** compare CSRNet density regression and YOLOv8 person boxes, set the default for new cameras, and save the model assigned to each camera.
+- **Camera scanner:** analyze a selected camera or the operator’s webcam. Uploaded photos and bundled examples are one-shot scans; they do not become venue observations.
+- **Live monitor and dashboard:** show configured cameras, last successful sample, observed counts, zone totals, service state, and open incidents.
+- **Alerts and incidents:** compare a zone estimate with its configured thresholds, create an incident when a threshold is crossed, attach the triggering frame when available, and let an operator resolve the incident.
+- **Analytics and reports:** show recorded observations and export CSV or print a report.
+- **Trend forecast:** fit a transparent linear trend to recent recorded zone counts. A trained LSTM checkpoint is not connected to the running application.
 
-### Why this split matters (Viva / Industry Architecture Point)
-- **Node.js** cannot run PyTorch deep learning models natively. By isolating deep learning in a **Python FastAPI microservice**, the AI worker scales independently on GPU instances while Node.js manages thousands of concurrent WebSocket dashboard clients and database writes.
-- **Time-series persistence**: Detections are stored in MongoDB with **compound indexes on `(cameraId, timestamp)`** and **TTL expiration indexes** for automatic 7-day raw data retention.
-
----
-
-## 🧠 Deep Learning & Research Core
-
-### 1. Point Annotations & Continuous Density Maps
-The ShanghaiTech dataset provides head point coordinates in MATLAB `.mat` files instead of bounding boxes. We map discrete head coordinates $x_i$ into a continuous 2D Gaussian density distribution $D(p)$:
-
-$$D(p) = \sum_{i=1}^{N} \delta(p - x_i) * G_{\sigma_i}(p)$$
-
-For dense crowds (**Part A**), we deploy **Geometry-Adaptive Gaussian Kernels**:
-
-$$\sigma_i = \beta \bar{d}_i$$
-
-where $\bar{d}_i$ is the average Euclidean distance to head $i$'s $k=3$ nearest neighbors, and $\beta = 0.3$. The total crowd count is the continuous integral:
-
-$$\text{Count} = \iint D(x, y) \, dx \, dy = \sum_{h, w} D[h, w]$$
-
-### 2. Why Detection (YOLO) Fails vs Density Regression
-- **High Occlusion**: In crowds with $>500$ people, head bounding boxes overlap by $>80\%$. Non-Maximum Suppression (NMS) suppresses legitimate human detections as duplicate false positives.
-- **Perspective Distortion**: Heads close to the camera may span $40 \times 40$ pixels, whereas distant background rows are only $3 \times 3$ pixels.
-- **Integral Solution**: Density regression does not detect discrete bounding boxes. Instead, it regresses continuous density features, preserving accuracy even in extreme crush environments.
-
-### 3. CSRNet (Dilated Convolutional Backend)
-- **Frontend**: First 10 layers of VGG-16 pretrained on ImageNet (stride downsampling factor = 8).
-- **Backend**: 6 dilated convolutional layers with dilation rate $r = 2$.
-- **Advantage**: Standard pooling downsamples resolution, destroying small head coordinates. Dilated convolutions expand the receptive field from $3 \times 3$ to effective $5 \times 5$ without pooling loss.
-
----
-
-## 📊 ShanghaiTech Official Benchmark Results
-
-| Model Architecture | Model Type | Part A MAE (↓) | Part A RMSE (↓) | Part B MAE (↓) | Part B RMSE (↓) | Inference Latency |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **YOLOv8 Detection Baseline** | Bounding Box Detection | 234.80 | 312.40 | 38.50 | 54.10 | 44.0 ms |
-| **MCNN (Zhang et al. CVPR 2016)** | 3-Column CNN | 110.20 | 173.20 | 26.40 | 41.30 | 18.2 ms |
-| **CSRNet (Proposed / Li et al.)** | **Dilated Conv Backend** | **68.20** | **115.00** | **10.60** | **16.00** | **38.4 ms** |
-
----
-
-## 🚀 Repository Structure
+## Architecture
 
 ```text
-crowdsense/
-├── docker-compose.yml               # Multi-container orchestration (Mongo, AI, Gateway, UI)
-├── README.md
-├── .env.example
-│
-├── ml/                              # Training & Offline Research Pipeline
-│   ├── notebooks/                   # 5 Jupyter notebooks with EDA, training & XAI
-│   │   ├── 01_eda_shanghaitech.ipynb
-│   │   ├── 02_density_map_generation.ipynb
-│   │   ├── 03_train_csrnet.ipynb
-│   │   ├── 04_evaluation_gradcam.ipynb
-│   │   └── 05_forecasting_lstm.ipynb
-│   ├── src/
-│   │   ├── dataset.py               # ShanghaiTech .mat parser + adaptive Gaussian kernel
-│   │   ├── models/                  # CSRNet, MCNN, Autoencoder, CrowdFlowLSTM
-│   │   ├── train.py                 # Multi-epoch PyTorch training loop
-│   │   ├── evaluate.py              # MAE and RMSE benchmark calculator
-│   │   ├── gradcam.py               # Density Grad-CAM implementation
-│   │   └── export_onnx.py           # Dynamic-axes ONNX exporter
-│   ├── configs/                     # YAML hyperparameters for Part A and Part B
-│   └── weights/                     # Model weights (.pth and .onnx)
-│
-├── ai-service/                      # Python FastAPI Microservice
-│   ├── app/
-│   │   ├── main.py                  # API server with lifespan & CORS
-│   │   ├── routers/                 # /predict, /forecast, /explain/gradcam, /stream
-│   │   ├── services/                # Inference, Jet Heatmap base64, Farneback Flow, Anomaly
-│   │   └── core/                    # Config, Dynamic Model Loader singleton
-│   ├── requirements.txt
-│   └── Dockerfile
-│
-├── backend/                         # Node.js + Express API Gateway
-│   ├── src/
-│   │   ├── config/                  # DB connection with in-memory fallback, environment
-│   │   ├── models/                  # User, Camera, Zone, Detection (TTL index), Alert, Incident
-│   │   ├── controllers/             # Full CRUD and business logic
-│   │   ├── routes/                  # Auth, Cameras, Zones, Analyze, Alerts, Analytics, Reports
-│   │   ├── middleware/              # JWT auth, RBAC hierarchy, Multer upload, Rate limit
-│   │   ├── services/                # AI client, Alert engine, CSV/PDF report service
-│   │   ├── sockets/                 # LiveFeed Socket.io broadcast ticks
-│   │   ├── jobs/                    # Video frame sampling worker
-│   │   ├── scripts/seed.js          # Enterprise venue data seeder
-│   │   └── server.js
-│   ├── tests/
-│   ├── package.json
-│   └── Dockerfile
-│
-└── frontend/                        # React (Vite) Production Console
-    ├── src/
-    │   ├── api/                     # REST client
-    │   ├── store/useCrowdStore.js   # Zustand state management
-    │   ├── pages/
-    │   │   ├── DashboardView.jsx    # Real-time metrics, trend chart + LSTM dotted forecast
-    │   │   ├── LiveMonitorView.jsx  # Multi-camera grid (1x1, 2x2, 3x3) + telemetry
-    │   │   ├── AnalyticsView.jsx    # Influx/outflux bar charts, bottleneck duration
-    │   │   ├── CamerasView.jsx      # RTSP registration & camera management
-    │   │   ├── ZonesView.jsx        # Zone capacity ceiling & dynamic threshold sliders
-    │   │   ├── IncidentsView.jsx    # Incident log + Interactive Timeline Replay Scrubber
-    │   │   ├── ForecastView.jsx     # LSTM crowd prediction + 8-minute early warning
-    │   │   ├── ModelLabView.jsx     # CSRNet vs MCNN vs YOLO + live Grad-CAM visualizer
-    │   │   ├── ReportsView.jsx      # Fire safety compliance audit & CSV exporter
-    │   │   ├── SandboxView.jsx      # Direct crowd frame upload & AI testing playground
-    │   │   └── SettingsView.jsx     # Microservice health, RBAC team roles, audit log
-    │   ├── App.jsx                  # Main router + Light/Dark theme toggle button
-    │   └── styles.css               # Production styling for Bright & Dark themes
-    ├── package.json
-    └── Dockerfile
+React + Vite browser UI
+       │ REST / JWT and Socket.IO
+       ▼
+Node.js + Express API ───── MongoDB
+       │
+       ├── camera stream sampling worker
+       ▼
+Python + FastAPI + PyTorch inference
+       ├── CSRNet density regression
+       └── YOLOv8 person detection
 ```
 
----
+The browser handles interaction and browser-local webcam capture. The Express service owns authenticated workspaces, camera and zone configuration, detections, incidents, and reports. The Python service performs image inference. MongoDB persists configured records and detection history. Socket.IO sends account-scoped live telemetry and newly created alerts.
 
-## ⚡ How to Run This Project
+## Models and forecast
 
-CrowdSense consists of three microservices designed to run cooperatively:
-1. **Python FastAPI AI Microservice** (Port `8000`): Hosts PyTorch CSRNet and Ultralytics YOLOv8 inference engines, continuous density mapping, and OpenCV camera ingestion.
-2. **Node.js Express API Gateway & WebSocket Server** (Port `5000`): Handles REST endpoints, JWT authentication, RBAC, alert threshold engine, and real-time Socket.io telemetry.
-3. **React Vite Frontend Console** (Port `5173`): Interactive operator dashboard with dark/light mode, live multi-monitor grid, webcam deep inspection, and analytics.
+**CSRNet** estimates a spatial density map; its integral is used as the crowd estimate. Model Lab shows the original paper’s ShanghaiTech Part A and Part B MAE values (68.2 and 10.6) as reference results only. They are not measured results for the checkpoint installed on a particular deployment.
 
----
+**YOLOv8** returns individual person detections and bounding boxes. CrowdSense does not include a project-specific ShanghaiTech evaluation for YOLOv8. Performance depends on the checkpoint, image quality, scene, and hardware. Validate both models locally before comparing them.
 
-### Prerequisites
+The forecast page uses recorded samples and a linear trend baseline. The repository contains an LSTM model definition and a notebook, but the app has no trained LSTM weights or connected LSTM inference endpoint. Forecasts are exploratory and do not trigger automated controls.
 
-- **Node.js**: v18.x or v20.x+ ([Download Node.js](https://nodejs.org/))
-- **Python**: 3.10+ with `pip` ([Download Python](https://www.python.org/))
-- **MongoDB** *(Optional)*: Runs locally on `mongodb://127.0.0.1:27017`. If MongoDB is not running, the backend automatically engages its built-in in-memory fallback so all features continue working seamlessly without any extra setup.
-- **Webcam / External Camera** *(Optional)*: Laptop integrated camera or USB camera for live crowd detection.
+## Camera sources and operating limits
 
----
+| Source | What CrowdSense can do | Limit |
+| --- | --- | --- |
+| Direct HTTP/HTTPS image, video, HLS, or RTSP URL | The AI service attempts to capture a frame; browser preview works only for browser-compatible sources. | The stream must be reachable from the server. RTSP preview in a browser needs a media gateway. |
+| Public YouTube, Twitch, Vimeo, or Dailymotion link | The player embeds supported URLs where the provider permits it, and the server attempts frame extraction through `yt-dlp`. | Provider restrictions, private streams, DRM, login requirements, geoblocking, and extractor changes can prevent capture. |
+| Laptop or USB webcam | Capture in CrowdSense Scanner through the browser’s `getUserMedia` permission. | This is the operator’s local browser camera; it is not accessible to a remote server worker. Use HTTPS outside localhost. |
+| Bundled image or uploaded photo | Run one image inference. | A photo is not a live stream and does not enter camera history unless the operator captures it from a registered camera. |
 
-### Step-by-Step Local Run Instructions
+The server samples at most two network streams concurrently, with a minimum five-second interval per camera. A zone total is currently the sum of fresh camera counts. If cameras overlap, some people can be counted more than once; camera overlap calibration and cross-camera deduplication are not implemented.
 
-Open **3 separate terminal windows** (one for each service):
+Thresholds operate on model estimates. A Warning or Critical alert is stored and broadcast to the signed-in workspace. Clearing the threshold resolves the active alert; an incident remains for operator review until resolved. This workflow does not contact turnstiles, emergency systems, or external messaging services.
 
-#### Terminal 1: Python FastAPI AI Microservice
-```bash
-# Navigate to the AI microservice directory
-cd ai-service
+## Run with Docker Compose
 
-cd ai-service
-.\venv\Scripts\activate
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+Requirements: Docker Compose and the model checkpoints you want to use. The repository does not guarantee that usable model weights are present in a fresh clone.
 
-# (Optional but recommended) Create and activate a Python virtual environment
-# Windows:
-python -m venv venv
-venv\Scripts\activate
-# macOS/Linux:
-python3 -m venv venv
-source venv/bin/activate
+1. Copy `.env.example` to `.env` in the repository root.
+2. Set unique secrets for `JWT_SECRET` (at least 32 characters), `ADMIN_REGISTRATION_CODE` (at least 24 characters), `MONGO_ROOT_USERNAME`, and `MONGO_ROOT_PASSWORD`. Use URI-safe Mongo credentials and set `CORS_ORIGIN` to the browser-facing origin.
+3. Put model weights in `ai-service/weights/`:
+   - CSRNet: `csrnet_shanghaitech.pth`
+   - YOLOv8: `yolov8n.pt` (or configure the loader for your checkpoint)
+4. Start the stack:
 
-# Install required deep learning and computer vision dependencies
-pip install -r requirements.txt
-
-# Start the FastAPI server on port 8000
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```sh
+docker compose up --build
 ```
-- **Service URL**: `http://localhost:8000`
-- **Interactive Swagger API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
-*(Note: On first startup, the service automatically downloads the official lightweight `yolov8n.pt` weights if not already present).*
 
----
+Open `http://localhost:3000`. Register a workspace using the configured invitation code. No default administrator or demo password is provisioned. If a checkpoint is missing or fails to load, the AI health endpoint reports the service as degraded and inference returns an error rather than fabricated results.
 
-#### Terminal 2: Node.js Express API Gateway & WebSockets
-```bash
-# Navigate to the backend directory
+## Local development
+
+Run MongoDB locally, then use separate terminals:
+
+```sh
+# Terminal 1: backend
 cd backend
-
-# Install Node dependencies
-npm install
-
-# (Recommended) Reset database to clean, authentic real-time baseline (CAM-02 = 2 people, 0 active incidents)
-node src/scripts/resetData.js
-
-# Start backend with automatic reload
+npm ci
 npm run dev
 ```
-- **Service URL**: `http://localhost:5000`
-- **Health Check**: [http://localhost:5000/health](http://localhost:5000/health)
-- **CCTV Camera API**: [http://localhost:5000/api/v1/cameras](http://localhost:5000/api/v1/cameras)
 
----
+```sh
+# Terminal 2: AI service
+cd ai-service
+python -m venv .venv
+# Activate the environment, then:
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-#### Terminal 3: React Production Frontend Console
-```bash
-# Navigate to the frontend directory
+```sh
+# Terminal 3: frontend
 cd frontend
-
-# Install UI dependencies
-npm install
-
-# Start Vite development server
+npm ci
 npm run dev
 ```
-- **Dashboard URL**: [http://localhost:5173](http://localhost:5173)
 
----
+The Vite development server proxies `/api` and `/socket.io` to port 5000, and only `/ai/health` to port 8000. Configure backend variables in `backend/.env` (at minimum `MONGODB_URI` and `JWT_SECRET`); configure model paths and `DEVICE` for the AI service in `ai-service/.env`. To add an optional empty starter zone to an existing account, set `SEED_USER_EMAIL` in `backend/.env` and run `npm run seed` from `backend/`. This never creates accounts, cameras, incidents, or detection history. If your MongoDB volume was initialized before authentication was enabled, migrate it deliberately or use a new volume; existing data volumes are not reset automatically.
 
-### Alternative: Run All Services via Docker Compose
+## Data and security notes
 
-If you have Docker and Docker Compose installed:
-```bash
-docker-compose up --build
-```
-- **Frontend Console**: `http://localhost:3000`
-- **Node.js API Gateway**: `http://localhost:5000`
-- **FastAPI AI Microservice**: `http://localhost:8000/docs`
-- **MongoDB**: `localhost:27017`
+- API routes and Socket.IO connections require a signed JWT. Passwords are hashed with bcrypt. Production registration requires the configured invitation code.
+- Production startup requires MongoDB and explicit secrets/origins. The development in-memory store is temporary and is cleared when the backend restarts.
+- Detection records are stored in MongoDB; set up backups and retention for the deployment. The project does not currently enforce an automatic detection TTL policy.
+- Camera URLs are fetched by the AI service. Only register streams the deployment is authorized to access and can safely expose to that service.
+- Validate model accuracy, alert thresholds, stream stability, and camera overlap on representative local footage before relying on results.
 
----
+## Presentation material
 
-## 🔍 How to Test Real-Time Crowd Detection & Counting
-
-1. Open [http://localhost:5173](http://localhost:5173) in your browser.
-2. In the left navigation menu, click **Crowd search** (or use the top navigation pill **🔍 Crowd search**).
-3. **Testing with your Laptop Integrated Camera**:
-   - Click the **💻 Laptop Camera (Integrated / USB)** tab.
-   - Select your camera device from the dropdown menu (e.g., *Integrated Camera* or connected USB webcam).
-   - Click **▶ Start Camera Feed** and allow camera permissions in your browser.
-   - Click **⚡ Continuous AI Tracking (1 FPS)** for real-time tracking, or **📸 Capture & Run AI Inference** for a single frame.
-   - Stand in front of your camera: The system uses real **YOLOv8 person detection** to detect humans, draw precise green bounding boxes, pinpoint head coordinates, and render a 2D Gaussian density heatmap.
-4. **Testing with Photo Upload**:
-   - Click the **📁 Upload Crowd Photo** tab.
-   - Drag and drop or browse any image of a crowd (stadium, auditorium, concert, street).
-   - Choose your model: **YOLOv8 Detection Baseline (BBox + Count)** or **CSRNet (Dilated Density Regression)**.
-   - Select a target safety zone (e.g., *Central Concourse Atrium*).
-   - Click **🚀 Run AI Crowd Inference**.
-   - Review detected crowd count, peak density, inference latency, bounding boxes, and Turbo/Jet colormap density heatmap.
-5. **Verify Cross-Feature Synchronization**:
-   - **Dashboard**: "PEOPLE IN VENUE" immediately updates to your detected count, and a blue `● LIVE AI SCAN ACTIVE` banner indicates active real-time AI sync.
-   - **Live Monitor**: Navigate to **Live monitor** and click **CAM-WEBCAM** or inspect any edge stream.
-   - **Analytics**: Navigate to **Analytics** to see live hourly influx/outflux and zone capacity share dynamically adjust.
-   - **Incidents & Safety Alerts**: If your detected count breaches a zone's threshold (>75% for Warning, >90% for Critical), an automated incident is logged with timestamped forensic snapshots in the **Incidents** view.
-
----
-
-## 👥 Default RBAC Operator Accounts
-
-Use the **Sign In** modal on the top-right of the dashboard to switch roles:
-
-| Role | Email | Password | Permissions |
-| :--- | :--- | :--- | :--- |
-| **Safety Administrator** | `admin@crowdsense.io` | `admin123` | Full access: Add/edit cameras, configure safety thresholds, AI model selection, export reports |
-| **Control Room Operator** | `operator@crowdsense.io` | `operator123` | Live monitoring, acknowledge alerts, resolve incidents, trigger emergency protocols |
-| **Safety Compliance Analyst** | `analyst@crowdsense.io` | `analyst123` | Historical crowd analytics, LSTM trend forecast, audit reports |
-| **Executive Viewer** | `viewer@crowdsense.io` | `viewer123` | Read-only executive view across all venue sectors |
-
----
-
-## 🛠 Troubleshooting & FAQ
-
-- **Port already in use (`EADDRINUSE: 5000` or `8000`)**:
-  - *Windows (PowerShell)*:
-    ```powershell
-    Get-NetTCPConnection -LocalPort 5000, 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-    ```
-  - *macOS/Linux*:
-    ```bash
-    lsof -ti:5000,8000 | xargs kill -9
-    ```
-- **Webcam feed blank or permission denied**:
-  - Ensure browser permissions for camera access are granted for `http://localhost:5173`.
-  - In Windows Settings > Privacy & security > Camera, ensure "Let desktop apps access your camera" is toggled **On**.
-- **MongoDB connection refused**:
-  - The backend will automatically fall back to the in-memory datastore with no user intervention required. To use MongoDB locally, ensure the MongoDB service is started (`mongod` or via Windows Services).
-
----
-
-## 🎯 Viva & Technical Defense Highlights
-
-1. **Why didn't you use YOLO for crowd counting?**
-   - *Answer*: Object detection requires predicting distinct bounding boxes. In congested scenes (ShanghaiTech Part A, average 501 people/frame), head occlusion exceeds 80%. Bounding box Non-Maximum Suppression (NMS) treats nearby heads as duplicate detections and drops them. Density regression outputs a continuous field $D(x, y)$ whose spatial integral $\iint D(x, y)\,dx\,dy$ reliably captures heads even under extreme overlap.
-
-2. **What is the purpose of Dilated Convolutions in CSRNet?**
-   - *Answer*: Downsampling with Max-Pooling reduces feature map resolution, destroying spatial details of small heads in the distance. Dilated convolution layers with dilation rate $r=2$ expand the filter's receptive field to $5 \times 5$ without reducing spatial resolution or adding extra parameters.
-
-3. **How does CrowdSense prevent stampedes proactively?**
-   - *Answer*: Conventional CCTV systems alert operators only after a crush occurs. CrowdSense feeds rolling 15-minute density sequences into a sequence-to-sequence LSTM that predicts crowd influx **8 minutes in advance**, giving operators sufficient lead time to meter turnstiles or open auxiliary exit gates.
-
-4. **Why separate Node.js and FastAPI?**
-   - *Answer*: Node.js is single-threaded and excels at non-blocking I/O (handling thousands of real-time WebSocket dashboard connections), but cannot execute PyTorch neural networks directly. FastAPI hosts PyTorch/ONNX inference on Python worker processes, enabling horizontal scaling and GPU offloading.
-
----
-
-## 🔄 Cross-Feature AI Synchronization Pipeline
-
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│               CROWD SEARCH & DETECTION ENGINE                          │
-│   (Uploaded Photo / Laptop Webcam / Connected External Cameras)        │
-│   • Exact Person Count   • Bounding Boxes   • Density Heatmap          │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │  recordRealDetection()
-        ┌───────────────────────────┼───────────────────────────┐
-        ▼                           ▼                           ▼
-┌───────────────┐           ┌───────────────┐           ┌───────────────┐
-│   DASHBOARD   │           │ LIVE MONITOR  │           │   ANALYTICS   │
-│ • Total venue │           │ • Edge camera │           │ • Hourly      │
-│   headcount   │           │   counts      │           │   throughput  │
-│ • Live banner │           │ • Telemetry   │           │ • Zone share  │
-│ • Trend chart │           │ • Snap & send │           │ • Influx bar  │
-└───────┬───────┘           └───────┬───────┘           └───────┬───────┘
-        │                           │                           │
-        └───────────────────────────┼───────────────────────────┘
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  INCIDENT CENTER & ALERTS     │
-                    │ • Auto-trigger on threshold   │
-                    │ • Forensic snapshot replay    │
-                    │ • One-click deep inspection   │
-                    └───────────────────────────────┘
-```
+See [PRESENTATION_NOTES.md](PRESENTATION_NOTES.md) for a project overview, demo sequence, architecture explanation, limitations, and likely viva questions.

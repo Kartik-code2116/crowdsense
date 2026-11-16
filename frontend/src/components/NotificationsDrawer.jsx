@@ -19,7 +19,7 @@ export default function NotificationsDrawer() {
         <div className="drawer-header">
           <div>
             <h3>Active Safety Alerts ({notifications.filter(n => n.unread).length} Unread)</h3>
-            <p>Real-time threshold breaches & LSTM forecast warnings</p>
+            <p>Alerts created when observed zone counts cross configured thresholds</p>
           </div>
           <button className="close-btn" onClick={() => setShowNotificationsDrawer(false)}>✕</button>
         </div>
@@ -36,7 +36,7 @@ export default function NotificationsDrawer() {
         <div className="drawer-notifications-list">
           {notifications.length === 0 ? (
             <div className="empty-notifs">
-              <span className="status-dot green" /> No active alarms
+              <span className="status-dot green" /> No alerts recorded
             </div>
           ) : (
             notifications.map((item) => (

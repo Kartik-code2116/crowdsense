@@ -58,7 +58,7 @@ export default function LandingPageView() {
             {isAuthenticated ? (
               <div className="landing-auth-pill">
                 <span className="user-indicator" style={{ color: '#ff3344', fontWeight: 600 }}>
-                  ● Admin: {user?.name || 'Alex Kumar'}
+                  ● {user?.name || 'Workspace'}
                 </span>
                 <button className="landing-btn-secondary" onClick={() => setPage('Dashboard')}>
                   Open Console →
@@ -75,8 +75,8 @@ export default function LandingPageView() {
                 <button className="landing-btn-primary" onClick={() => setPage('Register')}>
                   Register Admin
                 </button>
-                <button className="landing-btn-accent" onClick={() => setPage('Dashboard')}>
-                  Live Demo →
+                <button className="landing-btn-accent" onClick={() => setPage('Login')}>
+                  Sign In →
                 </button>
               </div>
             )}
@@ -91,22 +91,22 @@ export default function LandingPageView() {
 
         <div className="hero-badge">
           <span className="badge-pulse" style={{ background: '#ff3344' }} />
-          <span className="badge-text">Single-Role Administrator Architecture • ShanghaiTech Trained CSRNet</span>
+          <span className="badge-text">Camera-level model assignment · zone capacity monitoring</span>
         </div>
 
         <h1 className="hero-headline">
-          Real-Time Crowd Safety & Density Intelligence
+          Crowd Monitoring & Capacity Alerts
           <span className="hero-gradient-text"> Powered by Continuous Density Estimation</span>
         </h1>
 
         <p className="hero-description">
-          Overcoming object detection failure in dense, congested gatherings. CrowdSense replaces fragile bounding-box
-          detectors with <strong>dilated convolutional density regression (CSRNet)</strong>, continuous spatial integrals
-          (<code>∬ D(x,y) dx dy</code>), and multi-horizon <strong>CrowdFlowLSTM</strong> early warning alerts.
+          CrowdSense connects camera sources to capacity-limited zones, runs the selected crowd model, and records
+          observations for dashboards and threshold alerts. Choose <strong>CSRNet density regression</strong> or
+          <strong> YOLOv8 person detection</strong> for each camera.
         </p>
 
         <div className="hero-cta-group">
-          <button className="hero-btn-primary" onClick={() => setPage('Dashboard')}>
+          <button className="hero-btn-primary" onClick={() => setPage(isAuthenticated ? 'Dashboard' : 'Login')}>
             <span>Launch Admin Console</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
@@ -116,32 +116,32 @@ export default function LandingPageView() {
             <span className="btn-tag" style={{ background: '#ff3344', color: '#fff' }}>Role: Admin</span>
           </button>
 
-          <button className="hero-btn-outline" onClick={() => setPage('Crowd search')}>
-            <span>Photo Crowd Scanner</span>
+          <button className="hero-btn-outline" onClick={() => setPage(isAuthenticated ? 'Crowd search' : 'Login')}>
+            <span>Open Camera Scanner</span>
           </button>
         </div>
 
         {/* Live Metrics Ribbon */}
         <div className="hero-kpi-ribbon">
           <div className="kpi-card">
-            <span className="kpi-num">68.2</span>
-            <span className="kpi-label">Part A MAE (Paper Level)</span>
-            <span className="kpi-sub">Continuous Density Map</span>
+            <span className="kpi-num">2</span>
+            <span className="kpi-label">Supported model types</span>
+            <span className="kpi-sub">CSRNet · YOLOv8</span>
           </div>
           <div className="kpi-card">
-            <span className="kpi-num">&lt; 38.4 ms</span>
-            <span className="kpi-label">CSRNet Model Latency</span>
-            <span className="kpi-sub">Real Dilated Convolutions</span>
+            <span className="kpi-num">Measured</span>
+            <span className="kpi-label">Inference latency</span>
+            <span className="kpi-sub">Reported per sample at runtime</span>
           </div>
           <div className="kpi-card">
-            <span className="kpi-num">8 min</span>
-            <span className="kpi-label">Predictive Warning Lead</span>
-            <span className="kpi-sub">Multi-Horizon LSTM Model</span>
+            <span className="kpi-num">Observed</span>
+            <span className="kpi-label">Trend inputs</span>
+            <span className="kpi-sub">Timestamped zone counts</span>
           </div>
           <div className="kpi-card">
-            <span className="kpi-num">100%</span>
-            <span className="kpi-label">Continuous Spatial Integral</span>
-            <span className="kpi-sub">∬ D(x, y) dx dy</span>
+            <span className="kpi-num">Per zone</span>
+            <span className="kpi-label">Capacity thresholds</span>
+            <span className="kpi-sub">Set warning and critical limits</span>
           </div>
         </div>
 
@@ -150,7 +150,7 @@ export default function LandingPageView() {
           <div className="preview-topbar">
             <div className="preview-indicator">
               <span className="live-dot" />
-              <span>LIVE EDGE INFERENCE: VENUE CENTRAL (CAM-02 STADIUM CONCOURSE)</span>
+              <span>ILLUSTRATIVE SAMPLE FRAME · NOT A LIVE CAMERA</span>
             </div>
             <div className="preview-modes">
               <button
@@ -169,13 +169,13 @@ export default function LandingPageView() {
                 className={demoView === 'targets' ? 'active' : ''}
                 onClick={() => setDemoView('targets')}
               >
-                3. Head Peak Targets
+                3. Illustrative Markers
               </button>
               <button
                 className={demoView === 'gradcam' ? 'active' : ''}
                 onClick={() => setDemoView('gradcam')}
               >
-                4. Grad-CAM XAI
+                4. Illustrative Overlay
               </button>
             </div>
           </div>
@@ -183,22 +183,22 @@ export default function LandingPageView() {
           <div className="preview-viewport">
             <img
               src="/samples/stadium_dense.jpg"
-              alt="Live Real Stadium Crowd"
+              alt="Illustrative stadium sample frame"
               className="preview-img"
             />
 
-            {/* Real PyTorch CSRNet Continuous Density Heatmap Overlay */}
+            {/* Illustrative density heatmap sample, not a live model result. */}
             {demoView === 'heatmap' && (
               <div className="preview-overlay real-density-heatmap-overlay">
                 <img
                   src="/samples/stadium_dense_heatmap.png"
-                  alt="Real CSRNet Jet Density Overlay"
+                  alt="Illustrative CSRNet-style density heatmap sample"
                   className="preview-img-overlay"
                 />
               </div>
             )}
 
-            {/* Real Detected Head Peaks and Localization Reticles */}
+            {/* Illustrative markers, not detections from the displayed frame. */}
             {demoView === 'targets' && (
               <div className="preview-overlay target-pins-sim">
                 {[
@@ -232,12 +232,12 @@ export default function LandingPageView() {
               </div>
             )}
 
-            {/* Real PyTorch Density Grad-CAM Saliency Overlay */}
+            {/* Illustrative density visualization sample, not inference from this frame. */}
             {demoView === 'gradcam' && (
               <div className="preview-overlay real-gradcam-overlay">
                 <img
                   src="/samples/stadium_dense_gradcam.png"
-                  alt="Real PyTorch Density Grad-CAM Saliency"
+                  alt="Illustrative density visualization overlay"
                   className="preview-img-overlay"
                 />
               </div>
@@ -250,77 +250,77 @@ export default function LandingPageView() {
                 <span className="hud-val">PyTorch CSRNet (Dilated Backend)</span>
               </div>
               <div className="hud-metric">
-                <span className="hud-title">EXACT INTEGRATED COUNT</span>
-                <span className="hud-val highlight">287 People (∬ D(x,y) dx dy)</span>
+                <span className="hud-title">SAMPLE OUTPUT</span>
+                <span className="hud-val highlight">Illustrative only · connect a camera to measure</span>
               </div>
               <div className="hud-metric">
                 <span className="hud-title">ZONE CAPACITY CEILING</span>
-                <span className="hud-val warning">82.0% (Surge Alert)</span>
+                <span className="hud-val warning">Configured for each zone</span>
               </div>
               <div className="hud-metric">
                 <span className="hud-title">INFERENCE LATENCY</span>
-                <span className="hud-val">38.4 ms (CSRNet Dilated Conv)</span>
+                <span className="hud-val">Measured on each inference request</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. THE CORE PROBLEM: WHY OBJECT DETECTION FAILS */}
+      {/* 4. Comparing the supported model approaches */}
       <section className="landing-section" id="problem">
         <div className="section-header">
           <span className="section-eyebrow">THE FUNDAMENTAL PROBLEM</span>
-          <h2 className="section-title">Why YOLO & Bounding-Box Detectors Fail in Dense Crowds</h2>
+          <h2 className="section-title">Choose a counting approach for each camera</h2>
           <p className="section-subtitle">
-            Traditional object detection relies on individual bounding boxes. In high-density environments like stadiums,
-            marathons, and transit concourses, this approach suffers catastrophic failure.
+            Density regression estimates a crowd count from a density map; object detection returns individual person boxes.
+            The best choice depends on crowd density, scene conditions, installed weights, and local validation.
           </p>
         </div>
 
         <div className="problem-comparison-grid">
-          {/* Card 1: Bounding Box Failure */}
-          <div className="comparison-card failure-card">
-            <div className="card-badge red">TRADITIONAL DETECTION (YOLO / R-CNN)</div>
+          {/* Card 1: Object detection */}
+          <div className="comparison-card">
+            <div className="card-badge blue">YOLOV8 · OBJECT DETECTION</div>
             <h3>Bounding Box Object Detection</h3>
             <ul className="comparison-list">
               <li>
-                <strong>Severe Occlusion Failure:</strong> In dense crowds, people overlap by &gt;80%. Bounding boxes intersect and trigger Non-Maximum Suppression (NMS), discarding real people as duplicates.
+                <strong>Output:</strong> Individual person bounding boxes and confidence scores from the selected YOLOv8 weights.
               </li>
               <li>
-                <strong>Scale Inconsistency:</strong> A single 1080p frame contains heads ranging from 4 pixels (background) to 120 pixels (foreground). Fixed anchor grids cannot resolve tiny heads.
+                <strong>Useful when:</strong> Operators need localized detections and visual inspection in less crowded views.
               </li>
               <li>
-                <strong>Massive Under-Counting:</strong> On the benchmark ShanghaiTech Part A dataset, YOLOv8 suffers an MAE of <strong>234.8</strong>, missing more than 60% of the true crowd size.
+                <strong>Trade-off:</strong> Overlap and small distant people can reduce detection recall; validate on footage from the target venue.
               </li>
               <li>
-                <strong>High Computational Overhead:</strong> Evaluating thousands of dense bounding box proposals consumes excessive GPU memory with low accuracy.
+                <strong>Metric status:</strong> This project has no local YOLOv8 result on the ShanghaiTech test split.
               </li>
             </ul>
-            <div className="verdict-box red-border">
-              <span>✕ VERDICT:</span> Unusable for stadium safety, stampede prevention, and high-density surveillance.
+            <div className="verdict-box blue-border">
+              <span>YOLOV8:</span> Person boxes · requires model weights and venue validation.
             </div>
           </div>
 
-          {/* Card 2: Density Map Regression */}
-          <div className="comparison-card success-card">
+          {/* Card 2: Density map regression */}
+          <div className="comparison-card">
             <div className="card-badge green">CROWDSENSE ARCHITECTURE (CSRNET)</div>
             <h3>Continuous Density Map Regression</h3>
             <ul className="comparison-list">
               <li>
-                <strong>No Bounding Boxes Required:</strong> Heads are represented as point annotations converted into continuous Gaussian density maps: <code>G_σ(p - p_i)</code>.
+                <strong>Output:</strong> A continuous density map whose sum estimates the number of people in the image.
               </li>
               <li>
-                <strong>Mathematical Integral:</strong> Crowd count is computed directly as the continuous spatial surface integral: <code>Count = ∬ D(x, y) dx dy</code>.
+                <strong>Training idea:</strong> Head-point annotations are converted into density-map targets for supervised learning.
               </li>
               <li>
-                <strong>Dilated Convolutions (r=2):</strong> Receptive fields expand exponentially without pooling layers, preserving fine spatial resolution in congested corridors.
+                <strong>Model choice:</strong> CSRNet is designed for dense scenes where individual people overlap in the image.
               </li>
               <li>
-                <strong>Benchmark Excellence:</strong> Achieves a published MAE of <strong>68.2</strong> on ShanghaiTech Part A and <strong>10.6</strong> on Part B.
+                <strong>Reference result:</strong> The original CSRNet paper reports ShanghaiTech results; installed project weights are not independently evaluated here.
               </li>
             </ul>
             <div className="verdict-box green-border">
-              <span>✓ VERDICT:</span> State-of-the-art accuracy in dense crowds, exact capacity percentage, and real-time inference.
+              <span>CSRNET:</span> Density map · compare with local ground-truth footage before operational use.
             </div>
           </div>
         </div>
@@ -330,10 +330,10 @@ export default function LandingPageView() {
       <section className="landing-section alt-bg" id="architecture">
         <div className="section-header">
           <span className="section-eyebrow">ENGINEERING CHOICES</span>
-          <h2 className="section-title">Enterprise 4-Tier Microservices Architecture</h2>
+          <h2 className="section-title">Three services with shared telemetry storage</h2>
           <p className="section-subtitle">
-            Node.js cannot run PyTorch tensors efficiently. Following modern enterprise architectures, CrowdSense
-            decouples heavy deep learning into a dedicated Python microservice communicating via high-speed REST and Socket.io.
+            The browser presents setup and operations views. An Express API manages workspaces, zones, detections, and alerts;
+            a Python service runs the selected model. MongoDB stores configuration and observations.
           </p>
         </div>
 
@@ -344,14 +344,13 @@ export default function LandingPageView() {
               <div className="tier-header">
                 <span className="tier-pill">TIER 1</span>
                 <h4>React 18 Dashboard</h4>
-                <small>Vite • Tailwind • Zustand • Canvas OSD</small>
+                <small>React • Vite • Zustand</small>
               </div>
               <ul className="tier-feats">
-                <li>Live CCTV Surveillance Grid with 2.0 FPS OSD</li>
-                <li>Interactive Density Heatmaps & Flow Vectors</li>
-                <li>Dedicated Photo Crowd Scanner & Head Pinning</li>
-                <li>Model Lab (CSRNet vs MCNN vs YOLO Benchmarks)</li>
-                <li>Density Grad-CAM Saliency Visualizer</li>
+                <li>Zone and camera setup</li>
+                <li>Camera scanner and multi-camera monitor</li>
+                <li>Recorded observations, analytics, and incidents</li>
+                <li>CSRNet and YOLOv8 camera assignment</li>
               </ul>
             </div>
 
@@ -365,14 +364,14 @@ export default function LandingPageView() {
               <div className="tier-header">
                 <span className="tier-pill">TIER 2</span>
                 <h4>Node.js Express API Gateway</h4>
-                <small>Auth • RBAC • Alert Engine • Video Worker</small>
+                <small>Auth • Zones • Cameras • Alerts</small>
               </div>
               <ul className="tier-feats">
-                <li>JWT Token Issuance & Role-Based Access Control</li>
-                <li>Frame Sampling Worker (1 to 2 FPS Dispatch)</li>
-                <li>Real-Time Capacity Threshold Evaluator (% Occupancy)</li>
-                <li>Socket.io Multi-Client Live Telemetry Broadcast</li>
-                <li>Automated PDF Compliance Report Generator</li>
+                <li>Account-scoped API routes</li>
+                <li>Network stream sampling worker</li>
+                <li>Configurable zone threshold evaluation</li>
+                <li>Socket.IO telemetry and alert updates</li>
+                <li>CSV exports and printable reports</li>
               </ul>
             </div>
 
@@ -385,15 +384,14 @@ export default function LandingPageView() {
             <div className="arch-tier-box tier-fastapi">
               <div className="tier-header">
                 <span className="tier-pill">TIER 3</span>
-                <h4>CSRNet Deep Learning Model</h4>
-                <small>PyTorch 2.9 • Dilated Conv • ONNX • OpenCV</small>
+                <h4>Python AI Service</h4>
+                <small>PyTorch • OpenCV • FastAPI</small>
               </div>
               <ul className="tier-feats">
-                <li>CSRNet Density Map Regression (Dilated Conv backend)</li>
-                <li>Continuous Spatial Density Integral Computation</li>
-                <li>Local Maximum Head Peak Extraction (x, y)</li>
-                <li>Farnebäck Dense Optical Flow Vectors</li>
-                <li>CrowdFlowLSTM Multi-Horizon Congestion Predictor</li>
+                <li>CSRNet density regression or YOLOv8 detection</li>
+                <li>Count and optional model visualizations</li>
+                <li>Observed-count trend baseline</li>
+                <li>Model weights supplied by operator</li>
               </ul>
             </div>
           </div>
@@ -402,10 +400,9 @@ export default function LandingPageView() {
           <div className="arch-storage-strip">
             <div className="storage-icon">🗄️</div>
             <div className="storage-info">
-              <strong>Local MongoDB Time-Series Engine</strong>
+                <strong>MongoDB observation storage</strong>
               <span>
-                High-throughput telemetry storage with compound index on <code>(cameraId, timestamp)</code> and a
-                <code>7-day TTL index</code> for automatic sliding-window document expiration.
+                Stores account-owned zones, cameras, alerts, incidents, and timestamped detection records.
               </span>
             </div>
             <div className="storage-tag">Compound Index + TTL</div>
@@ -566,60 +563,58 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
         <div className="features-grid">
           <div className="feature-card" onClick={() => setPage('Crowd search')}>
             <div className="feature-icon">🔍</div>
-            <h3>Photo Crowd Scanner</h3>
+            <h3>Camera scanner</h3>
             <p>
-              Upload any crowd photograph to instantly execute deep learning inference. Pinpoints local head density peaks
-              with interactive target rings, extracts exact pixel coordinates, and exports detection records to CSV.
+              Scan the operator webcam, a selected camera, or an uploaded photo. Review the model’s available count,
+              detections, and density visualization. One-shot photo scans do not enter live camera history.
             </p>
             <span className="feature-link">Try Photo Scanner →</span>
           </div>
 
           <div className="feature-card" onClick={() => setPage('Live monitor')}>
             <div className="feature-icon">▦</div>
-            <h3>CCTV Multi-Monitor</h3>
+            <h3>Live camera monitor</h3>
             <p>
-              Low-latency video grid rendering real photo frames with millisecond OSD timecodes, live REC indicators,
-              density heatmap overlays, and Farnebäck optical flow evacuation vectors.
+              Review configured feeds, source previews, last successful samples, and observed camera counts in one grid.
             </p>
             <span className="feature-link">Open Live Monitor →</span>
           </div>
 
           <div className="feature-card" onClick={() => setPage('Forecast')}>
             <div className="feature-icon">📈</div>
-            <h3>CrowdFlowLSTM Predictor</h3>
+            <h3>Observed-count trend forecast</h3>
             <p>
-              Feeds rolling 15-minute time-series sequences into a multi-horizon LSTM network to predict overcrowding
-              8 to 15 minutes before critical safety thresholds are breached.
+              Projects a short trend from recent recorded zone observations. The current app uses a linear baseline;
+              it does not claim a trained LSTM forecast.
             </p>
             <span className="feature-link">View Forecast Curve →</span>
           </div>
 
           <div className="feature-card" onClick={() => setPage('Model lab')}>
             <div className="feature-icon">✳</div>
-            <h3>Density Grad-CAM (XAI)</h3>
+            <h3>Model outputs for review</h3>
             <p>
-              Explainable AI backpropagation hooks onto the penultimate dilated convolution layer. Visualizes gradient
-              saliency maps to verify that network activations correspond to human heads.
+              Review the count and available detections or density visualization returned by the selected model.
+              Preview overlays on this page are illustrative examples.
             </p>
-            <span className="feature-link">Inspect Grad-CAM →</span>
+            <span className="feature-link">Compare model outputs →</span>
           </div>
 
           <div className="feature-card" onClick={() => setPage('Zones')}>
             <div className="feature-icon">◇</div>
-            <h3>Zone Capacity Management</h3>
+            <h3>Zone capacity management</h3>
             <p>
-              Configures dynamic capacity ceilings, warning thresholds (75%), and critical tripwires (90%). Translates raw
-              head count into live crowd percentage of capacity for automated siren dispatch.
+              Configure a maximum capacity and warning and critical thresholds for each zone. When the recorded estimate
+              crosses a threshold, operators receive an alert and incident record.
             </p>
             <span className="feature-link">Manage Zones →</span>
           </div>
 
           <div className="feature-card" onClick={() => setPage('Incidents')}>
             <div className="feature-icon">⚑</div>
-            <h3>Forensic Incident Replay</h3>
+            <h3>Incident review</h3>
             <p>
-              Scrub back through historical telemetry timelines to reconstruct past crowd surges. Correlates camera frames,
-              density gradients, and operator response logs for official safety audits.
+              Review threshold incidents, their recorded counts and capacities, and a captured source frame when available.
             </p>
             <span className="feature-link">Replay Incidents →</span>
           </div>
@@ -629,10 +624,10 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
       {/* 7. BENCHMARK COMPARISON TABLE */}
       <section className="landing-section alt-bg" id="benchmarks">
         <div className="section-header">
-          <span className="section-eyebrow">EMPIRICAL RESULTS</span>
-          <h2 className="section-title">ShanghaiTech Dataset Performance Benchmark</h2>
+          <span className="section-eyebrow">MODEL CHOICES</span>
+          <h2 className="section-title">Pick the output that fits each camera view</h2>
           <p className="section-subtitle">
-            Comparison between our trained CSRNet dilated density model, Multi-Column CNN (MCNN), and standard YOLOv8 object detection baseline.
+            The app supports two inference paths. Accuracy and speed must be measured with the weights and footage used in deployment.
           </p>
         </div>
 
@@ -642,52 +637,34 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
               <tr>
                 <th>Model Architecture</th>
                 <th>Type</th>
-                <th>Part A MAE (Dense)</th>
-                <th>Part A RMSE</th>
-                <th>Part B MAE (Sparse)</th>
-                <th>Part B RMSE</th>
-                <th>Latency (CPU)</th>
-                <th>Receptive Field Tech</th>
+                <th>Output</th>
+                <th>Best suited to</th>
+                <th>Evaluation in this project</th>
               </tr>
             </thead>
             <tbody>
               <tr className="highlight-row">
                 <td>
-                  <strong>CSRNet (Our Primary Model)</strong>
-                  <span className="table-badge">Active Engine</span>
+                  <strong>CSRNet</strong>
                 </td>
-                <td>Density Map Regression</td>
-                <td className="metric-win">68.2</td>
-                <td className="metric-win">115.0</td>
-                <td className="metric-win">10.6</td>
-                <td className="metric-win">16.0</td>
-                <td>38.4 ms</td>
-                <td>Dilated Convolutions (r=2)</td>
+                <td>Density map and estimated count</td>
+                <td>Dense or overlapping crowds</td>
+                <td>Published CSRNet reference values appear in Model Lab; local weights are not benchmarked.</td>
               </tr>
               <tr>
-                <td><strong>MCNN (Multi-Column)</strong></td>
-                <td>Density Map Regression</td>
-                <td>110.2</td>
-                <td>173.2</td>
-                <td>26.4</td>
-                <td>41.3</td>
-                <td>18.2 ms</td>
-                <td>Multi-Scale Filters (9x9, 7x7, 5x5)</td>
+                <td><strong>YOLOv8</strong></td>
+                <td>Person boxes and count</td>
+                <td>Accuracy depends on checkpoint and scene; validate locally.</td>
               </tr>
               <tr className="failure-row">
-                <td><strong>YOLOv8 Detection Baseline</strong></td>
-                <td>Object Detection (BBox)</td>
-                <td className="metric-loss">234.8</td>
-                <td className="metric-loss">312.4</td>
-                <td>38.5</td>
-                <td>54.1</td>
-                <td>44.0 ms</td>
-                <td>Anchor Grid + NMS (Severe Overlap Failure)</td>
+                <td><strong>Trend forecast</strong></td>
+                <td>Recent zone count history</td>
+                <td>Exploratory linear baseline; no trained LSTM is connected.</td>
               </tr>
             </tbody>
           </table>
           <div className="table-caption">
-            * ShanghaiTech Part A contains 482 congested web photos with extreme crowd density (average 501 people/image). Part B contains 716 outdoor street photos.
+            Use the same labeled camera samples, hardware, and evaluation protocol when comparing models for a deployment.
           </div>
         </div>
       </section>
@@ -709,8 +686,8 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
               a: "Node.js runs on a single-threaded V8 event loop. While TensorFlow.js or ONNX bindings exist for Node, heavy deep learning backpropagation, tensor manipulation, and GPU CUDA memory allocation belong in Python's native ML ecosystem (PyTorch 2.9, Torchvision, Scipy). Real-world technology companies separate AI inference from the API Gateway to prevent CPU-intensive ML forward passes from freezing concurrent user requests and WebSocket connections."
             },
             {
-              q: "Why does density map regression succeed where YOLO fails?",
-              a: "YOLO predicts bounding boxes for each person. In dense crowds (>500 people per scene), heads occlude one another by 80-90%. Non-Maximum Suppression (NMS) suppresses overlapping boxes as duplicate predictions, leading to massive undercounting (MAE > 230). In contrast, density map regression treats head positions as point Dirac delta functions smoothed by Gaussian kernels. The integral over the spatial density map directly equals the total crowd count."
+              q: "How do CSRNet and YOLOv8 differ?",
+              a: "YOLOv8 returns individual person boxes. CSRNet predicts a density map whose sum estimates a count. Overlap and small distant people can affect person detection; density estimates depend on the checkpoint and scene. Compare both on labeled footage from the target camera before choosing one."
             },
             {
               q: "What is the mathematical role of dilated convolutions in CSRNet?",
@@ -721,8 +698,8 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
               a: "For congested scenes (Part A), the density map ground truth is generated via: D(x) = sum_i delta(x - x_i) * G_{sigma_i}(x). The spread sigma_i is dynamically determined by the average distance to the k nearest neighbors: sigma_i = beta * (1/k) * sum_{j=1}^k d_{i,j}, with beta = 0.3 and k = 3. This ensures dense clusters have tight, sharp Gaussian peaks while sparse individuals have wider spreads."
             },
             {
-              q: "How does the LSTM model prevent crowd disasters before they occur?",
-              a: "Raw crowd counts from consecutive video frames are stored as time-series sequences. The CrowdFlowLSTM model consumes a rolling window of past 15 time steps and projects crowd trends 8 to 15 minutes into the future. If the projected slope breaches 90% of a zone's capacity, an early warning alert triggers automated turnstile throttling before congestion reaches dangerous crush thresholds."
+              q: "Does the forecast use a trained LSTM?",
+              a: "No. The current forecast page fits a transparent linear trend to recent zone observations. It is a prototype for exploration, not a safety guarantee or an automated control system. A trained LSTM would need a prepared dataset, validation, and a deployed checkpoint."
             }
           ].map((item, idx) => (
             <div key={idx} className={`faq-card ${faqOpen === idx ? 'open' : ''}`}>
@@ -740,13 +717,11 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
       <section className="landing-section alt-bg" id="admin-portal">
         <div className="section-header">
           <span className="section-eyebrow" style={{ color: '#ff3344' }}>
-            ENTERPRISE ACCESS GOVERNANCE
+            WORKSPACE ACCESS
           </span>
           <h2 className="section-title">Single-Role Administrator Safety Command</h2>
           <p className="section-subtitle">
-            Engineered exclusively for venue safety directors and operations administrators.
-            Every administrator operates inside a secured, isolated MongoDB tenant partition with dedicated camera streams,
-            safety thresholds, and forensic incident workflows.
+            Sign in to manage account-scoped zones, camera sources, model settings, detections, and incidents.
           </p>
         </div>
 
@@ -771,10 +746,10 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
             </div>
             <h3>Dynamic Zone Ceilings & Alerts</h3>
             <p>
-              Configure real-time capacity ceilings with automatic 70% crowd influx warning and 85% critical bottleneck alarms.
-              Triggers instant automated turnstile throttling to avert crushes.
+              Set a maximum capacity and warning and critical percentages for each zone. When recent counts cross a threshold,
+              CrowdSense records an alert and incident for operator review.
             </p>
-            <div className="admin-card-pill">Full Policy Control</div>
+              <div className="admin-card-pill">Operator-configured thresholds</div>
           </div>
 
           {/* Card 3: Forensic Scrubber & Incidents */}
@@ -784,8 +759,8 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
             </div>
             <h3>Forensic Review & Incident Center</h3>
             <p>
-              Inspect frozen incident frames with overlay density gradients, replay chronological event timelines,
-              resolve active alerts, and export one-click regulatory safety CSV audits.
+              Review recorded threshold incidents, inspect available detection snapshots, resolve incidents,
+              and export observation reports.
             </p>
             <div className="admin-card-pill">Audit Dispatch</div>
           </div>
@@ -797,8 +772,8 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
             </div>
             <h3>Deep Learning Backbone Dispatch</h3>
             <p>
-              Hot-switch inference backends between CSRNet dilated convolutions, MCNN multi-scale columns, and YOLOv8.
-              Live Grad-CAM neural attention interpretability directly from PyTorch.
+              Assign CSRNet or YOLOv8 to each camera and review available model outputs. Accuracy depends on the supplied
+              weights and must be validated on local camera footage.
             </p>
             <div className="admin-card-pill">Model Lab Admin</div>
           </div>
@@ -810,25 +785,21 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
             <div className="admin-badge-row">
               <span className="live-status-pill" style={{ borderColor: '#ff3344', color: '#ff3344', background: 'rgba(255,51,68,0.1)' }}>
                 <span className="pulse-dot" style={{ background: '#ff3344' }} />
-                ACTIVE MONGODB USER-SCOPED TENANCY
+                ACCOUNT-SCOPED WORKSPACE
               </span>
             </div>
             <h3>Administrator Console Access</h3>
             <p>
-              Sign in with your verified Administrator credentials to manage your dedicated venue streams, or register a new Administrator workspace. All data between different users is strictly isolated in MongoDB.
+              Sign in with your workspace credentials or register an account. Production registration requires the invitation code configured by the deployment operator.
             </p>
             <div className="admin-credentials-preview">
               <div className="cred-chip">
-                <span className="cred-label">PRIMARY ADMIN EMAIL:</span>
-                <strong>admin@crowdsense.io</strong>
+                <span className="cred-label">WORKSPACE SETUP</span>
+                <strong>Create an account with your configured invite code.</strong>
               </div>
               <div className="cred-chip">
-                <span className="cred-label">MASTER PASSWORD:</span>
-                <strong>password123</strong>
-              </div>
-              <div className="cred-chip">
-                <span className="cred-label">ROLE CLEARANCE:</span>
-                <strong style={{ color: '#ff3344' }}>admin (Single-Role Enforced)</strong>
+                <span className="cred-label">MODEL WEIGHTS</span>
+                <strong>Provide the CSRNet or YOLOv8 checkpoint you plan to evaluate.</strong>
               </div>
             </div>
           </div>
@@ -841,7 +812,7 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
               Register New Administrator
             </button>
             <button className="landing-btn-ghost" onClick={() => setPage('Dashboard')} style={{ textAlign: 'center' }}>
-              Launch Live Console Demo
+              Sign in to open the console
             </button>
           </div>
         </div>
@@ -850,13 +821,13 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
       {/* 10. READY TO LAUNCH CALL TO ACTION */}
       <section className="landing-cta-banner">
         <div className="cta-content">
-          <h2>Deploy Enterprise Crowd Safety Today</h2>
+          <h2>Explore CrowdSense</h2>
           <p>
-            Experience authentic PyTorch deep learning, continuous density maps, and real-time live CCTV monitoring.
+            Connect a camera source, choose a model, and review observed crowd estimates against zone limits.
           </p>
           <div className="cta-buttons">
-            <button className="landing-btn-primary large" onClick={() => setPage('Dashboard')}>
-              Launch Administrator Console
+            <button className="landing-btn-primary large" onClick={() => setPage(isAuthenticated ? 'Dashboard' : 'Login')}>
+              Open workspace
             </button>
             <button className="landing-btn-secondary large" onClick={() => setPage('Register')}>
               Register Administrator Account
@@ -881,7 +852,7 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
               </div>
             </div>
             <p className="footer-desc">
-              Production-grade continuous density estimation platform built for stadium safety, transit hubs, and public assemblies.
+              A prototype for connecting camera estimates with zone capacity thresholds and operator review.
             </p>
             <div className="footer-credits">
               5th Semester Deep Learning & Distributed Systems Engineering Project.
@@ -890,19 +861,19 @@ def generate_density_map(image_shape, head_points, k=3, beta=0.3):
 
           <div className="footer-col">
             <h5>Navigation</h5>
-            <button onClick={() => setPage('Dashboard')}>Dashboard</button>
-            <button onClick={() => setPage('Live monitor')}>Live Monitor</button>
-            <button onClick={() => setPage('Crowd search')}>Photo Crowd Scanner</button>
+            <button onClick={() => setPage(isAuthenticated ? 'Dashboard' : 'Login')}>Dashboard</button>
+            <button onClick={() => setPage(isAuthenticated ? 'Live monitor' : 'Login')}>Live Monitor</button>
+            <button onClick={() => setPage(isAuthenticated ? 'Crowd search' : 'Login')}>Camera Scanner</button>
             <button onClick={() => setPage('Model lab')}>Model Lab</button>
-            <button onClick={() => setPage('Forecast')}>CrowdFlowLSTM Forecast</button>
+            <button onClick={() => setPage('Forecast')}>Trend Forecast</button>
           </div>
 
           <div className="footer-col">
             <h5>Architecture</h5>
             <a href="#problem">Why Detection Fails</a>
             <a href="#methodology">Density Integral vs YOLO</a>
-            <a href="#architecture">4-Tier Microservices</a>
-            <a href="#benchmarks">ShanghaiTech Benchmark</a>
+            <a href="#architecture">Service architecture</a>
+            <a href="#benchmarks">Model choices</a>
             <a href="#admin-portal">Single-Role RBAC Model</a>
             <a href="#viva">Viva Q&A Defense</a>
           </div>

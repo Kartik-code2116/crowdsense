@@ -1964,6 +1964,12 @@ h1 { font: 800 27px Manrope, sans-serif; letter-spacing: -0.8px; margin: 8px 0 6
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
 }
+
+.card-badge.blue {
+  background: rgba(52, 120, 229, 0.12);
+  color: #3478e5;
+  border: 1px solid rgba(52, 120, 229, 0.3);
+}
 .card-badge.green {
   background: rgba(21, 155, 111, 0.12);
   color: #159b6f;
@@ -2009,6 +2015,11 @@ h1 { font: 800 27px Manrope, sans-serif; letter-spacing: -0.8px; margin: 8px 0 6
   background: rgba(239, 68, 68, 0.08);
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.verdict-box.blue-border {
+  border-color: rgba(52, 120, 229, 0.35);
+  background: rgba(52, 120, 229, 0.06);
 }
 .verdict-box.green-border {
   background: rgba(21, 155, 111, 0.08);

@@ -1,16 +1,23 @@
 const Zone = require('../models/Zone');
+const Camera = require('../models/Camera');
 const { getIsConnected, getMemoryStore } = require('../config/db');
+
+const validLimits = (capacity, warning, critical) =>
+  Number.isFinite(Number(capacity)) && Number(capacity) > 0 &&
+  Number.isInteger(Number(warning)) && Number(warning) >= 1 && Number(warning) <= 99 &&
+  Number.isInteger(Number(critical)) && Number(critical) >= 2 && Number(critical) <= 100 &&
+  Number(warning) < Number(critical);
 
 exports.getZones = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
 
     if (getIsConnected()) {
       const zones = await Zone.find({ userId }).sort({ createdAt: 1 });
       return res.json({ success: true, count: zones.length, data: zones });
     }
     const store = getMemoryStore();
-    const filtered = (store.zones || []).filter(z => !z.userId || z.userId === userId);
+    const filtered = (store.zones || []).filter(z => z.userId === userId);
     return res.json({ success: true, count: filtered.length, data: filtered });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -19,7 +26,7 @@ exports.getZones = async (req, res) => {
 
 exports.createZone = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
     const {
       id,
       name,
@@ -35,15 +42,21 @@ exports.createZone = async (req, res) => {
     } = req.body;
 
     const zoneId = id || `zone_${Date.now()}`;
+    const capacity = Number(maxCapacity);
+    const warningPct = Number(warningThresholdPct ?? 75);
+    const criticalPct = Number(criticalThresholdPct ?? 90);
+    if (!validLimits(capacity, warningPct, criticalPct)) {
+      return res.status(400).json({ success: false, message: 'Capacity must be positive; warning and critical thresholds must be valid, with critical above warning.' });
+    }
     const newZoneData = {
       _id: zoneId,
       userId,
       name: name || 'New Safety Zone',
       code: code || `ZONE-${String(Date.now()).slice(-4)}`,
       floor: floor || 'Ground Level',
-      maxCapacity: Number(maxCapacity) || 200,
-      warningThresholdPct: Number(warningThresholdPct) || 75,
-      criticalThresholdPct: Number(criticalThresholdPct) || 90,
+      maxCapacity: capacity,
+      warningThresholdPct: warningPct,
+      criticalThresholdPct: criticalPct,
       currentCount: 0,
       currentOccupancyPct: 0,
       evacuationRoutes: Array.isArray(evacuationRoutes) ? evacuationRoutes : (evacuationRoutes ? [evacuationRoutes] : ['Emergency Egress']),
@@ -69,11 +82,20 @@ exports.createZone = async (req, res) => {
 
 exports.updateZone = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
     const { id } = req.params;
-    const updates = req.body;
+    const requested = req.body || {};
+    const allowed = ['name', 'code', 'floor', 'maxCapacity', 'description', 'evacuationRoutes', 'streamUrl', 'streamType'];
+    const updates = Object.fromEntries(allowed.filter((key) => requested[key] !== undefined).map((key) => [key, requested[key]]));
+    if (requested.warningThresholdPct !== undefined || requested.warningPct !== undefined) updates.warningThresholdPct = Number(requested.warningThresholdPct ?? requested.warningPct);
+    if (requested.criticalThresholdPct !== undefined || requested.criticalPct !== undefined) updates.criticalThresholdPct = Number(requested.criticalThresholdPct ?? requested.criticalPct);
 
     if (getIsConnected()) {
+      const current = await Zone.findOne({ $or: [{ _id: id }, { id }], userId }).lean();
+      if (!current) return res.status(404).json({ success: false, message: 'Zone not found or access denied.' });
+      if (!validLimits(updates.maxCapacity ?? current.maxCapacity, updates.warningThresholdPct ?? current.warningThresholdPct, updates.criticalThresholdPct ?? current.criticalThresholdPct)) {
+        return res.status(400).json({ success: false, message: 'Capacity must be positive; critical threshold must be above warning.' });
+      }
       const updated = await Zone.findOneAndUpdate(
         { $or: [{ _id: id }, { id }], userId },
         { $set: updates },
@@ -86,8 +108,12 @@ exports.updateZone = async (req, res) => {
     }
 
     const store = getMemoryStore();
-    const zoneIndex = (store.zones || []).findIndex(z => (String(z._id) === String(id) || String(z.id) === String(id)) && (!z.userId || z.userId === userId));
+    const zoneIndex = (store.zones || []).findIndex(z => (String(z._id) === String(id) || String(z.id) === String(id)) && z.userId === userId);
     if (zoneIndex !== -1) {
+      const current = store.zones[zoneIndex];
+      if (!validLimits(updates.maxCapacity ?? current.maxCapacity, updates.warningThresholdPct ?? current.warningThresholdPct, updates.criticalThresholdPct ?? current.criticalThresholdPct)) {
+        return res.status(400).json({ success: false, message: 'Capacity must be positive; critical threshold must be above warning.' });
+      }
       store.zones[zoneIndex] = { ...store.zones[zoneIndex], ...updates };
       return res.json({ success: true, data: store.zones[zoneIndex] });
     }
@@ -99,10 +125,12 @@ exports.updateZone = async (req, res) => {
 
 exports.deleteZone = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : '6ade4cd5c5d2c1c0ec4762e5';
+    const userId = req.user.id;
     const { id } = req.params;
 
     if (getIsConnected()) {
+      const attachedCamera = await Camera.exists({ userId, zoneId: String(id) });
+      if (attachedCamera) return res.status(409).json({ success: false, message: 'Move cameras to another zone before deleting this zone.' });
       const deleted = await Zone.findOneAndDelete({ $or: [{ _id: id }, { id }], userId });
       if (!deleted) {
         return res.status(404).json({ success: false, message: 'Zone not found or access denied.' });
@@ -111,7 +139,9 @@ exports.deleteZone = async (req, res) => {
     }
 
     const store = getMemoryStore();
-    store.zones = (store.zones || []).filter(z => (String(z._id) !== String(id) && String(z.id) !== String(id)) || (z.userId && z.userId !== userId));
+    const attachedCamera = (store.cameras || []).some((camera) => camera.userId === userId && String(camera.zoneId) === String(id));
+    if (attachedCamera) return res.status(409).json({ success: false, message: 'Move cameras to another zone before deleting this zone.' });
+    store.zones = (store.zones || []).filter(z => (String(z._id) !== String(id) && String(z.id) !== String(id)) || z.userId !== userId);
     return res.json({ success: true, message: 'Zone removed successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

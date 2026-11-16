@@ -6,9 +6,10 @@ const detectionSchema = new mongoose.Schema({
   zoneId: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
   count: { type: Number, required: true },
+  zoneCount: { type: Number },
   uncertainty: { type: Number, default: 0 },
   peakDensity: { type: Number, default: 0 },
-  latencyMs: { type: Number, default: 35 },
+  latencyMs: { type: Number, default: 0 },
   modelUsed: { type: String, default: 'CSRNet' },
   flowVector: {
     speed: { type: Number, default: 0 },
